@@ -9,6 +9,7 @@ import { oauthHmacHeader, oauthHmacParams } from "./oauthSign";
 import { recognizeRecord, recognizeRecordFree, tagVibes, tagVibesFree, type VibeInput } from "./ai";
 import { fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
 import { lastfmTags } from "./lastfm";
+import { sanitizeProfile, type CrateProfile } from "../shared/profile";
 
 type C = Context<{ Bindings: Env; Variables: { cfg: Config } }>;
 
@@ -488,6 +489,51 @@ app.get("/api/dir/search", async (c) => {
   const me = s.username.toLowerCase();
   const [byUser, byName] = await Promise.all([cfg.kv.list({ prefix: `dir:${q}` }), cfg.kv.list({ prefix: `dirn:${q}` })]);
   const names = [...new Set([...byUser.keys.map((k) => k.name.slice(4)), ...byName.keys.map((k) => k.name.split(":")[2])])].filter((u) => u && u !== me).slice(0, 8);
-  const results = (await Promise.all(names.map(async (u) => JSON.parse((await cfg.kv.get(`dir:${u}`)) ?? "null") as DirEntry | null))).filter(Boolean);
+  // Mit Crate-Profil anreichern: DJ-Name und Anfang der Bio für die Vorschläge
+  const results = (
+    await Promise.all(
+      names.map(async (u) => {
+        const [d, p] = await Promise.all([cfg.kv.get(`dir:${u}`), cfg.kv.get(profKey(u))]);
+        if (!d) return null;
+        const prof = p ? (JSON.parse(p) as CrateProfile) : null;
+        return { ...(JSON.parse(d) as DirEntry), djName: prof?.djName, bio: prof?.bio?.slice(0, 90) };
+      }),
+    )
+  ).filter(Boolean);
   return c.json({ results });
+});
+
+// ---------- Crate-Profil (für Freunde sichtbar, nur für angemeldete Crate-Nutzer) ----------
+const profKey = (u: string) => `prof:${u.toLowerCase()}`;
+
+app.get("/api/profile/me", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  return c.json({ profile: JSON.parse((await cfg.kv.get(profKey(s.username))) ?? "null") });
+});
+
+app.post("/api/profile/me", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const p = { ...sanitizeProfile(await c.req.json()), updatedAt: Date.now() };
+  const empty = !p.djName && !p.bio && !p.location && !p.links.length && !p.styles.length && !p.spotlight;
+  const u = s.username.toLowerCase();
+  const old = JSON.parse((await cfg.kv.get(profKey(u))) ?? "null") as CrateProfile | null;
+  if (empty) await cfg.kv.delete(profKey(u));
+  else await cfg.kv.put(profKey(u), JSON.stringify(p));
+  // DJ-Name in der Suche findbar machen (nur wer im Verzeichnis ist)
+  if (old?.djName && old.djName !== p.djName) for (const part of norm(old.djName).split(" ")) if (part.length > 1) await cfg.kv.delete(`dirn:${part}:${u}`);
+  if (p.djName && (await cfg.kv.get(`dir:${u}`))) for (const part of norm(p.djName).split(" ").slice(0, 4)) if (part.length > 1) await cfg.kv.put(`dirn:${part}:${u}`, u);
+  return c.json({ profile: empty ? null : p });
+});
+
+app.get("/api/profile/:u", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const u = c.req.param("u");
+  if (!/^[\w.\-]{2,40}$/.test(u)) return c.json({ profile: null });
+  return c.json({ profile: JSON.parse((await cfg.kv.get(profKey(u))) ?? "null") });
 });

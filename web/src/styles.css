@@ -742,3 +742,28 @@ details > summary::after { float: none; position: absolute; right: 0; top: 50%; 
 .home-hero h1 { font: 800 clamp(30px, 9.5vw, 40px)/1.05 var(--font-display); letter-spacing: -0.035em; margin: 10px 0 0; max-width: 16ch; }
 .home-hero-status { margin: 8px 0 0; font-size: 15px; font-weight: 500; color: var(--text-2); }
 .home-hero-top .eyebrow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+
+/* ---------- Crate-Profil ---------- */
+.pcard { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 4px 0 8px; }
+.pcard h1 { margin: 6px 0 0; font: 800 clamp(24px, 7vw, 28px)/1.15 var(--font-display); letter-spacing: -0.03em; }
+.pcard-bio { margin: 6px 0 0; max-width: 34ch; font-size: 15px; line-height: 1.45; color: var(--text); white-space: pre-line; }
+.pcard-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 8px; }
+.pcard-link { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px 6px 6px; border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 0.5px var(--hairline); color: var(--text); font-size: 14px; font-weight: 600; text-decoration: none; max-width: 100%; }
+.pcard-link i { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-style: normal; font-size: 12px; font-weight: 800; flex: none; }
+.pcard-styles { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 4px; }
+.pcard-styles span { font-size: 12.5px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+.pcard-spot { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 10px 14px 10px 10px; border-radius: 16px; background: var(--surface); text-align: left; text-decoration: none; color: var(--text); width: min(100%, 360px); }
+.pcard-spot .cover { width: 56px; height: 56px; flex: none; }
+.pcard-spot > span { display: flex; flex-direction: column; min-width: 0; }
+.pcard-spot small { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.pcard-spot b { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pcard-spot span span { font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-field { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; }
+.pe-field + .pe-field { border-top: 0.5px solid var(--hairline); }
+.pe-field > span { font-size: 13px; font-weight: 600; color: var(--text-2); display: flex; justify-content: space-between; }
+.pe-field small { font-weight: 500; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.pe-field small.warn { color: var(--warn); }
+.pe-field textarea { resize: vertical; min-height: 96px; font: inherit; line-height: 1.4; }
+.pe-add { display: flex; gap: 8px; padding: 10px 14px; border-top: 0.5px solid var(--hairline); }
+.pe-add input { flex: 1; min-width: 0; }
+.people-main .people-bio { font-size: 13px; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }

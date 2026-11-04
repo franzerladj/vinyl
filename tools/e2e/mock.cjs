@@ -36,6 +36,10 @@ module.exports = async function install(page) {
       return json({ results: all.filter((x) => x.username.startsWith(q) || x.name.toLowerCase().split(" ").some((w) => w.startsWith(q))) });
     }
     if (p === "/api/dir/me") return json({ visible: false });
+    if (p === "/api/profile/me" && route.request().method() === "POST") { globalThis.__prof = JSON.parse(route.request().postData() || "{}"); return json({ profile: globalThis.__prof }); }
+    if (p === "/api/profile/me") return json({ profile: globalThis.__prof ?? null });
+    if (p === "/api/profile/kumpel") return json({ profile: { djName: "DJ Kumpel", bio: "Deep House und Disco aus Bayreuth. Freitags im Glashaus.", location: "Bayreuth", links: [{ url: "https://soundcloud.com/djkumpel", kind: "soundcloud" }, { url: "https://instagram.com/djkumpel", kind: "instagram" }, { url: "https://feuerpfeil.de", kind: "web" }], styles: ["Deep House", "Disco", "Chicago House"], spotlight: { id: 2, title: "Altered States", artist: "Ron Trent" } } });
+    if (p.startsWith("/api/profile/")) return json({ profile: null });
     const um = p.match(/\/users\/([^/]+)(\/.*)?$/);
     if (um && um[1] !== "franzerladj") {
       const u = decodeURIComponent(um[1]);

@@ -5,6 +5,9 @@ import { db } from "../lib/db";
 import { notifyFriendAdded } from "../lib/push";
 import { isDiscoverable, searchPeople, setDiscoverable, type PersonHit } from "../lib/friends";
 import { Switch } from "../components/ui";
+import { ProfileHeader } from "../components/ProfileCard";
+import { loadProfile } from "../lib/profile";
+import type { CrateProfile } from "../../../shared/profile";
 import { addFriend, collectionUrl, friendFeed, friendMatches, inviteLink, lentRecords, messageUrl, profileUrl, removeFriend, syncFriend, tasteMatch, type FriendMatch } from "../lib/friends";
 import { toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, RecordRow, Seg, SkeletonRows, useDebounced } from "../components/bits";
@@ -126,9 +129,10 @@ function FriendList() {
               <button key={h.username} className="people-hit press" role="option" aria-selected={false} disabled={busy} onClick={() => add(h.username)}>
                 <Avatar src={h.avatar} name={h.username} size={40} />
                 <span className="people-main">
-                  <b>{h.name || h.username}</b>
+                  <b>{h.djName || h.name || h.username}</b>
+                  {h.bio && <span className="people-bio">{h.bio}</span>}
                   <small>
-                    {[h.name ? h.username : null, h.location, h.records ? `${h.records} Platten` : null].filter(Boolean).join(" · ")}
+                    {[h.djName || h.name ? h.username : null, h.location, h.records ? `${h.records} Platten` : null].filter(Boolean).join(" · ")}
                     {h.source === "crate" ? <em>auf Crate</em> : h.source === "seller" ? <em>Lieblingshändler</em> : <em>Discogs-Profil</em>}
                   </small>
                 </span>
@@ -266,6 +270,10 @@ function FriendDetail({ u }: { u: string }) {
   const [q, setQ] = useState("");
   const dq = useDebounced(q.toLowerCase(), 180);
   const f = useLiveQuery(() => db.friends.get(u), [u]);
+  const [crate, setCrate] = useState<CrateProfile | null | undefined>(undefined);
+  useEffect(() => {
+    void loadProfile(u).then(setCrate);
+  }, [u]);
   const data = useLiveQuery(async () => {
     const [m, items] = await Promise.all([friendMatches(u), db.friendItems.where("username").equals(u).toArray()]);
     const ids = [...new Set(items.map((i) => i.releaseId))];
@@ -315,7 +323,7 @@ function FriendDetail({ u }: { u: string }) {
   return (
     <>
       <NavBar
-        title={f.name || f.username}
+        title={crate?.djName || f.name || f.username}
         titleOnScroll
         backTo="/friends"
         backLabel="Freunde"
@@ -326,16 +334,13 @@ function FriendDetail({ u }: { u: string }) {
         }
       />
       <div className="page stack" style={{ alignItems: "center", textAlign: "center", paddingTop: 4 }}>
-        <Avatar src={f.avatar} name={f.username} size={92} />
-        <div>
-          <h1 style={{ margin: 0, font: "800 26px/1.15 var(--font-display)", letterSpacing: "-0.03em" }}>{f.name || f.username}</h1>
-          <div className="sub">{[f.name ? f.username : null, f.location].filter(Boolean).join(" · ")}</div>
+        <ProfileHeader username={f.username} avatar={f.avatar} discogsName={f.name} location={f.location} profile={crate ?? null}>
           {data?.taste.score != null && (
             <div className="sub" style={{ marginTop: 6 }}>
               <b style={{ color: "var(--accent)" }}>{data.taste.score} %</b> Geschmacks-Übereinstimmung{data.taste.topShared.length ? ` · ihr mögt beide ${data.taste.topShared.join(", ")}` : ""}
             </div>
           )}
-        </div>
+        </ProfileHeader>
         <div className="row" style={{ gap: 8 }}>
           <a className="btn small primary" href={messageUrl(u)} target="_blank" rel="noreferrer">
             Nachricht

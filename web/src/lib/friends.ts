@@ -174,6 +174,8 @@ export async function refreshMyProfile(maxAgeHours = 24): Promise<MyProfile | nu
 export interface PersonHit {
   username: string;
   name?: string;
+  djName?: string;
+  bio?: string;
   avatar?: string;
   location?: string;
   records?: number;

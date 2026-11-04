@@ -9,10 +9,13 @@ import { autoPipeline, fetchMissingDetails, getAutoSettings, lookupAudioFor, tag
 import { suggestionsState } from "../lib/prices";
 import { toast, useStore } from "../lib/store";
 import { getTheme, hapticsEnabled, setHaptics, setTheme, setYtConsent, ytConsent, type Theme } from "../lib/theme";
-import { Avatar, Seg } from "../components/bits";
+import { Avatar, haptic, Seg } from "../components/bits";
 import type { MyProfile } from "../lib/friends";
 import { NavBar, Switch } from "../components/ui";
 import { ShippingEditor } from "../components/ShippingEditor";
+import { ProfileHeader } from "../components/ProfileCard";
+import { loadMyProfile, saveMyProfile } from "../lib/profile";
+import { linkText, LINK_LABEL, parseLink, sanitizeProfile, type CrateProfile } from "../../../shared/profile";
 import { DEFAULT_PREFS, disablePush, enablePush, isIOS, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs } from "../lib/push";
 import { DEFAULT_SHIP, type ShipConfig } from "../../../shared/shipping";
 import {
@@ -115,6 +118,8 @@ export default function Settings() {
       return <HelpPage />;
     case "notifications":
       return <NotificationsPage />;
+    case "profile":
+      return <ProfileEditPage />;
     default:
       return <Overview />;
   }
@@ -164,6 +169,7 @@ function Overview() {
               </div>
             </div>
           </div>
+          <Row label="Crate-Profil bearbeiten" sub="DJ-Name, Bio, Links, Platte des Moments" to="/settings/profile" />
           <Row label="Profil auf Discogs" value="↗" onClick={() => window.open(`https://www.discogs.com/user/${me?.username}`, "_blank")} right={<span />} />
         </div>
 
@@ -780,6 +786,178 @@ function NotificationsPage() {
             {isIOS() && <p className="tiny" style={{ textAlign: "center" }}>Auf dem iPhone kommen Mitteilungen nur, solange Crate auf dem Home-Bildschirm liegt.</p>}
           </>
         )}
+      </div>
+    </>
+  );
+}
+
+function ProfileEditPage() {
+  const me = useStore((s) => s.me);
+  const nav = useNavigate();
+  const discogs = useLiveQuery(() => getKV<MyProfile | null>("myProfile", null));
+  const [p, setP] = useState<CrateProfile>({ links: [], styles: [] });
+  const [loaded, setLoaded] = useState(false);
+  const [linkIn, setLinkIn] = useState("");
+  const [q, setQ] = useState("");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    void loadMyProfile().then((x) => {
+      if (x) setP(x);
+      setLoaded(true);
+    });
+  }, []);
+  // Styles aus der eigenen Sammlung, häufigste zuerst
+  const myStyles = useLiveQuery(async () => {
+    const ids = [...new Set((await db.collection.toArray()).map((c) => c.releaseId))];
+    const count = new Map<string, number>();
+    for (const r of await db.releases.bulkGet(ids)) for (const st of r?.styles ?? []) count.set(st, (count.get(st) ?? 0) + 1);
+    return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 18).map(([k]) => k);
+  }, [], [] as string[]);
+  const picks = useLiveQuery(async () => {
+    if (q.trim().length < 2) return [];
+    const ids = [...new Set((await db.collection.toArray()).map((c) => c.releaseId))];
+    const ql = q.toLowerCase();
+    return (await db.releases.bulkGet(ids)).filter((r) => r && `${r.artist} ${r.title}`.toLowerCase().includes(ql)).slice(0, 6);
+  }, [q], []);
+  const set = (patch: Partial<CrateProfile>) => setP((x) => ({ ...x, ...patch }));
+  const addLink = () => {
+    const l = parseLink(linkIn);
+    if (!l) return toast("Das sieht nicht nach einem Link aus");
+    if (p.links.length >= 5) return toast("Höchstens 5 Links");
+    set({ links: [...p.links.filter((x) => x.url !== l.url), l] });
+    setLinkIn("");
+  };
+  const save = async () => {
+    setSaving(true);
+    try {
+      await saveMyProfile(sanitizeProfile(p));
+      haptic(15);
+      toast("Profil gespeichert");
+      nav("/settings", { viewTransition: true });
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  const bioLeft = 300 - (p.bio?.length ?? 0);
+  return (
+    <>
+      <NavBar
+        title="Crate-Profil"
+        backTo="/settings"
+        backLabel="Einstellungen"
+        right={
+          <button className="text-btn" onClick={save} disabled={saving || !loaded}>
+            Sichern
+          </button>
+        }
+      />
+      <div className="page settings-list">
+        <Group title="So sehen dich Freunde">
+          <div style={{ padding: "16px 14px" }}>
+            <ProfileHeader username={me?.username ?? ""} avatar={discogs?.avatar} discogsName={discogs?.name} location={discogs?.location} profile={sanitizeProfile(p)} />
+          </div>
+        </Group>
+
+        <Group title="Über dich" foot="Profilbild und Discogs-Name kommen von Discogs.">
+          <label className="pe-field">
+            <span>DJ-Name</span>
+            <input className="input" maxLength={40} placeholder={discogs?.name || me?.username || ""} value={p.djName ?? ""} onChange={(e) => set({ djName: e.target.value })} />
+          </label>
+          <label className="pe-field">
+            <span>Ort</span>
+            <input className="input" maxLength={60} placeholder={discogs?.location || "z. B. Bayreuth"} value={p.location ?? ""} onChange={(e) => set({ location: e.target.value })} />
+          </label>
+          <label className="pe-field">
+            <span>
+              Bio <small className={bioLeft < 30 ? "warn" : ""}>{bioLeft}</small>
+            </span>
+            <textarea className="input" rows={4} maxLength={300} placeholder="Was legst du auf, wo spielst du, was suchst du gerade?" value={p.bio ?? ""} onChange={(e) => set({ bio: e.target.value })} />
+          </label>
+        </Group>
+
+        <Group title="Links" foot="Instagram, SoundCloud, Mixcloud, Bandcamp, Resident Advisor oder die eigene Website. „@name“ geht auch für Instagram.">
+          {p.links.map((l) => (
+            <div key={l.url} className="set-row" style={{ cursor: "default" }}>
+              <span className="label">
+                {linkText(l)}
+                <small>{LINK_LABEL[l.kind]}</small>
+              </span>
+              <button className="icon-btn" aria-label="Link entfernen" onClick={() => set({ links: p.links.filter((x) => x.url !== l.url) })}>
+                ✕
+              </button>
+            </div>
+          ))}
+          {p.links.length < 5 && (
+            <form
+              className="pe-add"
+              onSubmit={(e) => {
+                e.preventDefault();
+                addLink();
+              }}
+            >
+              <input className="input" inputMode="url" autoCapitalize="none" autoCorrect="off" placeholder="Link einfügen" value={linkIn} onChange={(e) => setLinkIn(e.target.value)} />
+              <button className="btn small tinted" disabled={!linkIn.trim()}>
+                Hinzufügen
+              </button>
+            </form>
+          )}
+        </Group>
+
+        <Group title={`Deine Styles (${p.styles.length}/6)`} foot="Vorschläge aus deiner Sammlung, häufigste zuerst.">
+          <div className="chips" style={{ padding: "12px 14px" }}>
+            {[...new Set([...p.styles, ...myStyles])].map((st) => {
+              const on = p.styles.includes(st);
+              return (
+                <button key={st} className={`chip ${on ? "on" : ""}`} onClick={() => (on ? set({ styles: p.styles.filter((x) => x !== st) }) : p.styles.length < 6 ? set({ styles: [...p.styles, st] }) : toast("Höchstens 6 Styles"))}>
+                  {st}
+                </button>
+              );
+            })}
+          </div>
+        </Group>
+
+        <Group title="Platte des Moments">
+          {p.spotlight ? (
+            <div className="set-row" style={{ cursor: "default" }}>
+              <span className="label">
+                {p.spotlight.title}
+                <small>{p.spotlight.artist}</small>
+              </span>
+              <button className="icon-btn" aria-label="Entfernen" onClick={() => set({ spotlight: undefined })}>
+                ✕
+              </button>
+            </div>
+          ) : null}
+          <div style={{ padding: "10px 14px" }}>
+            <input className="input" placeholder={p.spotlight ? "Andere Platte suchen …" : "Platte aus deiner Kiste suchen …"} value={q} onChange={(e) => setQ(e.target.value)} />
+          </div>
+          {picks.map(
+            (r) =>
+              r && (
+                <button
+                  key={r.id}
+                  className="set-row"
+                  onClick={() => {
+                    set({ spotlight: { id: r.id, title: r.title, artist: r.artist, cover: r.cover || r.thumb } });
+                    setQ("");
+                  }}
+                >
+                  <span className="label">
+                    {r.title}
+                    <small>{r.artist}</small>
+                  </span>
+                  <span className="chev">+</span>
+                </button>
+              ),
+          )}
+        </Group>
+
+        <button className="btn primary block" onClick={save} disabled={saving || !loaded}>
+          {saving ? "Speichert …" : "Profil speichern"}
+        </button>
+        <p className="tiny" style={{ textAlign: "center" }}>Sichtbar für angemeldete Crate-Nutzer, die dich als Freund hinzufügen. In der Suche erscheinst du nur, wenn du auf der Freunde-Seite „Für Freunde auffindbar“ eingeschaltet hast.</p>
       </div>
     </>
   );
