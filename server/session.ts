@@ -5,6 +5,8 @@ export interface Session {
   token: string;
   secret: string;
   username: string;
+  /** false = Benutzername kam vom Browser und ist noch nicht vom Server bei Discogs bestätigt */
+  verified?: boolean;
 }
 
 const enc = new TextEncoder();

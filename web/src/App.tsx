@@ -6,7 +6,8 @@ import { haptic, Jobs, Sheet } from "./components/bits";
 import { setYtConsent, ytConsent } from "./lib/theme";
 import { IconHeart, IconHome, IconList, IconRecord, IconSearch } from "./components/icons";
 import Home from "./pages/Home";
-import Login from "./pages/Login";
+import Login, { LoginFinish } from "./pages/Login";
+import { resolveIdentity } from "./lib/auth";
 // Detailseite direkt laden, damit die Cover-Animation sofort ein Ziel hat
 import ReleasePage from "./pages/Release";
 const Collection = lazy(() => import("./pages/Collection"));
@@ -365,8 +366,14 @@ export default function App() {
         return null;
       }
     })();
+    if (new URLSearchParams(location.search).get("oauth_verifier")) return setLoaded(true);
     getMe()
-      .then((m) => {
+      .then(async (m) => {
+        // Angemeldet, aber der Name fehlt noch (Discogs war beim Anmelden ausgelastet): direkt nachfragen
+        if (!m.username && (m as { needIdentity?: boolean }).needIdentity) {
+          const name = await resolveIdentity();
+          if (name) m = { ...m, username: name };
+        }
         setState({ me: m });
         if (m.username) void startupSync();
         try {
@@ -387,6 +394,8 @@ export default function App() {
         </Suspense>
       </div>
     );
+  const oauthBack = new URLSearchParams(loc.search);
+  if (oauthBack.get("oauth_verifier") && oauthBack.get("oauth_token")) return <LoginFinish token={oauthBack.get("oauth_token")!} verifier={oauthBack.get("oauth_verifier")!} />;
   if (!loaded) return <div className="app" />;
   if (!me?.username) return <Login me={me} />;
 

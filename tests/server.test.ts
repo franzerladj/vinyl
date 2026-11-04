@@ -43,3 +43,15 @@ describe("barcode", () => {
     expect(validBarcode("4006381333932")).toBe(false);
   });
 });
+
+describe("Anmeldung vom Gerät", () => {
+  it("signiert Parameter für Formular/Query genauso wie den Header", async () => {
+    const { oauthHmacHeader, oauthHmacParams } = await import("../server/oauthSign");
+    const input = { method: "POST", url: "https://api.discogs.com/oauth/access_token", consumerKey: "ck", consumerSecret: "cs", token: "rt", tokenSecret: "rs", extra: { oauth_verifier: "v" }, fixed: { nonce: "n", timestamp: "1" } };
+    const header = await oauthHmacHeader(input);
+    const params = await oauthHmacParams(input);
+    expect(header).toContain(`oauth_signature="${encodeURIComponent(params.oauth_signature)}"`);
+    expect(params.oauth_verifier).toBe("v");
+    expect(params.oauth_token).toBe("rt");
+  });
+});

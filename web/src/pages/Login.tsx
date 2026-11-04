@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import type { Me } from "../lib/api";
+import { completeLogin, startLogin } from "../lib/auth";
 import { IconCart, IconList, IconSearch, IconTag } from "../components/icons";
 
 const SLEEVES = [
@@ -9,6 +11,7 @@ const SLEEVES = [
 
 export default function Login({ me }: { me: Me | null }) {
   const status = new URLSearchParams(location.search).get("login");
+  const [busyText, setBusyText] = useState<string | null>(null);
   return (
     <div className="app" style={{ paddingBottom: 0 }}>
       <div className="hero">
@@ -50,14 +53,22 @@ export default function Login({ me }: { me: Me | null }) {
           })}
         </div>
         <div style={{ marginTop: "auto" }}>
-          {status === "failed" && <p style={{ color: "var(--bad)" }}>Die Anmeldung hat nicht geklappt. Bitte noch einmal versuchen.</p>}
-          {status === "busy" && <p style={{ color: "var(--warn)" }}>Discogs war gerade ausgelastet. Bitte in einer Minute noch einmal anmelden.</p>}
+          {status === "failed" && !busyText && <p style={{ color: "var(--bad)" }}>Die Anmeldung hat nicht geklappt. Bitte noch einmal versuchen.</p>}
+          {status === "busy" && !busyText && <p style={{ color: "var(--warn)" }}>Discogs war gerade ausgelastet. Einfach noch einmal tippen, meistens klappt es beim zweiten Mal.</p>}
+          {busyText && <p className="sub" aria-live="polite">{busyText}</p>}
           {me?.features.oauth === false ? (
             <p className="sub">Auf dem Server fehlt der Discogs-Consumer-Key. Siehe README, Abschnitt Einrichtung.</p>
           ) : (
-            <a className="btn primary block lg" href="/api/auth/login">
-              Mit Discogs anmelden
-            </a>
+            <button
+              className="btn primary block lg"
+              disabled={!!busyText}
+              onClick={() => {
+                setBusyText("Verbinde mit Discogs …");
+                void startLogin(setBusyText);
+              }}
+            >
+              {busyText ? "Einen Moment …" : "Mit Discogs anmelden"}
+            </button>
           )}
           <p className="tiny" style={{ marginTop: 12 }}>Du meldest dich direkt bei Discogs an. Crate sieht dein Passwort nie.</p>
           <p className="tiny" style={{ marginTop: 18 }}>
@@ -73,6 +84,41 @@ export default function Login({ me }: { me: Me | null }) {
             <a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a>
           </p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/** Rückkehr von Discogs: Anmeldung abschließen, bei Überlastung selbst neu versuchen */
+export function LoginFinish({ token, verifier }: { token: string; verifier: string }) {
+  const [text, setText] = useState("Anmeldung wird abgeschlossen …");
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    completeLogin(token, verifier, setText)
+      .then(() => {
+        history.replaceState(null, "", "/");
+        location.reload();
+      })
+      .catch((e: Error) => setError(e.message));
+  }, [token, verifier]);
+  return (
+    <div className="app" style={{ paddingBottom: 0 }}>
+      <div className="empty" style={{ minHeight: "80vh", justifyContent: "center", padding: 24 }}>
+        {!error && <span className="spin" style={{ width: 28, height: 28 }} />}
+        <b style={{ fontSize: 20 }}>{error ? "Anmeldung nicht abgeschlossen" : "Gleich geht es los"}</b>
+        <span className="sub" aria-live="polite">{error ?? text}</span>
+        {error && (
+          <button
+            className="btn primary"
+            onClick={() => {
+              setError(null);
+              setText("Verbinde mit Discogs …");
+              void startLogin(setText);
+            }}
+          >
+            Noch einmal anmelden
+          </button>
+        )}
       </div>
     </div>
   );

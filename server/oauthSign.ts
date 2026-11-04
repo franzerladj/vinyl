@@ -50,3 +50,22 @@ export async function oauthHmacHeader(i: SignInput): Promise<string> {
   const signature = await hmacSha1(`${pct(i.consumerSecret)}&${pct(i.tokenSecret ?? "")}`, base);
   return "OAuth " + Object.entries({ ...oauth, oauth_signature: signature }).map(([k, v]) => `${pct(k)}="${pct(v)}"`).join(", ");
 }
+
+/**
+ * Signierte OAuth-Parameter als Formular/Query statt Header. So braucht der Browser keinen
+ * Authorization-Header, schickt also keine CORS-Vorabprüfung (die Discogs bei /oauth/* ablehnt).
+ */
+export async function oauthHmacParams(i: SignInput): Promise<Record<string, string>> {
+  const oauth: Record<string, string> = {
+    oauth_consumer_key: i.consumerKey,
+    oauth_nonce: i.fixed?.nonce ?? nonce(),
+    oauth_signature_method: "HMAC-SHA1",
+    oauth_timestamp: i.fixed?.timestamp ?? String(Math.floor(Date.now() / 1000)),
+    oauth_version: "1.0",
+    ...(i.token ? { oauth_token: i.token } : {}),
+    ...i.extra,
+  };
+  const base = signatureBase(i.method, i.url, oauth);
+  const signature = await hmacSha1(`${pct(i.consumerSecret)}&${pct(i.tokenSecret ?? "")}`, base);
+  return { ...oauth, oauth_signature: signature };
+}

@@ -22,6 +22,7 @@ Mobile Web-App (PWA) für Vinyl-DJs auf Basis von Discogs. Besitzer: Franz Krali
 
 Wichtige Eigenheiten:
 - Discogs-Anfragen gehen direkt vom Browser an api.discogs.com (Signatur über `/api/sign`), weil Discogs pro IP limitiert (60/min) und Cloudflare-IPs geteilt sind. Warteschlange in `web/src/lib/api.ts`.
+- Auch der Login läuft vom Gerät (`web/src/lib/auth.ts`, Server: `/api/auth/start|pending|sign-access|finish|identity`). OAuth-Parameter stehen in Query/Formular statt im Header, weil Discogs bei `/oauth/*` die CORS-Vorabprüfung ablehnt. Rückfall: `/api/auth/login` und `/api/auth/exchange` (Server, mit Wiederholungen). Vorschau-Deployments haben keine Discogs-Secrets, Login nur auf Produktion testbar (`node tools/e2e/login.cjs`).
 - Marktplatz-Seiten von Discogs sind für Server gesperrt (403). Angebote kommen über Inventare der Lieblingshändler (API) oder optional das Lesezeichen.
 - BPM: Deezer-Album-Matching (`server/audio.ts`, `POST /api/audio/release`, Artist wird getrennt geprüft), dann Einzelsuche, dann Analyse der Hörprobe im Web Worker (`shared/audioAnalysis.ts`, Bassdrum-Band + Kammfilter, Style als Tempo-Hinweis). Gemessen an echten Hörproben: rund 95 % richtig. Keys: nur Analyse (Schätzung) oder GetSongBPM. AcousticBrainz liefert für typische Platten nichts.
 - Hörproben laufen über den Server (`/api/audio/preview`). iOS: Ton nur nach Tippen, deshalb ein einziges Audio-Element wiederverwenden.

@@ -4,7 +4,7 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { readConfig, type Config, type Env } from "./env";
 import { seal, unseal, type Session } from "./session";
 import { authorizeUrl, discogsFetch, DiscogsBusy, getAccessToken, getRequestToken } from "./discogs";
-import { oauthHmacHeader } from "./oauthSign";
+import { oauthHmacHeader, oauthHmacParams } from "./oauthSign";
 import { recognizeRecord, recognizeRecordFree, tagVibes, tagVibesFree, type VibeInput } from "./ai";
 import { fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
 import { lastfmTags } from "./lastfm";
@@ -31,7 +31,8 @@ async function claudeKey(c: C): Promise<string | null> {
   if (!anthropicKey || aiAllowlist.length === 0) return null;
   if (aiAllowlist.includes("*")) return anthropicKey;
   const s = await session(c);
-  return s && aiAllowlist.includes(s.username.toLowerCase()) ? anthropicKey : null;
+  // Nur bestätigte Benutzernamen (sonst könnte jemand einen fremden Namen angeben)
+  return s && s.verified !== false && aiAllowlist.includes(s.username.toLowerCase()) ? anthropicKey : null;
 }
 
 // ---------- Auth ----------
@@ -49,24 +50,99 @@ app.get("/api/auth/login", async (c) => {
   return c.redirect(authorizeUrl(rt.token));
 });
 
-app.get("/api/auth/callback", async (c) => {
+app.get("/api/auth/callback", (c) => {
+  // Den Tausch gegen den Access-Token macht die App (vom Gerät aus, siehe /api/auth/sign-access).
+  // So scheitert die Anmeldung nicht an der gedrosselten Server-IP.
+  const cfg = c.var.cfg;
+  const token = c.req.query("oauth_token");
+  const verifier = c.req.query("oauth_verifier");
+  if (!token || !verifier) return c.redirect(`${cfg.appUrl}/?login=failed`);
+  return c.redirect(`${cfg.appUrl}/?oauth_token=${encodeURIComponent(token)}&oauth_verifier=${encodeURIComponent(verifier)}`);
+});
+
+// ---------- Anmeldung direkt vom Gerät ----------
+// Discogs drosselt pro IP. Cloudflare-IPs teilen sich viele Dienste, deshalb scheitert die
+// Anmeldung vom Server aus oft mit 429. Hier schickt der Browser die drei Schritte selbst
+// (eigene IP), der Server signiert nur und hält die Geheimnisse im verschlüsselten Cookie.
+const API_BASE = "https://api.discogs.com";
+
+/** Schritt 1: signierte Adresse für den Request-Token */
+app.post("/api/auth/start", async (c) => {
+  const cfg = c.var.cfg;
+  if (!cfg.discogsKey) return c.json({ message: "DISCOGS_CONSUMER_KEY fehlt" }, 500);
+  const url = `${API_BASE}/oauth/request_token`;
+  const params = await oauthHmacParams({ method: "GET", url, consumerKey: cfg.discogsKey, consumerSecret: cfg.discogsSecret, extra: { oauth_callback: `${cfg.appUrl}/api/auth/callback` } });
+  return c.json({ url: `${url}?${new URLSearchParams(params)}` });
+});
+
+/** Schritt 1b: Request-Token merken und zu Discogs weiterleiten */
+app.post("/api/auth/pending", async (c) => {
+  const cfg = c.var.cfg;
+  const { token, secret } = await c.req.json<{ token: string; secret: string }>();
+  if (!token || !secret) return c.json({ message: "Token fehlt" }, 400);
+  setCookie(c, PENDING, await seal(cfg.sessionSecret, { token, secret }), { ...cookieOpts(c), maxAge: 900 });
+  return c.json({ authorize: authorizeUrl(token) });
+});
+
+/** Schritt 2: signierte Anfrage für den Access-Token (Geheimnis des Request-Tokens bleibt im Cookie) */
+app.post("/api/auth/sign-access", async (c) => {
   const cfg = c.var.cfg;
   const pending = await unseal<{ token: string; secret: string }>(cfg.sessionSecret, getCookie(c, PENDING));
-  const verifier = c.req.query("oauth_verifier");
-  if (!pending || !verifier || c.req.query("oauth_token") !== pending.token) return c.redirect(`${cfg.appUrl}/?login=failed`);
-  let at: { token: string; secret: string };
-  try {
-    at = await getAccessToken(cfg, pending.token, pending.secret, verifier);
-  } catch (e) {
-    // Der Verifier ist nur einmal gültig, also neu anmelden lassen
-    return c.redirect(`${cfg.appUrl}/?login=${e instanceof DiscogsBusy ? "busy" : "failed"}`);
-  }
-  const idRes = await discogsFetch(cfg, { token: at.token, secret: at.secret, username: "" }, "/oauth/identity");
-  if (!idRes.ok) return c.redirect(`${cfg.appUrl}/?login=${idRes.status === 429 ? "busy" : "failed"}`);
-  const identity = (await idRes.json()) as { username: string };
+  const { token, verifier } = await c.req.json<{ token: string; verifier: string }>();
+  if (!pending || pending.token !== token || !verifier) return c.json({ message: "Anmeldung abgelaufen" }, 400);
+  const url = `${API_BASE}/oauth/access_token`;
+  const params = await oauthHmacParams({ method: "POST", url, consumerKey: cfg.discogsKey, consumerSecret: cfg.discogsSecret, token, tokenSecret: pending.secret, extra: { oauth_verifier: verifier } });
+  return c.json({ url, body: params });
+});
+
+/** Schritt 3: Access-Token übernehmen. Der Server prüft den Namen bei Discogs, wenn das gerade geht. */
+app.post("/api/auth/finish", async (c) => {
+  const cfg = c.var.cfg;
+  const { token, secret, username } = await c.req.json<{ token: string; secret: string; username?: string }>();
+  if (!token || !secret) return c.json({ message: "Token fehlt" }, 400);
+  let name = "";
+  let verified = false;
+  const r = await discogsFetch(cfg, { token, secret, username: "" }, "/oauth/identity").catch(() => null);
+  if (r?.ok) {
+    name = ((await r.json()) as { username: string }).username;
+    verified = true;
+  } else if (r && r.status !== 429) {
+    return c.json({ message: "Discogs hat den Zugang nicht bestätigt" }, 401);
+  } else name = (username ?? "").trim();
   deleteCookie(c, PENDING, { path: "/" });
-  setCookie(c, SESSION, await seal(cfg.sessionSecret, { ...at, username: identity.username }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
-  return c.redirect(`${cfg.appUrl}/`);
+  setCookie(c, SESSION, await seal(cfg.sessionSecret, { token, secret, username: name, verified }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
+  return c.json({ username: name || null, verified });
+});
+
+/** Benutzername nachreichen, wenn der Server ihn beim Anmelden nicht abfragen konnte */
+app.post("/api/auth/identity", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s) return c.json({ message: "nicht angemeldet" }, 401);
+  if (s.verified !== false && s.username) return c.json({ username: s.username });
+  const { username } = await c.req.json<{ username: string }>();
+  if (!/^[\w.\-]{2,40}$/.test(username ?? "")) return c.json({ message: "ungültig" }, 400);
+  setCookie(c, SESSION, await seal(cfg.sessionSecret, { ...s, username, verified: false }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
+  return c.json({ username });
+});
+
+/** Rückfall: Austausch über den Server (mit Wiederholungen); bei Überlastung bleibt der Verifier gültig */
+app.post("/api/auth/exchange", async (c) => {
+  const cfg = c.var.cfg;
+  const pending = await unseal<{ token: string; secret: string }>(cfg.sessionSecret, getCookie(c, PENDING));
+  const { token, verifier } = await c.req.json<{ token: string; verifier: string }>();
+  if (!pending || pending.token !== token || !verifier) return c.json({ message: "Anmeldung abgelaufen" }, 400);
+  try {
+    const at = await getAccessToken(cfg, pending.token, pending.secret, verifier);
+    const r = await discogsFetch(cfg, { token: at.token, secret: at.secret, username: "" }, "/oauth/identity");
+    const ok = r.ok;
+    const name = ok ? ((await r.json()) as { username: string }).username : "";
+    deleteCookie(c, PENDING, { path: "/" });
+    setCookie(c, SESSION, await seal(cfg.sessionSecret, { ...at, username: name, verified: ok }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
+    return c.json({ username: name || null, verified: ok });
+  } catch (e) {
+    return c.json({ busy: e instanceof DiscogsBusy, message: (e as Error).message }, e instanceof DiscogsBusy ? 503 : 400);
+  }
 });
 
 app.post("/api/auth/logout", (c) => {
@@ -84,7 +160,8 @@ app.get("/api/me", async (c) => {
     lastfm: Boolean(cfg.lastfmKey),
     keyLookup: Boolean(cfg.getSongBpmKey),
   };
-  if (s) return c.json({ username: s.username, features });
+  if (s?.username) return c.json({ username: s.username, features, verified: s.verified !== false });
+  if (s) return c.json({ username: null, needIdentity: true, features }, 401);
   if (cfg.discogsPersonalToken) {
     const r = await discogsFetch(cfg, null, "/oauth/identity");
     if (r.ok) return c.json({ username: ((await r.json()) as { username: string }).username, features, personalToken: true });
