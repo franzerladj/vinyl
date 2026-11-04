@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV } from "../lib/db";
+import { friendMatches } from "../lib/friends";
 import { autoPipeline } from "../lib/sync";
 import { toast, useStore } from "../lib/store";
 import { Cover, Empty, haptic, markHero, Ring } from "../components/bits";
@@ -35,6 +36,7 @@ export default function Home() {
       listings: await db.listings.count(),
       recent: (await db.releases.bulkGet(recent.map((r) => r.releaseId))).filter(Boolean),
       lastSync: await getKV<number>("lastCollectionSync", 0),
+      friends: await Promise.all((await db.friends.orderBy("addedAt").reverse().toArray()).map(async (f) => ({ f, m: await friendMatches(f.username) }))),
     };
   });
 
@@ -172,6 +174,36 @@ export default function Home() {
                 </span>
               </Link>
             </div>
+
+            <div className="row" style={{ marginTop: 28, marginBottom: 12 }}>
+              <h2 style={{ margin: 0 }}>Freunde</h2>
+              <span className="spacer" />
+              <Link to="/friends" viewTransition className="btn small ghost" style={{ paddingRight: 0 }}>
+                Alle
+              </Link>
+            </div>
+            <div className="carousel" style={{ paddingBottom: 6 }}>
+              {(stats?.friends ?? []).map(({ f, m }) => (
+                <Link key={f.username} to={`/friends/${encodeURIComponent(f.username)}`} viewTransition className="press" style={{ width: 84, textAlign: "center", position: "relative" }}>
+                  {f.avatar ? <img src={f.avatar} alt="" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", margin: "0 auto" }} /> : <span className="avatar" style={{ width: 72, height: 72, margin: "0 auto" }}>{f.username.charAt(0).toUpperCase()}</span>}
+                  {m.hasYourWants.length > 0 && (
+                    <span className="badge" style={{ position: "absolute", top: 0, right: 2, background: "var(--ok)", color: "#fff" }}>
+                      {m.hasYourWants.length}
+                    </span>
+                  )}
+                  <div className="t" style={{ fontSize: 13 }}>{f.username}</div>
+                </Link>
+              ))}
+              <Link to="/friends" viewTransition className="press" style={{ width: 84, textAlign: "center" }}>
+                <span style={{ width: 72, height: 72, borderRadius: "50%", margin: "0 auto", display: "grid", placeItems: "center", border: "1.5px dashed var(--surface-3)", color: "var(--accent)", fontSize: 28 }}>+</span>
+                <div className="t" style={{ fontSize: 13, color: "var(--text-2)" }}>{stats?.friends.length ? "Hinzufügen" : "Freunde"}</div>
+              </Link>
+            </div>
+            {stats && stats.friends.some((x) => x.m.hasYourWants.length) && (
+              <p className="tiny" style={{ marginTop: 0 }}>
+                Grüne Zahl: so viele deiner Wants stehen bei diesem Freund im Regal.
+              </p>
+            )}
 
             {stats && stats.tracks > 0 && (
               <>

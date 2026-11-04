@@ -119,6 +119,29 @@ export interface Seller {
   lastHits?: number;
 }
 
+export interface Friend {
+  username: string;
+  name?: string;
+  avatar?: string;
+  location?: string;
+  addedAt: number;
+  lastSync?: number;
+  /** null = privat oder noch nicht geladen */
+  numCollection?: number | null;
+  numWantlist?: number | null;
+  collectionPrivate?: boolean;
+  wantsPrivate?: boolean;
+}
+
+/** Eine Platte in Sammlung oder Wantlist eines Freundes. key = `${username}:${kind}:${releaseId}` */
+export interface FriendItem {
+  key: string;
+  username: string;
+  kind: "coll" | "want";
+  releaseId: number;
+  dateAdded: string;
+}
+
 export interface StoredListing extends Listing {
   importedAt: number;
 }
@@ -137,6 +160,8 @@ class CrateDB extends Dexie {
   priceSuggestions!: Table<PriceSuggestion, number>;
   wantMeta!: Table<WantMeta, number>;
   sellers!: Table<Seller, string>;
+  friends!: Table<Friend, string>;
+  friendItems!: Table<FriendItem, string>;
 
   constructor() {
     super("crate");
@@ -157,6 +182,11 @@ class CrateDB extends Dexie {
       priceSuggestions: "releaseId, fetchedAt",
       wantMeta: "releaseId",
       sellers: "name, favorite",
+    });
+    // v3: Freunde und deren Sammlungen/Wantlists
+    this.version(3).stores({
+      friends: "username, addedAt",
+      friendItems: "key, username, releaseId, [username+kind]",
     });
   }
 }

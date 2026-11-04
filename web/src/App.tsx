@@ -17,6 +17,7 @@ const Sets = lazy(() => import("./pages/Sets"));
 const SetEditor = lazy(() => import("./pages/SetEditor"));
 const Stickers = lazy(() => import("./pages/Stickers"));
 const Settings = lazy(() => import("./pages/Settings"));
+const Friends = lazy(() => import("./pages/Friends"));
 
 /** Nach dem Start: einmalige Bereinigung, dann Sync, wenn der letzte länger als 6 Stunden her ist (egal auf welcher Seite) */
 async function startupSync() {
@@ -113,6 +114,8 @@ export default function App() {
         <Route path="/stickers" element={<Stickers />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/settings/:section" element={<Settings />} />
+        <Route path="/friends" element={<Friends />} />
+        <Route path="/friends/:username" element={<Friends />} />
       </Routes>
       </Suspense>
       <Jobs />

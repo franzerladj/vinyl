@@ -37,7 +37,7 @@ export function fromDetail(r: DRelease, prev?: Release): Release {
   };
 }
 
-async function upsertBasics(items: BasicInformation[]) {
+export async function upsertBasics(items: BasicInformation[]) {
   const prev = await db.releases.bulkGet(items.map((i) => i.id));
   await db.releases.bulkPut(items.map((b, i) => fromBasic(b, prev[i])));
 }
@@ -321,6 +321,8 @@ export async function autoPipeline(opts: { force?: boolean } = {}) {
     const { refreshPrices, scanFavorites } = await import("./prices");
     await refreshPrices(await db.wants.toCollection().primaryKeys(), { maxAgeHours: 24 });
     await scanFavorites(24);
+    const { syncFriends } = await import("./friends");
+    await syncFriends(24);
     await setKV("lastAutoRun", Date.now());
   } finally {
     pipelineRunning = false;

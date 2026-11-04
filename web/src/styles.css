@@ -296,6 +296,7 @@ video.scan { width: 100%; border-radius: var(--r-lg); background: #000; aspect-r
 .carousel { display: flex; gap: 14px; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 calc(-1 * var(--gutter)); padding: 4px var(--gutter) 18px; scrollbar-width: none; scroll-padding: var(--gutter); }
 .carousel::-webkit-scrollbar { display: none; }
 .carousel > a { flex: none; width: 46%; max-width: 220px; scroll-snap-align: start; }
+.carousel > a[style*="width: 84"] { max-width: 84px; }
 .carousel .cover { width: 100%; height: auto; aspect-ratio: 1; border-radius: 8px; box-shadow: var(--shadow-cover); }
 .carousel .t { font-weight: 600; font-size: 14px; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .carousel .a { color: var(--text-2); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

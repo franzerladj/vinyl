@@ -60,6 +60,13 @@ export default function Login({ me }: { me: Me | null }) {
             </a>
           )}
           <p className="tiny" style={{ marginTop: 12 }}>Du meldest dich direkt bei Discogs an. Crate sieht dein Passwort nie.</p>
+          <p className="tiny" style={{ marginTop: 18 }}>
+            Daten von{" "}
+            <a href="https://www.discogs.com" target="_blank" rel="noreferrer">Discogs</a>,{" "}
+            <a href="https://www.deezer.com" target="_blank" rel="noreferrer">Deezer</a>,{" "}
+            <a href="https://www.last.fm" target="_blank" rel="noreferrer">Last.fm</a> und{" "}
+            <a href="https://getsongbpm.com" target="_blank" rel="noreferrer">GetSongBPM</a>
+          </p>
         </div>
       </div>
     </div>

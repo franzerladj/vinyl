@@ -26,7 +26,7 @@ import {
   IconWave,
 } from "../components/icons";
 
-const TABLES = ["releases", "collection", "wants", "tracks", "recordMeta", "sets", "marketStats", "listings", "kv", "priceHistory", "priceSuggestions", "wantMeta", "sellers"] as const;
+const TABLES = ["releases", "collection", "wants", "tracks", "recordMeta", "sets", "marketStats", "listings", "kv", "priceHistory", "priceSuggestions", "wantMeta", "sellers", "friends", "friendItems"] as const;
 
 function download(name: string, blob: Blob) {
   const a = document.createElement("a");
@@ -535,6 +535,7 @@ function AboutPage() {
           <Row label="Discogs" sub="Datenbank, Sammlung, Marktplatz" value="↗" right={<span />} onClick={() => window.open("https://www.discogs.com", "_blank")} />
           <Row label="Deezer" sub="BPM und Hörproben" value="↗" right={<span />} onClick={() => window.open("https://www.deezer.com", "_blank")} />
           <Row label="Last.fm" sub="Vibe-Tags" value="↗" right={<span />} onClick={() => window.open("https://www.last.fm", "_blank")} />
+          <Row label="GetSongBPM" sub="BPM und Tonarten" value="↗" right={<span />} onClick={() => window.open("https://getsongbpm.com", "_blank")} />
         </Group>
         <p className="tiny" style={{ textAlign: "center" }}>Diese App nutzt die Discogs-API, ist aber nicht von Discogs entwickelt oder unterstützt.</p>
       </div>
