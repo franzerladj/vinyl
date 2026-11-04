@@ -5,6 +5,7 @@ import { api } from "./api";
 import { getState, jobUpdate } from "./store";
 import { analyzeSamples, type AudioAnalysis } from "../../../shared/audioAnalysis";
 import { estimateVibe } from "../../../shared/vibes";
+import { validBarcode } from "../../../shared/barcode";
 
 // ---------------------------------------------------------------------------
 // Texterkennung (Tesseract, läuft im Browser)
@@ -23,7 +24,7 @@ export function parseOcrText(text: string): OcrGuess {
     .split(/\n+/)
     .map((l) => l.replace(/[^\p{L}\p{N}\s.&'/+-]/gu, " ").replace(/\s+/g, " ").trim())
     .filter((l) => l.length >= 2 && !NOISE.test(l));
-  const barcode = text.split(/\n+/).map((l) => l.replace(/[\s-]/g, "")).map((l) => l.match(/^\d{12,13}$/)?.[0]).find(Boolean) ?? "";
+  const barcode = text.split(/\n+/).map((l) => l.replace(/[\s-]/g, "")).map((l) => l.match(/^\d{12,13}$/)?.[0]).find((c) => c && validBarcode(c)) ?? "";
   const catnos = [...text.toUpperCase().matchAll(/\b([A-Z]{1,8}[ .-]?\d{1,5}[A-Z]{0,2}(?:[ .-]?\d{1,3})?)\b/g)]
     .map((m) => m[1])
     .filter((c) => !/^(19|20)\d\d$/.test(c.replace(/\D/g, "")) || /[A-Z]{2}/.test(c))

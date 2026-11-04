@@ -24,3 +24,22 @@ describe("parsing", () => {
     expect(g.barcode).toBe("5024545123456");
   });
 });
+
+import { modelJson } from "../server/ai";
+describe("workers ai antworten", () => {
+  it("versteht beide Antwortformate", () => {
+    expect(modelJson<{ a: number }>({ response: { a: 1 } })).toEqual({ a: 1 });
+    expect(modelJson<{ a: number }>({ response: '```json\n{"a":2}\n```' })).toEqual({ a: 2 });
+    expect(modelJson<{ a: number }>({ choices: [{ message: { content: 'x {"a":3} y' } }] })).toEqual({ a: 3 });
+  });
+});
+
+import { validBarcode } from "../shared/barcode";
+describe("barcode", () => {
+  it("prüft die Prüfziffer", () => {
+    expect(validBarcode("4006381333931")).toBe(true);
+    expect(validBarcode("036000291452")).toBe(true);
+    expect(validBarcode("07660117019")).toBe(false);
+    expect(validBarcode("4006381333932")).toBe(false);
+  });
+});

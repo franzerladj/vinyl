@@ -3,6 +3,7 @@
 // (kostenloses Tageskontingent, etwas schwächer).
 import Anthropic from "@anthropic-ai/sdk";
 import type { AiBinding } from "./env";
+import { validBarcode } from "../shared/barcode";
 
 const MODEL = "claude-opus-5-5";
 const clients = new Map<string, Anthropic>();
@@ -127,18 +128,34 @@ export async function tagVibes(apiKey: string, items: VibeInput[]): Promise<Vibe
 // ---------------------------------------------------------------------------
 // Cloudflare Workers AI (kostenloses Kontingent)
 // ---------------------------------------------------------------------------
-const VISION_MODEL = "@cf/meta/llama-3.2-11b-vision-instruct";
-const TEXT_MODEL = "@cf/meta/llama-3.1-8b-instruct";
+// Modelle mit Ersatz, falls Cloudflare eins abkündigt (Stand November 2026 getestet)
+const VISION_MODELS = ["@cf/meta/llama-3.2-11b-vision-instruct", "@cf/mistralai/mistral-small-3.1-24b-instruct", "@cf/google/gemma-4-26b-a4b-it"];
+const TEXT_MODELS = ["@cf/meta/llama-3.1-8b-instruct-fp8", "@cf/meta/llama-3.3-70b-instruct-fp8-fast", "@cf/mistralai/mistral-small-3.1-24b-instruct"];
 
-/** Llama-Modelle verlangen einmalig die Zustimmung zur Meta-Lizenz */
-async function runWithLicense(ai: AiBinding, model: string, input: Record<string, unknown>) {
-  try {
-    return await ai.run(model, input);
-  } catch (e) {
-    if (!/agree|licen[sc]e/i.test(String((e as Error).message))) throw e;
-    await ai.run(model, { prompt: "agree" });
-    return ai.run(model, input);
+/** Llama-Modelle verlangen einmalig die Zustimmung zur Meta-Lizenz. Bei Abkündigung das nächste Modell nehmen. */
+async function runModels(ai: AiBinding, models: string[], input: Record<string, unknown>) {
+  let last: unknown;
+  for (const model of models) {
+    try {
+      return await ai.run(model, input);
+    } catch (e) {
+      last = e;
+      const msg = String((e as Error).message);
+      if (/agree|licen[sc]e/i.test(msg)) {
+        try {
+          await ai.run(model, { prompt: "agree" });
+        } catch {
+          /* Cloudflare meldet die Zustimmung selbst als Fehler 5016 */
+        }
+        try {
+          return await ai.run(model, input);
+        } catch (e2) {
+          last = e2;
+        }
+      }
+    }
   }
+  throw last instanceof Error ? last : new Error(String(last));
 }
 
 /** Erstes {...}-Objekt aus einer Modellantwort lesen (kleine Modelle schreiben gern Text drumherum) */
@@ -153,34 +170,42 @@ export function extractJson<T>(text: string): T | null {
   }
 }
 
-const responseText = (r: unknown) => (typeof r === "object" && r && "response" in r ? String((r as { response: unknown }).response ?? "") : String(r ?? ""));
+/** Antworten kommen je nach Modell als {response: string|object} oder im OpenAI-Format */
+export function modelJson<T>(r: unknown): T | null {
+  if (!r || typeof r !== "object") return typeof r === "string" ? extractJson<T>(r) : null;
+  const o = r as { response?: unknown; choices?: { message?: { content?: unknown } }[] };
+  const v = o.response ?? o.choices?.[0]?.message?.content;
+  if (v && typeof v === "object") return v as T;
+  return typeof v === "string" ? extractJson<T>(v) : null;
+}
 
 export async function recognizeRecordFree(ai: AiBinding, imageBase64: string, mediaType: string): Promise<Recognition> {
-  const r = await runWithLicense(ai, VISION_MODEL, {
+  const r = await runModels(ai, VISION_MODELS, {
     messages: [
       {
-        role: "system",
-        content: "You identify vinyl records from photos for a search in the Discogs database. Answer only with one JSON object, no other text.",
-      },
-      {
         role: "user",
-        content:
-          'Read all visible text on this record cover, back or center label. Return JSON with the keys "artist", "title", "label", "catno" (catalog number), "barcode" (digits only), "year", "matrix". Use an empty string for anything you cannot read. Do not guess.',
+        content: [
+          {
+            type: "text",
+            text: 'This photo shows a vinyl record (cover, back, center label or runout). Read all visible text. Answer only with one JSON object with the keys "artist", "title", "label", "catno" (catalog number), "barcode" (digits only), "year", "matrix". Use an empty string for anything you cannot read. Do not guess.',
+          },
+          { type: "image_url", image_url: { url: `data:${mediaType};base64,${imageBase64}` } },
+        ],
       },
     ],
-    image: `data:${mediaType};base64,${imageBase64}`,
     max_tokens: 400,
     temperature: 0.1,
   });
-  const j = extractJson<Partial<Recognition>>(responseText(r)) ?? {};
+  const j = modelJson<Partial<Recognition>>(r) ?? {};
   const str = (v: unknown) => (typeof v === "string" ? v.trim() : v == null ? "" : String(v));
   return {
     artist: str(j.artist),
     title: str(j.title),
     label: str(j.label),
     catno: str(j.catno),
-    barcode: str(j.barcode).replace(/\D/g, ""),
-    year: str(j.year),
+    // Kleine Modelle erfinden gern Barcodes: nur mit gültiger Prüfziffer übernehmen
+    barcode: validBarcode(str(j.barcode)) ? str(j.barcode).replace(/\D/g, "") : "",
+    year: /^(19|20)\d\d$/.test(str(j.year)) ? str(j.year) : "",
     matrix: str(j.matrix),
     confidence: "mittel",
     notes: "Erkannt mit dem kostenlosen Bildmodell (Workers AI).",
@@ -188,7 +213,7 @@ export async function recognizeRecordFree(ai: AiBinding, imageBase64: string, me
 }
 
 export async function tagVibesFree(ai: AiBinding, items: VibeInput[]): Promise<VibeOutput[]> {
-  const r = await runWithLicense(ai, TEXT_MODEL, {
+  const r = await runModels(ai, TEXT_MODELS, {
     messages: [
       { role: "system", content: "You are an experienced vinyl DJ. Answer only with one JSON object, no other text." },
       {
@@ -201,7 +226,7 @@ export async function tagVibesFree(ai: AiBinding, items: VibeInput[]): Promise<V
     max_tokens: 1800,
     temperature: 0.2,
   });
-  const j = extractJson<{ items?: VibeOutput[] }>(responseText(r));
+  const j = modelJson<{ items?: VibeOutput[] }>(r);
   const ids = new Set(items.map((i) => i.id));
   const slots = new Set(["warmup", "build", "peak", "closing"]);
   return (j?.items ?? [])
