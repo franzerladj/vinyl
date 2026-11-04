@@ -161,15 +161,16 @@ export default function ReleasePage() {
         <div className="grid3" style={{ marginTop: 10 }}>
           <div className="stat">
             <span>ab</span>
-            <b style={{ fontSize: 20 }}>{stat ? (stat.numForSale ? money(stat.lowest, stat.currency) : "–") : "…"}</b>
+            <b className="stat-sm">{stat ? (stat.numForSale ? money(stat.lowest, stat.currency) : "–") : "…"}</b>
           </div>
           <div className="stat">
             <span>Angebote</span>
-            <b style={{ fontSize: 20 }}>{stat?.numForSale ?? "…"}</b>
+            <b className="stat-sm">{stat?.numForSale ?? "…"}</b>
           </div>
           <div className="stat">
-            <span>Have / Want</span>
-            <b style={{ fontSize: 20 }}>{rel.community ? `${rel.community.have}/${rel.community.want}` : "–"}</b>
+            <span>Wollen</span>
+            <b className="stat-sm">{rel.community ? rel.community.want : "–"}</b>
+            {rel.community && <span className="tiny">{rel.community.have} haben</span>}
           </div>
         </div>
 

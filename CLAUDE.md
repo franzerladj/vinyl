@@ -9,7 +9,8 @@ Mobile Web-App (PWA) für Vinyl-DJs auf Basis von Discogs. Besitzer: Franz Krali
 - Commit-Nachrichten auf Deutsch, beschreibend. Keine Modellnamen in Commits oder Code.
 - Nie Secrets committen oder Franz bitten, Schlüssel in den Chat zu kopieren.
 - Nicht anfassen: das alte Cloudflare-Projekt `vinyl-wantlist`.
-- UI-Anspruch: wirkt wie eine große native iOS-App (Apple-Design, Motion, Haptik). Änderungen immer im Handy-Viewport (Playwright, „iPhone 13“) prüfen, hell und dunkel.
+- UI-Anspruch: wirkt wie eine große native iOS-App (Apple-Design, Motion, Haptik). Änderungen immer im Handy-Viewport (Playwright, „iPhone 13“) prüfen, hell und dunkel, und mit `tools/e2e/wrap.cjs` auf 320 px gegenprüfen.
+- Umbrüche: Silbentrennung nur in Fließtext, nie in Labels, Fragen, Titeln oder Knöpfen. Kurze Labels statt Trennung.
 
 ## Aufbau
 
@@ -42,6 +43,7 @@ node tools/e2e/yt.cjs       # YouTube-Einwilligung
 node tools/e2e/djo.cjs      # DJ-Übersicht auf Start
 node tools/e2e/ship.cjs     # Versand-Schätzung
 node tools/e2e/tap.cjs      # Tap-Tempo
+node tools/e2e/wrap.cjs     # Umbruch-Audit aller Seiten (320/375/390 px, hell/dunkel; SHOTS=1 für Screenshots)
 ```
 
 `tools/e2e/mock.cjs` mockt `/api/**`: 45 Platten Sammlung (IDs 1–45), 25 Wants (46–70), Feed-Funde (71–100), Freunde kumpel/privat/niemand. Release 5 ist eine Doppel-LP mit 20 Tracks.

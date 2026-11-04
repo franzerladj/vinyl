@@ -668,3 +668,35 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .tap-tools button { border: 0; border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; font-weight: 700; background: var(--surface-3); color: var(--text); cursor: pointer; }
 .tap-tools button:disabled { opacity: 0.4; }
 .tap-take { grid-area: take; width: 100%; }
+
+/* ---------- Umbrüche & Typografie (für alle Bildschirmbreiten) ---------- */
+/* Überschriften ausgeglichen umbrechen, Fließtext ohne einzelne Wörter in der letzten Zeile */
+h1, h2, h3, .page-head h1, .dig-title b, .djo-head b { text-wrap: balance; }
+p, .sub, .tiny, small, .djo-note, .ship-example, .legal p, .empty span, .card > span { text-wrap: pretty; }
+/* Lange deutsche Wörter trennen statt über den Rand laufen lassen */
+body { overflow-wrap: break-word; }
+/* Silbentrennung nur in Fließtext; Labels, Fragen und Titel brechen nur an Leerzeichen */
+p, .djo-note, .legal, .ship > p, .card > .sub, .empty span { hyphens: auto; -webkit-hyphens: auto; }
+.set-row .label, summary, .rec-title, .rec-artist, h1, h2, h3, b { hyphens: manual; -webkit-hyphens: manual; }
+/* Bedienelemente, Zahlen und Kürzel nie trennen */
+button, .btn, .chip, .badge, .seg button, .stat b, .bpm, .tap-bpm, .djo-big b, .key-badge, input, select { hyphens: manual; -webkit-hyphens: manual; }
+.btn, .chip, .badge, .seg button { white-space: nowrap; }
+/* Flex- und Grid-Kinder dürfen schrumpfen */
+.row > *, .page-head > *, .rec-main, .set-row > * { min-width: 0; }
+.grid2, .grid3 { grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); }
+.grid3 { --cols: 3; }
+.stat { min-width: 0; }
+.stat b { font-size: clamp(17px, 5.4vw, 26px); }
+/* Aufklapp-Bereiche: Pfeil als eigenes Element statt float */
+details > summary { position: relative; display: block; padding-right: 26px; }
+details > summary::after { float: none; position: absolute; right: 0; top: 50%; width: 20px; height: 20px; margin-top: -10px; text-align: center; }
+/* Seitenkopf: Titel und Aktion umbrechen, wenn es eng wird */
+.page-head { flex-wrap: wrap; }
+.page-head > :first-child { flex: 1 1 150px; }
+.page-head > :not(:first-child) { flex: none; }
+.page-head h1 { font-size: clamp(28px, 9vw, 34px); }
+@media (max-width: 360px) {
+  .stat { padding: 12px 10px; }
+  .card { padding-left: 14px; padding-right: 14px; }
+}
+.stat b.stat-sm { font-size: clamp(15px, 4.8vw, 20px); }

@@ -116,6 +116,16 @@ export default function Settings() {
   }
 }
 
+/** „heute“, „gestern“ oder kurzes Datum: spart Platz in schmalen Zeilen */
+function relDay(ts: number) {
+  const d = new Date(ts);
+  const today = new Date();
+  const diff = Math.round((new Date(today.toDateString()).getTime() - new Date(d.toDateString()).getTime()) / 86_400_000);
+  if (diff === 0) return "heute";
+  if (diff === 1) return "gestern";
+  return d.toLocaleDateString("de-DE", { day: "numeric", month: "numeric" });
+}
+
 function Overview() {
   const me = useStore((s) => s.me);
   const [theme, setT] = useState<Theme>(getTheme());
@@ -153,7 +163,7 @@ function Overview() {
         </div>
 
         <Group title="Bibliothek">
-          <Row icon={<IconSync />} color="#30d158" label="Synchronisation & Analyse" value={stats?.lastSync ? new Date(stats.lastSync).toLocaleDateString("de-DE") : "nie"} to="/settings/sync" />
+          <Row icon={<IconSync />} color="#30d158" label="Synchronisation & Analyse" value={stats?.lastSync ? relDay(stats.lastSync) : "nie"} to="/settings/sync" />
           <Row icon={<IconCoin />} color="#ff9f0a" label="Preise & Shopping" value={stats?.currency} to="/settings/prices" />
           <Row icon={<IconWave />} color="#5e5ce6" label="Datenquellen & KI" value={`${sources} aktiv`} to="/settings/sources" />
         </Group>
@@ -610,7 +620,7 @@ function AboutPage() {
           </div>
         </div>
         <Group title="Datenschutz" foot="Crate speichert nichts über dich auf dem Server. Die Anmeldung läuft direkt über Discogs, dein Passwort sieht die App nie.">
-          <Row label="Deine Sammlung & eigenen Daten" value="nur auf dem Gerät" />
+          <Row label="Deine Daten" value="nur auf dem Gerät" />
           <Row label="Discogs-Zugang" value="verschlüsselt im Cookie" />
           <Row label="Anfragen an Discogs" value="von deinem Gerät" />
         </Group>
