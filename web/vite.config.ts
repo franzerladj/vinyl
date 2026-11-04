@@ -25,7 +25,7 @@ export default defineConfig({
     VitePWA({
       registerType: "prompt",
       injectRegister: false,
-      includeAssets: ["icon.svg", "apple-touch-icon.png"],
+      includeAssets: ["icon.svg", "apple-touch-icon.png", "badge-96.png"],
       manifest: {
         id: "/",
         name: "Crate – Vinyl DJ",

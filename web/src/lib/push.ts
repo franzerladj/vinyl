@@ -88,5 +88,5 @@ export async function localNotify(kind: PushKind, title: string, body: string, u
   const prefs = await getKV<PushPrefs>("pushPrefs", DEFAULT_PREFS);
   if (!prefs[kind]) return;
   const reg = await navigator.serviceWorker.getRegistration();
-  await reg?.showNotification(title, { body, tag: kind, icon: "/icon-192.png", badge: "/icon-maskable-192.png", data: { url } });
+  await reg?.showNotification(title, { body, tag: kind, icon: "/icon-192.png", badge: "/badge-96.png", data: { url } });
 }
