@@ -584,6 +584,7 @@ function DataPage() {
 }
 
 function AboutPage() {
+  const nav = useNavigate();
   return (
     <>
       <NavBar title="Über Crate" backTo="/settings" backLabel="Einstellungen" />
@@ -609,7 +610,11 @@ function AboutPage() {
         <p className="tiny" style={{ textAlign: "center" }}>
           <a href="/credits" style={{ color: "var(--accent)" }}>Alle Datenquellen</a>
         </p>
-        <p className="tiny" style={{ textAlign: "center" }}>Diese App nutzt die Discogs-API, ist aber nicht von Discogs entwickelt oder unterstützt.</p>
+        <Group title="Rechtliches">
+          <Row label="Impressum" onClick={() => nav("/impressum")} />
+          <Row label="Datenschutz" onClick={() => nav("/datenschutz")} />
+        </Group>
+        <p className="tiny" style={{ textAlign: "center" }}>Diese App nutzt die Discogs-API, ist aber nicht mit Discogs verbunden, gesponsert oder von Discogs unterstützt.</p>
       </div>
     </>
   );

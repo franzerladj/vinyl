@@ -42,10 +42,10 @@ export type PrintFont = "modern" | "klassisch" | "mono" | "schlicht";
 
 /** Überschrift- und Textschrift je Stil */
 export const FONTS: Record<PrintFont, { head: string; body: string; stretch: string; weight: number; upper: boolean; label: string }> = {
-  modern: { head: "'Archivo', 'Inter', system-ui, sans-serif", body: "'Inter', -apple-system, system-ui, sans-serif", stretch: "125%", weight: 900, upper: true, label: "Modern" },
-  klassisch: { head: "'Fraunces', Georgia, serif", body: "'Fraunces', Georgia, serif", stretch: "100%", weight: 700, upper: false, label: "Klassisch" },
-  mono: { head: "'JetBrains Mono', ui-monospace, monospace", body: "'JetBrains Mono', ui-monospace, monospace", stretch: "100%", weight: 800, upper: true, label: "Mono" },
-  schlicht: { head: "'Inter', -apple-system, system-ui, sans-serif", body: "'Inter', -apple-system, system-ui, sans-serif", stretch: "100%", weight: 800, upper: false, label: "Schlicht" },
+  modern: { head: "'Archivo Variable', 'Archivo', 'Inter Variable', 'Inter', system-ui, sans-serif", body: "'Inter Variable', 'Inter', -apple-system, system-ui, sans-serif", stretch: "125%", weight: 900, upper: true, label: "Modern" },
+  klassisch: { head: "'Fraunces Variable', Georgia, serif", body: "'Fraunces Variable', Georgia, serif", stretch: "100%", weight: 700, upper: false, label: "Klassisch" },
+  mono: { head: "'JetBrains Mono Variable', ui-monospace, monospace", body: "'JetBrains Mono Variable', ui-monospace, monospace", stretch: "100%", weight: 800, upper: true, label: "Mono" },
+  schlicht: { head: "'Inter Variable', 'Inter', -apple-system, system-ui, sans-serif", body: "'Inter Variable', 'Inter', -apple-system, system-ui, sans-serif", stretch: "100%", weight: 800, upper: false, label: "Schlicht" },
 };
 
 export const stars = (n?: number) => (n && n > 0 ? "★".repeat(n) + "☆".repeat(Math.max(0, 5 - n)) : "");

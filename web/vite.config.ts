@@ -25,28 +25,44 @@ export default defineConfig({
     VitePWA({
       registerType: "prompt",
       injectRegister: false,
-      includeAssets: ["icon.svg"],
+      includeAssets: ["icon.svg", "apple-touch-icon.png"],
       manifest: {
+        id: "/",
         name: "Crate – Vinyl DJ",
         short_name: "Crate",
-        description: "Wantlist, Sammlung, Setlists und Sticker für Vinyl-DJs (mit Discogs)",
+        description: "Wantlist, Sammlung, DJ-Sets nach BPM und Key, Einleger und günstige Händler für Vinyl-DJs. Mit Discogs.",
+        lang: "de",
+        dir: "ltr",
         theme_color: "#000000",
         background_color: "#000000",
         display: "standalone",
-        start_url: "/",
+        display_override: ["standalone", "minimal-ui"],
+        orientation: "portrait",
+        scope: "/",
+        start_url: "/?source=pwa",
+        categories: ["music", "entertainment", "lifestyle"],
         icons: [
           { src: "icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
-          { src: "icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
+          { src: "icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "icon-maskable-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+          { src: "icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+        ],
+        shortcuts: [
+          { name: "Platte scannen", short_name: "Scannen", url: "/scan", icons: [{ src: "icon-192.png", sizes: "192x192" }] },
+          { name: "Wantlist", url: "/wants", icons: [{ src: "icon-192.png", sizes: "192x192" }] },
+          { name: "DJ-Sets", url: "/sets", icons: [{ src: "icon-192.png", sizes: "192x192" }] },
+          { name: "Shoppen", url: "/shop", icons: [{ src: "icon-192.png", sizes: "192x192" }] },
         ],
       },
       workbox: {
         navigateFallbackDenylist: [/^\/api\//, /^\/credits/],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,
-            handler: "StaleWhileRevalidate",
-            options: { cacheName: "fonts", expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 } },
+            // Selbst gehostete Schriften (alle Sprachbereiche, daher nicht vorab gecacht)
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.endsWith(".woff2"),
+            handler: "CacheFirst",
+            options: { cacheName: "fonts", expiration: { maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 365 } },
           },
           {
             urlPattern: /^https:\/\/i\.discogs\.com\//,

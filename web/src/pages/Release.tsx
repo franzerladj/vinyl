@@ -372,7 +372,7 @@ export default function ReleasePage() {
             <div className="stack">
               {rel.videos.slice(0, 6).map((v) => {
                 const yt = v.uri.match(/[?&]v=([\w-]{11})/)?.[1];
-                return yt ? <iframe key={v.uri} className="video" src={`https://www.youtube-nocookie.com/embed/${yt}`} title={v.title} allowFullScreen loading="lazy" /> : null;
+                return yt ? <VideoFacade key={v.uri} id={yt} title={v.title} /> : null;
               })}
             </div>
           </>
@@ -551,5 +551,20 @@ function TrackEdit({
         Speichern
       </button>
     </div>
+  );
+}
+
+/** YouTube erst nach Antippen laden: vorher keine Verbindung zu Google */
+function VideoFacade({ id, title }: { id: string; title: string }) {
+  const [on, setOn] = useState(false);
+  if (on) return <iframe className="video" src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&playsinline=1&rel=0`} title={title} allow="autoplay; encrypted-media" allowFullScreen />;
+  return (
+    <button className="video video-facade press" onClick={() => setOn(true)} aria-label={`${title} abspielen`}>
+      <span className="video-play">
+        <IconPlay />
+      </span>
+      <span className="video-title">{title}</span>
+      <span className="tiny">Lädt das Video von YouTube</span>
+    </button>
   );
 }

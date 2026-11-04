@@ -1,7 +1,12 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
-import App, { routes } from "./App";
+import App, { ErrorPage, routes } from "./App";
+// Schriften lokal ausliefern (keine Verbindung zu Google Fonts, DSGVO)
+import "@fontsource-variable/inter/wght.css";
+import "@fontsource-variable/archivo/wdth.css";
+import "@fontsource-variable/fraunces/wght.css";
+import "@fontsource-variable/jetbrains-mono/wght.css";
 import "./styles.css";
 import { applyTheme } from "./lib/theme";
 import { registerSW } from "virtual:pwa-register";
@@ -43,10 +48,13 @@ document.addEventListener(
   true,
 );
 
-const router = createBrowserRouter([{ path: "/", element: <App />, children: routes }]);
+const router = createBrowserRouter([{ path: "/", element: <App />, errorElement: <ErrorPage />, children: [{ errorElement: <ErrorPage />, children: routes }] }]);
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <RouterProvider router={router} />
   </StrictMode>,
 );
+
+// Merker für das automatische Neuladen nach einem Update zurücksetzen, sobald die App läuft
+setTimeout(() => sessionStorage.removeItem("crate:reloaded"), 10_000);

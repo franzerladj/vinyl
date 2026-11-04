@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigationType, type RouteObject } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigationType, useRouteError, type RouteObject } from "react-router-dom";
 import { getMe } from "./lib/api";
 import { setState, useStore } from "./lib/store";
 import { haptic, Jobs } from "./components/bits";
@@ -18,6 +18,11 @@ const SetEditor = lazy(() => import("./pages/SetEditor"));
 const Stickers = lazy(() => import("./pages/Stickers"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Friends = lazy(() => import("./pages/Friends"));
+const Impressum = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Impressum })));
+const Datenschutz = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Datenschutz })));
+
+/** Seiten, die auch ohne Anmeldung erreichbar sein müssen (App-Store-Prüfung, Login-Seite) */
+const PUBLIC = new Set(["/impressum", "/datenschutz"]);
 
 /** Alle Seiten der App (Data-Router, damit Seitenübergänge und Zurück-Animationen funktionieren) */
 export const routes: RouteObject[] = [
@@ -35,8 +40,50 @@ export const routes: RouteObject[] = [
   { path: "settings/:section", element: <Settings /> },
   { path: "friends", element: <Friends /> },
   { path: "friends/:username", element: <Friends /> },
+  { path: "impressum", element: <Impressum /> },
+  { path: "datenschutz", element: <Datenschutz /> },
   { path: "*", element: <NotFound /> },
 ];
+
+/** Fehlerseite statt weißem Bildschirm. Nach einem Update fehlen alte Dateien: dann neu laden. */
+export function ErrorPage() {
+  const err = useRouteError() as Error | undefined;
+  const stale = /dynamically imported module|Failed to fetch|Importing a module script failed|error loading/i.test(String(err?.message ?? err));
+  useEffect(() => {
+    if (stale && !sessionStorage.getItem("crate:reloaded")) {
+      sessionStorage.setItem("crate:reloaded", "1");
+      location.reload();
+    }
+  }, [stale]);
+  return (
+    <div className="empty" style={{ minHeight: "80vh", justifyContent: "center", padding: 24 }}>
+      <b style={{ fontSize: 20 }}>{stale ? "Neue Version wird geladen …" : "Da ist etwas schiefgelaufen"}</b>
+      {!stale && <span className="sub">Deine Daten sind sicher, sie liegen auf dem Gerät. Neu laden hilft meistens.</span>}
+      <button className="btn primary" onClick={() => location.reload()}>
+        Neu laden
+      </button>
+      <a className="btn ghost" href="/">
+        Zur Startseite
+      </a>
+      {!stale && err?.message && <code className="tiny" style={{ maxWidth: 420, wordBreak: "break-word" }}>{err.message}</code>}
+    </div>
+  );
+}
+
+function useOnline() {
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    addEventListener("online", on);
+    addEventListener("offline", off);
+    return () => {
+      removeEventListener("online", on);
+      removeEventListener("offline", off);
+    };
+  }, []);
+  return online;
+}
 
 function NotFound() {
   return (
@@ -235,6 +282,7 @@ function useBackGesture() {
 export default function App() {
   const me = useStore((s) => s.me);
   const [loaded, setLoaded] = useState(false);
+  const online = useOnline();
   const loc = useLocation();
   const [barTitle, setBarTitle] = useState<string | null>(null);
   useScrollMemory();
@@ -295,11 +343,20 @@ export default function App() {
       .finally(() => setLoaded(true));
   }, []);
 
+  if (PUBLIC.has(loc.pathname))
+    return (
+      <div className="app">
+        <Suspense fallback={<div className="page" />}>
+          <Outlet />
+        </Suspense>
+      </div>
+    );
   if (!loaded) return <div className="app" />;
   if (!me?.username) return <Login me={me} />;
 
   return (
     <div className="app">
+      {!online && <div className="offline-bar no-print">Offline · du siehst die Daten auf dem Gerät</div>}
       <div className={`topbar no-print ${barTitle ? "on" : ""}`} aria-hidden={!barTitle}>
         <div className="topbar-inner">{barTitle}</div>
       </div>

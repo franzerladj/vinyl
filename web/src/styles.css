@@ -4,9 +4,9 @@
    mit Blur, 44-pt-Touch-Ziele, Federbewegungen, Hell- und Dunkelmodus.
    ========================================================================== */
 :root {
-  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", system-ui, sans-serif;
-  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
-  --font-brand: "Archivo", "Inter", system-ui, sans-serif;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter Variable", "Inter", system-ui, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter Variable", "Inter", system-ui, sans-serif;
+  --font-brand: "Archivo Variable", "Archivo", "Inter Variable", "Inter", system-ui, sans-serif;
 
   /* Dunkel (Standard) */
   --bg: #000;
@@ -524,3 +524,14 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 
 /* Läuft ein Hintergrund-Job, rückt der runde Knopf über die Fortschrittsanzeige */
 .app:has(.jobs) .fab { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 64px); transition: bottom 0.4s var(--spring); }
+
+.video-facade { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; border: 0; padding: 16px; background: linear-gradient(160deg, var(--surface-2), var(--surface)); color: var(--text); cursor: pointer; text-align: center; }
+.video-play { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; }
+.video-play svg { width: 24px; height: 24px; }
+.video-title { font-weight: 600; max-width: 90%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.offline-bar { position: fixed; top: env(safe-area-inset-top); left: 50%; transform: translateX(-50%); z-index: 40; margin-top: 6px; padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; color: #fff; background: rgba(60, 60, 67, 0.85); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); pointer-events: none; animation: pop 0.4s var(--spring) both; }
+.legal { max-width: 680px; line-height: 1.55; }
+.legal h1 { margin-bottom: 4px; }
+.legal h2 { font-size: 17px; margin: 22px 0 4px; }
+.legal p { margin: 0 0 8px; color: var(--text-2); }

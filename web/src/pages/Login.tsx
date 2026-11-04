@@ -67,6 +67,11 @@ export default function Login({ me }: { me: Me | null }) {
             <a href="https://www.last.fm" target="_blank" rel="noreferrer">Last.fm</a> und{" "}
             <a href="https://getsongbpm.com" target="_blank" rel="noreferrer">GetSongBPM</a>
           </p>
+          <p className="tiny" style={{ marginTop: 8 }}>
+            Nutzt die Discogs-API, ist aber nicht mit Discogs verbunden oder von Discogs unterstützt.
+            <br />
+            <a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a>
+          </p>
         </div>
       </div>
     </div>

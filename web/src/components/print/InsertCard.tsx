@@ -316,7 +316,7 @@ export function ObiFold({ s, w, h, o, theme }: { s: PrintItem; w: number; h: num
     <div style={{ position: "relative", display: "flex", width: mm(w), height: mm(h), background: t.bg, overflow: "hidden" }}>
       <ObiStrip s={s} w={panel} h={h} o={o} theme={theme} />
       <div style={{ position: "relative", width: mm(spine), height: "100%", background: t.bg, borderLeft: `0.2mm dashed ${t.line}`, borderRight: `0.2mm dashed ${t.line}`, boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ writingMode: "vertical-rl", fontSize: mm(2), fontWeight: 800, letterSpacing: "0.2em", color: t.muted, fontFamily: "'Inter', system-ui, sans-serif", whiteSpace: "nowrap" }}>
+        <span style={{ writingMode: "vertical-rl", fontSize: mm(2), fontWeight: 800, letterSpacing: "0.2em", color: t.muted, fontFamily: "'Inter Variable', 'Inter', system-ui, sans-serif", whiteSpace: "nowrap" }}>
           {[label?.catno && label.catno !== "none" ? label.catno : "", s.r.artist].filter(Boolean).join("  ·  ").toUpperCase()}
         </span>
       </div>
