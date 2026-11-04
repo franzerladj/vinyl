@@ -7,6 +7,10 @@ export interface SetTrack {
   key: string | null;
   energy: number | null; // 1..10
   moods?: string[];
+  /** Platte, von der der Track stammt (meist gibt es jede Platte nur einmal) */
+  group?: string;
+  /** 0..1: Bewertung und Datenlage (gemessenes Tempo, bekannte Tonart). Bessere Tracks werden bevorzugt. */
+  quality?: number;
 }
 
 export type Curve = "warmup" | "peak" | "journey" | "flat" | "closing";
@@ -19,6 +23,23 @@ export interface SetlistOptions {
   maxBpmJumpPercent?: number; // Standard 6 %
   keyWeight?: number; // 0..2, Standard 1
   mustStartWith?: string;
+  /** Höchstens so viele Tracks pro Platte (Standard 1). Reichen die Platten nicht, bis 3 mit Abzug. */
+  maxPerRecord?: number;
+  /** Gewicht von Bewertung und Datenlage, 0..2, Standard 1 */
+  qualityWeight?: number;
+}
+
+/** Abzug für den zweiten und dritten Track derselben Platte */
+const REPEAT_COST = 12;
+/** Dieselbe Platte direkt hintereinander geht praktisch nicht (eine Platte, ein Plattenteller) */
+const ADJACENT_COST = 80;
+
+/** Wie viele Tracks pro Platte sind nötig, damit das Set voll wird? Erst gewünschtes Limit, im Notfall bis 3. */
+export function effectiveCap(tracks: SetTrack[], length: number, wanted = 1): number {
+  const groups = new Set(tracks.map((t) => t.group ?? t.id)).size;
+  let cap = Math.max(1, wanted);
+  while (cap < 3 && groups * cap < length) cap++;
+  return cap;
 }
 
 /** Ziel-Energie (1..10) für Position t ∈ [0,1] */
@@ -48,6 +69,7 @@ export function transitionCost(a: SetTrack, b: SetTrack, opts: SetlistOptions, t
   const e = b.energy ?? 5;
   cost += Math.abs(e - targetEnergy(opts.curve, t)) * 1.2;
   if (targetBpm && b.bpm) cost += bpmDelta(targetBpm, b.bpm) * 0.3;
+  cost += (1 - (b.quality ?? 0.5)) * 3 * (opts.qualityWeight ?? 1);
   return cost;
 }
 
@@ -61,12 +83,25 @@ export function buildSetlist(tracks: SetTrack[], opts: SetlistOptions): string[]
   const bpmAt = (t: number) =>
     opts.startBpm && opts.endBpm ? opts.startBpm + (opts.endBpm - opts.startBpm) * t : opts.startBpm ?? null;
 
+  const wantedCap = opts.maxPerRecord ?? 1;
+  const cap = effectiveCap(tracks, n, wantedCap);
+  const g = (t: SetTrack) => t.group ?? t.id;
+
   const evaluate = (seq: SetTrack[]) => {
     let c = 0;
-    for (let i = 1; i < seq.length; i++) c += transitionCost(seq[i - 1], seq[i], opts, i / Math.max(1, n - 1), bpmAt(i / Math.max(1, n - 1)));
+    for (let i = 1; i < seq.length; i++) {
+      c += transitionCost(seq[i - 1], seq[i], opts, i / Math.max(1, n - 1), bpmAt(i / Math.max(1, n - 1)));
+      if (g(seq[i]) === g(seq[i - 1])) c += ADJACENT_COST;
+    }
     const first = seq[0];
     c += Math.abs((first.energy ?? 5) - targetEnergy(opts.curve, 0)) * 1.2;
     if (bpmAt(0) && first.bpm) c += bpmDelta(bpmAt(0), first.bpm) * 0.3;
+    c += (1 - (first.quality ?? 0.5)) * 3 * (opts.qualityWeight ?? 1);
+    // Mehrere Tracks einer Platte: über das gewünschte Limit hinaus deutlich teurer
+    const count = new Map<string, number>();
+    for (const t of seq) count.set(g(t), (count.get(g(t)) ?? 0) + 1);
+    for (const k of count.values()) if (k > wantedCap) c += (k - wantedCap) * REPEAT_COST * 2;
+    else if (k > 1) c += (k - 1) * REPEAT_COST * 0.5;
     return c;
   };
 
@@ -85,13 +120,17 @@ export function buildSetlist(tracks: SetTrack[], opts: SetlistOptions): string[]
   for (const start of startCandidates) {
     const seq = [start];
     const used = new Set([start.id]);
+    const perGroup = new Map<string, number>([[g(start), 1]]);
     while (seq.length < n) {
       const t = seq.length / Math.max(1, n - 1);
       let pick: SetTrack | null = null;
       let pc = Infinity;
+      const prev = seq[seq.length - 1];
       for (const cand of tracks) {
         if (used.has(cand.id)) continue;
-        const c = transitionCost(seq[seq.length - 1], cand, opts, t, bpmAt(t));
+        const k = perGroup.get(g(cand)) ?? 0;
+        if (k >= cap || g(cand) === g(prev)) continue;
+        const c = transitionCost(prev, cand, opts, t, bpmAt(t)) + k * (k >= wantedCap ? REPEAT_COST * 2 : REPEAT_COST * 0.5);
         if (c < pc) {
           pc = c;
           pick = cand;
@@ -100,6 +139,7 @@ export function buildSetlist(tracks: SetTrack[], opts: SetlistOptions): string[]
       if (!pick) break;
       seq.push(pick);
       used.add(pick.id);
+      perGroup.set(g(pick), (perGroup.get(g(pick)) ?? 0) + 1);
     }
     const cost = evaluate(seq);
     if (cost < bestCost) {
@@ -124,6 +164,28 @@ export function buildSetlist(tracks: SetTrack[], opts: SetlistOptions): string[]
         }
       }
     }
+  }
+  // Tauschen: jeden Platz gegen ungenutzte Tracks probieren (anderer Track derselben Platte oder andere Platte)
+  const pool = tracks.length > 600 ? tracks.slice(0, 600) : tracks;
+  for (let round = 0; round < 3; round++) {
+    let changed = false;
+    for (let i = opts.mustStartWith ? 1 : 0; i < best.length; i++) {
+      const inSet = new Set(best.map((t) => t.id));
+      for (const cand of pool) {
+        if (inSet.has(cand.id)) continue;
+        const k = best.filter((t, j) => j !== i && g(t) === g(cand)).length;
+        if (k >= cap) continue;
+        const trial = [...best.slice(0, i), cand, ...best.slice(i + 1)];
+        const c = evaluate(trial);
+        if (c + 1e-9 < bestCost) {
+          best = trial;
+          bestCost = c;
+          inSet.delete(best[i].id);
+          changed = true;
+        }
+      }
+    }
+    if (!changed) break;
   }
   return best.map((t) => t.id);
 }

@@ -138,3 +138,44 @@ describe("Versand nach Herkunft", () => {
     expect(r.baskets[0].shipping).toBe(6.5);
   });
 });
+
+describe("Set nach Platten", () => {
+  const mk = (records: number, perRecord: number, quality = () => 0.5) =>
+    Array.from({ length: records * perRecord }, (_, i) => {
+      const r = Math.floor(i / perRecord);
+      return { id: `${r}:${i % perRecord}`, group: String(r), bpm: 118 + (i % 9), key: `${1 + (i % 12)}A`, energy: 3 + (i % 6), quality: quality() };
+    });
+  const groups = (ids: string[]) => ids.map((id) => id.split(":")[0]);
+
+  it("nimmt standardmäßig einen Track pro Platte", () => {
+    const order = buildSetlist(mk(12, 3), { length: 10, curve: "journey" });
+    expect(order).toHaveLength(10);
+    expect(new Set(groups(order)).size).toBe(10);
+  });
+
+  it("spielt nie zwei Tracks derselben Platte hintereinander, auch im Notfall", () => {
+    const order = buildSetlist(mk(4, 4), { length: 10, curve: "journey" });
+    const g = groups(order);
+    expect(order).toHaveLength(10);
+    for (let i = 1; i < g.length; i++) expect(g[i]).not.toBe(g[i - 1]);
+    // höchstens 3 pro Platte
+    for (const k of new Set(g)) expect(g.filter((x) => x === k).length).toBeLessThanOrEqual(3);
+  });
+
+  it("erlaubt auf Wunsch zwei pro Platte, aber nur so viele wie nötig", () => {
+    const order = buildSetlist(mk(6, 3), { length: 8, curve: "flat", maxPerRecord: 2 });
+    const g = groups(order);
+    for (const k of new Set(g)) expect(g.filter((x) => x === k).length).toBeLessThanOrEqual(2);
+  });
+
+  it("wählt bei gleicher Passung den besser bewerteten Track einer Platte", () => {
+    const tracks = [
+      { id: "a:1", group: "a", bpm: 120, key: "8A", energy: 5, quality: 0.2 },
+      { id: "a:2", group: "a", bpm: 120, key: "8A", energy: 5, quality: 1 },
+      { id: "b:1", group: "b", bpm: 121, key: "8A", energy: 5, quality: 0.6 },
+    ];
+    const order = buildSetlist(tracks, { length: 2, curve: "flat" });
+    expect(order).toContain("a:2");
+    expect(order).not.toContain("a:1");
+  });
+});

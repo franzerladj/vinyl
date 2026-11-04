@@ -25,7 +25,8 @@ export default function SetEditor() {
   const nav = useNavigate();
   const isNew = id === "new";
   const [set, setSet] = useState<DJSet>({ name: "", curve: "journey", trackIds: [], createdAt: Date.now() });
-  const [cfg, setCfg] = useState({ length: 20, startBpm: "", endBpm: "", maxJump: 6, keyWeight: 1, style: "", minStars: 0, onlyWithBpm: false, crate: "" });
+  const [cfg, setCfg] = useState({ length: 20, startBpm: "", endBpm: "", maxJump: 6, keyWeight: 1, style: "", minStars: 0, onlyWithBpm: false, crate: "", perRecord: 1 });
+  const [genNote, setGenNote] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [view, setView] = useState<"set" | "crate">("set");
 
@@ -35,8 +36,9 @@ export default function SetEditor() {
 
   const data = useLiveQuery(async () => {
     const ids = [...new Set((await db.collection.toArray()).map((c) => c.releaseId))];
-    const [tracks, rels, metas] = await Promise.all([db.tracks.where("releaseId").anyOf(ids).toArray(), db.releases.bulkGet(ids), db.recordMeta.bulkGet(ids)]);
+    const [tracks, rels, metas, coll] = await Promise.all([db.tracks.where("releaseId").anyOf(ids).toArray(), db.releases.bulkGet(ids), db.recordMeta.bulkGet(ids), db.collection.toArray()]);
     return {
+      ratings: new Map(coll.map((c) => [c.releaseId, c.rating])),
       tracks,
       byId: new Map(tracks.map((t) => [t.id, t])),
       rels: new Map(rels.filter(Boolean).map((r) => [r!.id, r!])),
@@ -80,8 +82,23 @@ export default function SetEditor() {
 
   const generate = () => {
     if (!pool.length) return toast("Keine Tracks im Pool. Filter lockern oder erst BPM ergänzen.");
+    // Qualität: eigene Bewertung (Track-Sterne, sonst Platte) und wie sicher Tempo und Tonart sind
+    const quality = (t: (typeof pool)[number]) => {
+      const stars = t.stars || data?.ratings.get(t.releaseId) || 0;
+      const rating = stars ? stars / 5 : 0.5;
+      const bpm = t.bpm ? (t.bpmSource === "Analyse" ? 0.85 : 1) : estBpm.has(t.id) ? 0.35 : 0;
+      const key = t.key ? (t.keySource?.startsWith("Analyse") ? 0.6 : 1) : 0;
+      return 0.45 * rating + 0.35 * bpm + 0.2 * key;
+    };
     const order = buildSetlist(
-      pool.map((t) => ({ id: t.id, bpm: t.bpm ?? estBpm.get(t.id) ?? null, key: t.key ?? null, energy: t.energy ?? estimateVibe({ styles: data?.rels.get(t.releaseId)?.styles ?? [], bpm: t.bpm ?? estBpm.get(t.id) }).energy })),
+      pool.map((t) => ({
+        id: t.id,
+        group: String(t.releaseId),
+        quality: quality(t),
+        bpm: t.bpm ?? estBpm.get(t.id) ?? null,
+        key: t.key ?? null,
+        energy: t.energy ?? estimateVibe({ styles: data?.rels.get(t.releaseId)?.styles ?? [], bpm: t.bpm ?? estBpm.get(t.id) }).energy,
+      })),
       {
         length: cfg.length,
         curve: set.curve as Curve,
@@ -89,7 +106,23 @@ export default function SetEditor() {
         endBpm: Number(cfg.endBpm) || undefined,
         maxBpmJumpPercent: cfg.maxJump,
         keyWeight: cfg.keyWeight,
+        maxPerRecord: cfg.perRecord,
       },
+    );
+    // Hinweis, wenn Platten mehrfach drin sind oder das Set kürzer wurde
+    const perRel = new Map<number, number>();
+    order.forEach((id) => {
+      const r = data?.byId.get(id)?.releaseId;
+      if (r != null) perRel.set(r, (perRel.get(r) ?? 0) + 1);
+    });
+    const multi = [...perRel.values()].filter((k) => k > 1).length;
+    const records = new Set(pool.map((t) => t.releaseId)).size;
+    setGenNote(
+      multi && cfg.perRecord === 1
+        ? `Nur ${records} Platten passen zu den Filtern, deshalb kommen ${multi} Platten zweimal vor (nie direkt hintereinander).`
+        : order.length < cfg.length
+          ? `Nur ${order.length} Tracks passen zu den Filtern.`
+          : null,
     );
     setSet({ ...set, trackIds: order });
   };
@@ -180,6 +213,19 @@ export default function SetEditor() {
               ))}
             </div>
             <EnergyCurve curve={set.curve as Curve} actual={tracks.map((t) => t.energy ?? null)} />
+            <div className="field" style={{ marginBottom: 10 }}>
+              Tracks pro Platte
+              <Seg
+                value={String(cfg.perRecord) as "1" | "2" | "3"}
+                options={[
+                  ["1", "Einer"],
+                  ["2", "Bis 2"],
+                  ["3", "Bis 3"],
+                ]}
+                onChange={(v) => setCfg({ ...cfg, perRecord: Number(v) })}
+              />
+              <span className="tiny" style={{ fontWeight: 400 }}>Tracks derselben Platte kommen nie direkt hintereinander. Reichen die Platten nicht, nimmt die App im Notfall mehr.</span>
+            </div>
             <div className="grid3">
               <label className="field">
                 Tracks
@@ -240,9 +286,10 @@ export default function SetEditor() {
               <input type="checkbox" checked={cfg.onlyWithBpm} onChange={(e) => setCfg({ ...cfg, onlyWithBpm: e.target.checked })} /> nur Tracks mit gemessenem BPM (sonst wird fehlendes Tempo aus Platte und Style geschätzt)
             </label>
             <button className="btn primary" onClick={generate}>
-              Vorschlag erstellen ({pool.length} Tracks im Pool)
+              Vorschlag erstellen ({new Set(pool.map((t) => t.releaseId)).size} Platten, {pool.length} Tracks)
             </button>
-            <span className="sub">Energie und Vibes kommen aus deinen Track-Daten. Fehlt etwas, schätzt die App aus Style und Tempo.{estimatedInSet > 0 ? ` Im aktuellen Set sind ${estimatedInSet} Tempi geschätzt (mit ~ markiert).` : ""}</span>
+            {genNote && <span className="sub" style={{ color: "var(--warn)" }}>{genNote}</span>}
+            <span className="sub">Pro Platte wählt die App den Track, der am besten passt: nach Tempo, Tonart, Energie und deiner Bewertung. Gemessene Werte schlagen geschätzte.{estimatedInSet > 0 ? ` Im aktuellen Set sind ${estimatedInSet} Tempi geschätzt (mit ~ markiert).` : ""}</span>
           </div>
         </details>
 
@@ -274,7 +321,7 @@ export default function SetEditor() {
                   {prev && (
                     <div className="transition">
                       <span className="dot" style={{ background: d <= 3 ? "var(--ok)" : d <= 6 ? "var(--warn)" : "var(--bad)" }} />
-                      {prev.bpm && t.bpm ? `${t.bpm > prev.bpm ? "+" : ""}${(t.bpm - prev.bpm).toFixed(0)} BPM (${d.toFixed(1)} %)` : "BPM ?"}
+                      {prev.bpm && t.bpm ? (Math.round(t.bpm) === Math.round(prev.bpm) ? "gleiches Tempo" : `${t.bpm > prev.bpm ? "+" : ""}${(t.bpm - prev.bpm).toFixed(0)} BPM (${d.toFixed(1).replace(".", ",")} %)`) : "BPM ?"}
                       <span className="dot" style={{ background: kd <= 1 ? "var(--ok)" : kd <= 2 ? "var(--warn)" : "var(--bad)" }} />
                       {kd <= 1 ? "harmonisch" : kd <= 2 ? "Energy-Boost" : prev.key && t.key ? "Key-Clash" : "Key ?"}
                     </div>
