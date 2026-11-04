@@ -44,6 +44,7 @@ python3 tools/e2e/ean.py 5021392033112 tools/e2e/ean.jpg && node tools/e2e/scan.
 node tools/e2e/print.cjs    # Einleger als PDF
 node tools/e2e/yt.cjs       # YouTube-Einwilligung
 node tools/e2e/djo.cjs      # DJ-Übersicht auf Start
+node tools/e2e/hero.cjs     # Kopf der Startseite zu verschiedenen Uhrzeiten
 node tools/e2e/ship.cjs     # Versand-Schätzung
 node tools/e2e/tap.cjs      # Tap-Tempo
 node tools/e2e/push.cjs     # Mitteilungen-Seite und Freund-Rückmeldung

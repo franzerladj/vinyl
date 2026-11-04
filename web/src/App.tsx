@@ -334,7 +334,7 @@ export default function App() {
     const attach = () => {
       // Seiten mit eigener Navigationsleiste brauchen keine zusätzliche Titelleiste
       if (document.querySelector(".navbar")) return;
-      const h = document.querySelector<HTMLElement>(".page-head h1, .stage h1");
+      const h = document.querySelector<HTMLElement>(".page-head h1, .stage h1, .home-hero h1");
       if (!h) {
         if (tries++ < 30) timer = setTimeout(attach, 100);
         return;

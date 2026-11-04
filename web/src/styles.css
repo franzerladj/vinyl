@@ -725,3 +725,20 @@ details > summary::after { float: none; position: absolute; right: 0; top: 50%; 
 .people-add { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; flex: none; }
 .people-add svg { width: 18px; height: 18px; }
 .people-empty { padding: 14px; }
+
+/* ---------- Kopf der Startseite ---------- */
+.home-hero { position: relative; isolation: isolate; overflow: hidden; margin-top: calc(-1 * env(safe-area-inset-top)); padding: calc(env(safe-area-inset-top) + 14px) var(--gutter) 18px; }
+.home-hero-bg { position: absolute; inset: -30px; z-index: -2; display: flex; filter: blur(46px) saturate(1.5); opacity: 0.55; transform: scale(1.15); }
+.home-hero-bg img { flex: 1; min-width: 0; object-fit: cover; }
+.home-hero::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 20%, transparent) 0%, color-mix(in srgb, var(--bg) 55%, transparent) 55%, var(--bg) 100%); }
+.home-hero-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 60px; }
+.home-hero-top .eyebrow { margin: 0; }
+.home-hero-actions { display: flex; align-items: center; gap: 10px; flex: none; }
+.hero-btn { width: 48px; height: 48px; border-radius: 50%; border: 0; display: grid; place-items: center; color: var(--text); background: color-mix(in srgb, var(--surface) 70%, transparent); -webkit-backdrop-filter: blur(18px) saturate(1.6); backdrop-filter: blur(18px) saturate(1.6); box-shadow: inset 0 0 0 0.5px var(--hairline); cursor: pointer; }
+.hero-btn svg { width: 22px; height: 22px; }
+.hero-btn:disabled { opacity: 0.7; }
+.hero-avatar { display: grid; border-radius: 50%; padding: 2px; background: conic-gradient(from 200deg, var(--accent), #ffd60a, var(--accent)); box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent); }
+.hero-avatar > * { box-shadow: 0 0 0 2px var(--bg); border-radius: 50%; }
+.home-hero h1 { font: 800 clamp(30px, 9.5vw, 40px)/1.05 var(--font-display); letter-spacing: -0.035em; margin: 10px 0 0; max-width: 16ch; }
+.home-hero-status { margin: 8px 0 0; font-size: 15px; font-weight: 500; color: var(--text-2); }
+.home-hero-top .eyebrow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }

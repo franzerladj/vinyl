@@ -9,10 +9,24 @@ import { Avatar, Cover, Empty, haptic, markHero } from "../components/bits";
 import { DjOverview } from "../components/DjOverview";
 import { IconCamera, IconCart, IconList, IconPlay, IconSync, IconTag } from "../components/icons";
 
-const greeting = () => {
-  const h = new Date().getHours();
-  return h < 5 ? "Gute Nacht" : h < 11 ? "Guten Morgen" : h < 17 ? "Hallo" : "Guten Abend";
-};
+/** Begrüßung mit DJ-Bezug je nach Tageszeit. Wechselt täglich, damit sie nicht jeden Tag gleich ist. */
+export function greeting(name: string, opts: { setToday?: boolean; now?: Date } = {}) {
+  const now = opts.now ?? new Date();
+  const h = now.getHours();
+  if (opts.setToday && h >= 7) return `Heute ist Set-Tag, ${name}`;
+  const lines =
+    h >= 22 || h < 5
+      ? [`Noch am Diggen, ${name}?`, `Späte Session, ${name}?`, `Eine Platte geht noch, ${name}`]
+      : h < 10
+        ? [`Guten Morgen, ${name}`, `Kaffee und Platten, ${name}?`]
+        : h < 14
+          ? [`Hallo ${name}`, `Was läuft heute, ${name}?`]
+          : h < 18
+            ? [`Hallo ${name}`, `Zeit zum Sortieren, ${name}?`, `Was liegt heute auf, ${name}?`]
+            : [`Guten Abend, ${name}`, `Bereit für heute Abend, ${name}?`];
+  const day = Math.floor((now.getTime() - now.getTimezoneOffset() * 60_000) / 86_400_000);
+  return lines[day % lines.length];
+}
 
 export default function Home() {
   const me = useStore((s) => s.me);
@@ -87,7 +101,19 @@ export default function Home() {
     }
   };
 
-  const today = new Date().toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" });
+  // Auf schmalen Handys kürzerer Wochentag, damit die Zeile nicht umbricht
+  const today = new Date().toLocaleDateString("de-DE", { weekday: window.innerWidth < 360 ? "short" : "long", day: "numeric", month: "long" });
+  const firstName = profile?.name?.split(" ")[0] || me?.username || "";
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const setToday = stats?.nextSet?.date === todayIso;
+  // Was gerade zählt: Set heute, neue Platten zum Beschriften, sonst der Überblick
+  const statusLine = !stats
+    ? ""
+    : setToday
+      ? `Set „${stats.nextSet!.name}“ · ${stats.nextSet!.trackIds.length} Tracks eingepackt?`
+      : stats.records === 0
+        ? "Deine Kiste wird gerade gefüllt"
+        : [`${stats.records} Platten`, `${stats.wants} Wants`, stats.noSticker ? `${stats.noSticker} ohne Einleger` : null].filter(Boolean).join(" · ");
 
   return (
     <>
@@ -96,24 +122,26 @@ export default function Home() {
           <IconSync />
         </div>
       )}
-      <div className="page-head">
-        <div>
+      <header className="home-hero">
+        <div className="home-hero-bg" aria-hidden="true">
+          {(stats?.recent ?? []).filter(Boolean).slice(0, 4).map((r) => r && <img key={r.id} src={r.cover || r.thumb} alt="" />)}
+        </div>
+        <div className="home-hero-top">
           <div className="eyebrow">{today}</div>
-          <h1>
-            {greeting()}, {profile?.name?.split(" ")[0] || me?.username}
-          </h1>
+          <div className="home-hero-actions">
+            <button className="hero-btn press" onClick={sync} disabled={busy} aria-label="Synchronisieren">
+              <span style={{ display: "grid", animation: busy ? "spin 1s linear infinite" : undefined }}>
+                <IconSync />
+              </span>
+            </button>
+            <Link to="/settings" viewTransition className="hero-avatar press" aria-label="Profil und Einstellungen">
+              <Avatar src={profile?.avatar} name={me?.username ?? "?"} size={56} />
+            </Link>
+          </div>
         </div>
-        <div className="row" style={{ gap: 4 }}>
-          <button className="icon-btn round" onClick={sync} disabled={busy} aria-label="Synchronisieren">
-            <span style={{ display: "grid", animation: busy ? "spin 1s linear infinite" : undefined }}>
-              <IconSync />
-            </span>
-          </button>
-          <Link to="/settings" viewTransition className="press" aria-label="Profil und Einstellungen" style={{ display: "grid", borderRadius: "50%", boxShadow: "0 0 0 2px var(--surface-2)" }}>
-            <Avatar src={profile?.avatar} name={me?.username ?? "?"} size={38} />
-          </Link>
-        </div>
-      </div>
+        <h1>{greeting(firstName, { setToday })}</h1>
+        <p className="home-hero-status">{statusLine}</p>
+      </header>
 
       <div className="page">
         {busy && (
