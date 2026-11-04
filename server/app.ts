@@ -3,7 +3,8 @@ import { Hono, type Context } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { readConfig, type Config, type Env } from "./env";
 import { seal, unseal, type Session } from "./session";
-import { authorizeUrl, discogsFetch, getAccessToken, getRequestToken } from "./discogs";
+import { authorizeUrl, discogsFetch, DiscogsBusy, getAccessToken, getRequestToken } from "./discogs";
+import { oauthHmacHeader } from "./oauthSign";
 import { recognizeRecord, recognizeRecordFree, tagVibes, tagVibesFree, type VibeInput } from "./ai";
 import { fetchPreview, lookupAudio } from "./audio";
 import { lastfmTags } from "./lastfm";
@@ -37,7 +38,13 @@ async function claudeKey(c: C): Promise<string | null> {
 app.get("/api/auth/login", async (c) => {
   const cfg = c.var.cfg;
   if (!cfg.discogsKey) return c.text("DISCOGS_CONSUMER_KEY fehlt in der Server-Konfiguration", 500);
-  const rt = await getRequestToken(cfg, `${cfg.appUrl}/api/auth/callback`);
+  let rt: { token: string; secret: string };
+  try {
+    rt = await getRequestToken(cfg, `${cfg.appUrl}/api/auth/callback`);
+  } catch (e) {
+    if (e instanceof DiscogsBusy) return c.redirect(`${cfg.appUrl}/?login=busy`);
+    throw e;
+  }
   setCookie(c, PENDING, await seal(cfg.sessionSecret, rt), { ...cookieOpts(c), maxAge: 900 });
   return c.redirect(authorizeUrl(rt.token));
 });
@@ -47,8 +54,15 @@ app.get("/api/auth/callback", async (c) => {
   const pending = await unseal<{ token: string; secret: string }>(cfg.sessionSecret, getCookie(c, PENDING));
   const verifier = c.req.query("oauth_verifier");
   if (!pending || !verifier || c.req.query("oauth_token") !== pending.token) return c.redirect(`${cfg.appUrl}/?login=failed`);
-  const at = await getAccessToken(cfg, pending.token, pending.secret, verifier);
+  let at: { token: string; secret: string };
+  try {
+    at = await getAccessToken(cfg, pending.token, pending.secret, verifier);
+  } catch (e) {
+    // Der Verifier ist nur einmal gültig, also neu anmelden lassen
+    return c.redirect(`${cfg.appUrl}/?login=${e instanceof DiscogsBusy ? "busy" : "failed"}`);
+  }
   const idRes = await discogsFetch(cfg, { token: at.token, secret: at.secret, username: "" }, "/oauth/identity");
+  if (!idRes.ok) return c.redirect(`${cfg.appUrl}/?login=${idRes.status === 429 ? "busy" : "failed"}`);
   const identity = (await idRes.json()) as { username: string };
   deleteCookie(c, PENDING, { path: "/" });
   setCookie(c, SESSION, await seal(cfg.sessionSecret, { ...at, username: identity.username }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
@@ -78,7 +92,21 @@ app.get("/api/me", async (c) => {
   return c.json({ username: null, features }, 401);
 });
 
-// ---------- Discogs-Proxy ----------
+// ---------- Signierte Direktanfragen ----------
+// Der Browser schickt Anfragen selbst an api.discogs.com (eigene IP, eigenes Limit).
+// Der Server liefert nur die HMAC-Signatur für genau diese Anfrage.
+app.post("/api/sign", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s) return c.json({ mode: "proxy" });
+  const { method, path } = await c.req.json<{ method: string; path: string }>();
+  if (!path || !ALLOWED.test(path) || !["GET", "POST", "PUT", "DELETE"].includes(method)) return c.json({ message: "Pfad nicht erlaubt" }, 403);
+  const url = `https://api.discogs.com${path}`;
+  const authorization = await oauthHmacHeader({ method, url, consumerKey: cfg.discogsKey, consumerSecret: cfg.discogsSecret, token: s.token, tokenSecret: s.secret });
+  return c.json({ mode: "direct", url, authorization });
+});
+
+// ---------- Discogs-Proxy (Rückfallebene) ----------
 const ALLOWED = /^\/(users|database|releases|masters|artists|labels|marketplace\/(stats|price_suggestions|listings)|oauth\/identity)(\/|$|\?)/;
 
 app.all("/api/discogs/*", async (c) => {

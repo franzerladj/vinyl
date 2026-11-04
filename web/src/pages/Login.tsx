@@ -8,7 +8,7 @@ const SLEEVES = [
 ];
 
 export default function Login({ me }: { me: Me | null }) {
-  const failed = new URLSearchParams(location.search).get("login") === "failed";
+  const status = new URLSearchParams(location.search).get("login");
   return (
     <div className="app" style={{ paddingBottom: 0 }}>
       <div className="hero">
@@ -50,7 +50,8 @@ export default function Login({ me }: { me: Me | null }) {
           })}
         </div>
         <div style={{ marginTop: "auto" }}>
-          {failed && <p style={{ color: "var(--bad)" }}>Die Anmeldung hat nicht geklappt. Bitte noch einmal versuchen.</p>}
+          {status === "failed" && <p style={{ color: "var(--bad)" }}>Die Anmeldung hat nicht geklappt. Bitte noch einmal versuchen.</p>}
+          {status === "busy" && <p style={{ color: "var(--warn)" }}>Discogs war gerade ausgelastet. Bitte in einer Minute noch einmal anmelden.</p>}
           {me?.features.oauth === false ? (
             <p className="sub">Auf dem Server fehlt der Discogs-Consumer-Key. Siehe README, Abschnitt Einrichtung.</p>
           ) : (

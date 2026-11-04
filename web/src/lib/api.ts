@@ -1,5 +1,8 @@
-// API-Zugriff. Alle Discogs-Aufrufe laufen über den eigenen Server (OAuth) und eine Warteschlange,
-// die das Discogs-Limit von 60 Anfragen pro Minute einhält.
+// API-Zugriff auf Discogs.
+// Discogs drosselt pro IP-Adresse (60 Anfragen/Minute). Deshalb schickt der Browser die
+// Anfragen selbst an api.discogs.com, von der eigenen IP. Der Server liefert nur die
+// OAuth-Signatur für genau diese Anfrage. Klappt das nicht, geht es über den Server-Proxy.
+// Eine Warteschlange hält das Limit ein und bevorzugt Nutzeraktionen vor Hintergrund-Sync.
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -10,8 +13,10 @@ export class ApiError extends Error {
 type Job = { run: () => Promise<void>; priority: number };
 const queue: Job[] = [];
 let running = false;
-let remaining = 60;
 let lastCall = 0;
+/** Zeitstempel der letzten Anfragen (gleitendes 60-Sekunden-Fenster) */
+const recent: number[] = [];
+const LIMIT_PER_MIN = 55;
 
 async function pump() {
   if (running) return;
@@ -19,11 +24,15 @@ async function pump() {
   while (queue.length) {
     queue.sort((a, b) => b.priority - a.priority);
     const job = queue.shift()!;
-    // Mindestabstand: großzügig, wenn das Kontingent knapp wird
-    const gap = remaining > 20 ? 250 : remaining > 5 ? 1100 : 4000;
-    const wait = lastCall + gap - Date.now();
+    const now = Date.now();
+    while (recent.length && now - recent[0] > 60_000) recent.shift();
+    // Volles Fenster: warten, bis die älteste Anfrage herausfällt
+    let wait = recent.length >= LIMIT_PER_MIN ? recent[0] + 60_000 - now : 0;
+    // Hintergrund-Jobs gleichmäßig verteilen, Nutzeraktionen sofort
+    wait = Math.max(wait, lastCall + (job.priority > 0 ? 150 : 1050) - now);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     lastCall = Date.now();
+    recent.push(lastCall);
     await job.run();
   }
   running = false;
@@ -43,20 +52,47 @@ export interface DiscogsOptions {
   background?: boolean;
 }
 
+/** Direktweg abschalten, falls der Browser ihn blockiert (z.B. Tracking-Schutz) */
+let direct = true;
+
+async function sendDirect(path: string, method: string, body?: string): Promise<Response | null> {
+  if (!direct) return null;
+  const sig = await fetch("/api/sign", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ method, path }),
+  });
+  if (!sig.ok) return null;
+  const s = (await sig.json()) as { mode: "direct" | "proxy"; url?: string; authorization?: string };
+  if (s.mode !== "direct" || !s.url || !s.authorization) return null;
+  try {
+    return await fetch(s.url, {
+      method,
+      headers: { Authorization: s.authorization, ...(body ? { "Content-Type": "application/json" } : {}) },
+      body,
+    });
+  } catch {
+    // Netzwerk- oder CORS-Fehler: ab jetzt über den Server
+    direct = false;
+    return null;
+  }
+}
+
+const sendProxy = (path: string, method: string, body?: string) =>
+  fetch(`/api/discogs${path}`, { method, credentials: "include", headers: body ? { "Content-Type": "application/json" } : undefined, body });
+
 export function discogs<T>(path: string, opts: DiscogsOptions = {}): Promise<T> {
+  const method = opts.method ?? "GET";
+  const body = opts.body ? JSON.stringify(opts.body) : undefined;
   return enqueue(async () => {
     for (let attempt = 0; attempt < 4; attempt++) {
-      const res = await fetch(`/api/discogs${path}`, {
-        method: opts.method ?? "GET",
-        credentials: "include",
-        headers: opts.body ? { "Content-Type": "application/json" } : undefined,
-        body: opts.body ? JSON.stringify(opts.body) : undefined,
-      });
-      const rem = res.headers.get("X-Discogs-Ratelimit-Remaining");
-      if (rem) remaining = Number(rem);
+      const res = (await sendDirect(path, method, body)) ?? (await sendProxy(path, method, body));
       if (res.status === 429) {
-        remaining = 0;
-        await new Promise((r) => setTimeout(r, 15000 * (attempt + 1)));
+        // Fenster als voll markieren und warten
+        const t = Date.now();
+        while (recent.length < LIMIT_PER_MIN) recent.push(t);
+        await new Promise((r) => setTimeout(r, 12_000 * (attempt + 1)));
         continue;
       }
       if (!res.ok) {
@@ -67,7 +103,7 @@ export function discogs<T>(path: string, opts: DiscogsOptions = {}): Promise<T> 
       const text = await res.text();
       return (text ? JSON.parse(text) : undefined) as T;
     }
-    throw new ApiError(429, "Discogs-Limit erreicht, bitte kurz warten");
+    throw new ApiError(429, "Discogs ist gerade ausgelastet, bitte kurz warten");
   }, opts.background ? 0 : 10);
 }
 
