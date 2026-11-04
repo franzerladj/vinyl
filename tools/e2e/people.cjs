@@ -14,7 +14,7 @@ const install = require("./mock.cjs");
     await page.waitForSelector("text=45 Platten");
     await page.goto("http://localhost:8787/friends");
     await page.waitForTimeout(800);
-    const toggle = await page.isVisible("text=Für Kumpels auffindbar sein");
+    const toggle = await page.isVisible("text=Für Freunde auffindbar sein");
     await page.fill("input[placeholder*='Discogs-Name']", "max");
     await page.waitForSelector(".people-hit", { timeout: 8000 });
     await page.waitForTimeout(1500);

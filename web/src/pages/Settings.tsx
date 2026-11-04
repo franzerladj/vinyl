@@ -685,7 +685,7 @@ function HelpPage() {
 }
 
 const PUSH_KINDS: [PushKind, string, string][] = [
-  ["friends", "Neue Kumpels", "Wenn dich jemand in Crate als Freund hinzufügt"],
+  ["friends", "Neue Freundschaften", "Wenn dich jemand in Crate als Freund hinzufügt"],
   ["wants", "Wantlist", "Wieder verfügbar, Preis gefallen oder unter deinem Wunschpreis"],
   ["sellers", "Lieblingshändler", "Neue Angebote für deine Wants nach dem Sync"],
   ["lent", "Verliehene Platten", "Erinnerung nach 3, 6 und 10 Wochen"],

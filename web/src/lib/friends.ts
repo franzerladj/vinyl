@@ -138,7 +138,7 @@ export async function friendMatches(u: string): Promise<FriendMatch> {
   };
 }
 
-/** Link, mit dem ein Kumpel dich direkt als Freund hinzufügen kann */
+/** Link, mit dem ein Freund dich direkt als Freund hinzufügen kann */
 export const inviteLink = () => `${location.origin}/friends?add=${encodeURIComponent(username())}`;
 
 export const messageUrl = (u: string) => `https://www.discogs.com/messages/compose?to=${encodeURIComponent(u)}`;

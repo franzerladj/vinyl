@@ -87,7 +87,7 @@ function FriendList() {
       <div className="page-head" style={{ paddingTop: 0 }}>
         <div>
           <h1>Freunde</h1>
-          <div className="sub">Sammlungen und Wantlists deiner Kumpels</div>
+          <div className="sub">Sammlungen und Wantlists deiner Freunde</div>
         </div>
       </div>
       <div className="page stack">
@@ -148,10 +148,10 @@ function FriendList() {
         {visible === false && !name && (
           <div className="card row" style={{ gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <b>Für Kumpels auffindbar sein</b>
+              <b>Für Freunde auffindbar sein</b>
               <div className="sub">Dann finden dich andere Crate-Nutzer über die Suche, mit Name, Ort und Profilbild von Discogs.</div>
             </div>
-            <Switch checked={false} label="Für Kumpels auffindbar" onChange={() => setDiscoverable(true).then(() => (setVisible(true), toast("Du bist jetzt auffindbar")), (e) => toast(e.message))} />
+            <Switch checked={false} label="Für Freunde auffindbar" onChange={() => setDiscoverable(true).then(() => (setVisible(true), toast("Du bist jetzt auffindbar")), (e) => toast(e.message))} />
           </div>
         )}
 
@@ -180,7 +180,7 @@ function FriendList() {
             ))}
           </div>
         ) : friends ? (
-          <Empty title="Noch keine Freunde" action={<button className="btn primary" onClick={share}><IconShare /> Kumpels einladen</button>}>
+          <Empty title="Noch keine Freunde" action={<button className="btn primary" onClick={share}><IconShare /> Freunde einladen</button>}>
             Füge Freunde über ihren Discogs-Namen hinzu. Du siehst ihre Sammlung, ihre Wantlist und vor allem, wer welche deiner Wants im Regal stehen hat.
           </Empty>
         ) : (
@@ -189,7 +189,7 @@ function FriendList() {
 
         {friends && friends.length > 0 && (
           <button className="btn block tinted" onClick={share}>
-            <IconShare /> Kumpels einladen
+            <IconShare /> Freunde einladen
           </button>
         )}
 
@@ -245,10 +245,10 @@ function FriendList() {
         {visible && (
           <div className="card row" style={{ gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <b>Für Kumpels auffindbar</b>
+              <b>Für Freunde auffindbar</b>
               <div className="sub">Andere Crate-Nutzer finden dich über die Suche.</div>
             </div>
-            <Switch checked label="Für Kumpels auffindbar" onChange={() => setDiscoverable(false).then(() => (setVisible(false), toast("Du bist nicht mehr auffindbar")), (e) => toast(e.message))} />
+            <Switch checked label="Für Freunde auffindbar" onChange={() => setDiscoverable(false).then(() => (setVisible(false), toast("Du bist nicht mehr auffindbar")), (e) => toast(e.message))} />
           </div>
         )}
       </div>

@@ -272,7 +272,7 @@ app.post("/api/push/subscribe", async (c) => {
     await cfg.kv.delete(`pending:${s.username.toLowerCase()}`);
     const names = [...new Set(pending)];
     await notifyUser(cfg.kv, cfg.push, s.username, rec, "friends", {
-      title: names.length === 1 ? "Neuer Kumpel auf Crate" : `${names.length} Kumpels auf Crate`,
+      title: names.length === 1 ? "Neue Freundschaft auf Crate" : `${names.length} neue Freundschaften auf Crate`,
       body: names.length === 1 ? `${names[0]} hat dich als Freund hinzugefügt.` : `${names.join(", ")} haben dich hinzugefügt.`,
       url: names.length === 1 ? `/friends?add=${encodeURIComponent(names[0])}` : "/friends",
       tag: "friends",
@@ -344,7 +344,7 @@ app.post("/api/push/friend-added", async (c) => {
   await cfg.kv.put(pairKey, "1", { expirationTtl: 30 * 86_400 });
   const rec = await loadUser(cfg.kv, friend);
   if (rec?.subs.length) {
-    const n = await notifyUser(cfg.kv, cfg.push, friend, rec, "friends", { title: "Neuer Kumpel auf Crate", body: `${s.username} hat dich als Freund hinzugefügt. Tippen, um zurück zu folgen.`, url: `/friends?add=${encodeURIComponent(s.username)}`, tag: `friend-${s.username}` });
+    const n = await notifyUser(cfg.kv, cfg.push, friend, rec, "friends", { title: "Neue Freundschaft auf Crate", body: `${s.username} hat dich als Freund hinzugefügt. Tippen, um zurück zu folgen.`, url: `/friends?add=${encodeURIComponent(s.username)}`, tag: `friend-${s.username}` });
     return c.json({ ok: true, status: n ? "zugestellt" : "aus" });
   }
   // Noch keine Mitteilungen an: merken und nachreichen, sobald er sie einschaltet

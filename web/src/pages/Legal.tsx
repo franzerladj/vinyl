@@ -133,7 +133,7 @@ export function Datenschutz() {
 
         <h2>9. Freunde</h2>
         <p>Die Freunde-Funktion liest öffentliche Discogs-Profile und Sammlungen der Nutzer, deren Namen du einträgst. Die Daten liegen nur auf deinem Gerät.</p>
-        <p>Wenn du „Für Kumpels auffindbar“ einschaltest, speichert der Server deinen Discogs-Namen, deinen Namen, Ort, Profilbild und die Anzahl deiner Platten, wie sie öffentlich auf Discogs stehen. Andere angemeldete Crate-Nutzer finden dich dann über die Suche. Ausschalten löscht den Eintrag sofort. Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO).</p>
+        <p>Wenn du „Für Freunde auffindbar“ einschaltest, speichert der Server deinen Discogs-Namen, deinen Namen, Ort, Profilbild und die Anzahl deiner Platten, wie sie öffentlich auf Discogs stehen. Andere angemeldete Crate-Nutzer finden dich dann über die Suche. Ausschalten löscht den Eintrag sofort. Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO).</p>
 
         <h2>10. Mitteilungen (optional)</h2>
         <p>
