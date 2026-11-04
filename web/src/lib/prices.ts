@@ -104,7 +104,10 @@ export async function loadPriceInfo(ids: number[]): Promise<Map<number, PriceInf
   return out;
 }
 
-export const setTargetPrice = (releaseId: number, targetPrice: number | null) => db.wantMeta.put({ releaseId, targetPrice });
+export const setTargetPrice = async (releaseId: number, targetPrice: number | null) => {
+  await db.wantMeta.put({ releaseId, targetPrice });
+  void import("./push").then((p) => p.syncPushData());
+};
 
 // ---------------------------------------------------------------------------
 // Lieblingshändler: Inventar über die offizielle API nach Wants durchsuchen

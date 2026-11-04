@@ -56,6 +56,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Push-Mitteilungen anzeigen und öffnen (web/public/push-sw.js)
+        importScripts: ["/push-sw.js"],
         navigateFallbackDenylist: [/^\/api\//, /^\/credits/],
         runtimeCaching: [
           {

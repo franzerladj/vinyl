@@ -13,8 +13,10 @@ import { Avatar, Seg } from "../components/bits";
 import type { MyProfile } from "../lib/friends";
 import { NavBar, Switch } from "../components/ui";
 import { ShippingEditor } from "../components/ShippingEditor";
+import { DEFAULT_PREFS, disablePush, enablePush, isIOS, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs } from "../lib/push";
 import { DEFAULT_SHIP, type ShipConfig } from "../../../shared/shipping";
 import {
+  IconBell,
   IconBolt,
   IconPlay,
   IconChevron,
@@ -111,6 +113,8 @@ export default function Settings() {
       return <AboutPage />;
     case "help":
       return <HelpPage />;
+    case "notifications":
+      return <NotificationsPage />;
     default:
       return <Overview />;
   }
@@ -131,6 +135,7 @@ function Overview() {
   const [theme, setT] = useState<Theme>(getTheme());
   const [haptics, setH] = useState(hapticsEnabled());
   const [yt, setYt] = useState(ytConsent() === "yes");
+  const pushOn = useLiveQuery(() => getKV("pushOn", false), [], false);
   const profile = useLiveQuery(() => getKV<MyProfile | null>("myProfile", null));
   const stats = useLiveQuery(async () => ({
     friends: await db.friends.count(),
@@ -226,6 +231,10 @@ function Overview() {
               />
             }
           />
+        </Group>
+
+        <Group title="Mitteilungen">
+          <Row icon={<IconBell />} color="#ff3b30" label="Mitteilungen" value={pushOn ? "an" : "aus"} to="/settings/notifications" />
         </Group>
 
         <Group title="Daten">
@@ -670,6 +679,107 @@ function HelpPage() {
         <Group title="Tipp">
           <Row label="Als App installieren" sub="Im Browsermenü „Zum Startbildschirm hinzufügen“ wählen. Dann startet Crate wie eine echte App und funktioniert offline." />
         </Group>
+      </div>
+    </>
+  );
+}
+
+const PUSH_KINDS: [PushKind, string, string][] = [
+  ["friends", "Neue Kumpels", "Wenn dich jemand in Crate als Freund hinzufügt"],
+  ["wants", "Wantlist", "Wieder verfügbar, Preis gefallen oder unter deinem Wunschpreis"],
+  ["sellers", "Lieblingshändler", "Neue Angebote für deine Wants nach dem Sync"],
+  ["lent", "Verliehene Platten", "Erinnerung nach 3, 6 und 10 Wochen"],
+  ["sets", "Set-Termine", "Am Tag des Sets: Platten einpacken"],
+];
+
+function NotificationsPage() {
+  const support = pushSupport();
+  const [on, setOn] = useState<boolean | null>(null);
+  const [prefs, setPrefs] = useState<PushPrefs>(DEFAULT_PREFS);
+  const [busy, setBusy] = useState(false);
+  const [available, setAvailable] = useState(true);
+  useEffect(() => {
+    void (async () => {
+      const local = await getKV("pushOn", false);
+      const st = await pushStatus().catch(() => null);
+      setAvailable(st?.available ?? true);
+      setOn(Boolean(local && st && st.devices > 0 && "Notification" in window && Notification.permission === "granted"));
+      if (st?.prefs) setPrefs(st.prefs);
+    })();
+  }, []);
+  const toggle = async (v: boolean) => {
+    setBusy(true);
+    try {
+      if (v) {
+        const p = await enablePush(prefs);
+        setPrefs(p);
+        await setKV("pushPrefs", p);
+        toast("Mitteilungen sind an");
+      } else {
+        await disablePush();
+        toast("Mitteilungen sind aus");
+      }
+      setOn(v);
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const setPref = async (k: PushKind, v: boolean) => {
+    const p = { ...prefs, [k]: v };
+    setPrefs(p);
+    await setKV("pushPrefs", p);
+    await savePushPrefs({ [k]: v }).catch((e) => toast(e.message));
+  };
+  return (
+    <>
+      <NavBar title="Mitteilungen" backTo="/settings" backLabel="Einstellungen" />
+      <div className="page settings-list">
+        {support === "install" ? (
+          <Group title="Zuerst installieren" foot="Apple erlaubt Mitteilungen nur für Web-Apps auf dem Home-Bildschirm (ab iOS 16.4).">
+            <div style={{ padding: "12px 14px" }} className="stack">
+              <span>1. Unten in Safari auf das Teilen-Symbol tippen</span>
+              <span>2. „Zum Home-Bildschirm“ wählen</span>
+              <span>3. Crate vom Home-Bildschirm öffnen und hier Mitteilungen einschalten</span>
+            </div>
+          </Group>
+        ) : support === "unsupported" ? (
+          <Group foot="Dieser Browser kann keine Mitteilungen empfangen. Am Handy klappt es mit Chrome (Android) oder als installierte App (iPhone).">
+            <Row label="Mitteilungen" value="nicht möglich" />
+          </Group>
+        ) : (
+          <>
+            <Group foot={available ? "Für Wantlist und Erinnerungen prüft Crate stündlich bei Discogs. Dafür liegen deine Wants, Wunschpreise und Termine verschlüsselt auf dem Server, nur solange Mitteilungen an sind." : "Mitteilungen sind auf dem Server noch nicht eingerichtet."}>
+              <Row
+                icon={<IconBell />}
+                color="#ff3b30"
+                label="Mitteilungen erlauben"
+                sub={on ? "Auf diesem Gerät an" : "Auf diesem Gerät aus"}
+                right={<Switch checked={Boolean(on)} label="Mitteilungen erlauben" onChange={(v) => !busy && on !== null && toggle(v)} />}
+              />
+            </Group>
+            <Group title="Worüber">
+              {PUSH_KINDS.map(([k, l, d]) => (
+                <Row key={k} label={l} sub={d} right={<Switch checked={prefs[k]} label={l} onChange={(v) => setPref(k, v)} />} />
+              ))}
+            </Group>
+            {on && (
+              <Group>
+                <Row
+                  label="Test-Mitteilung senden"
+                  onClick={() =>
+                    sendTestPush().then(
+                      (r) => toast(r.sent ? "Gesendet. Sie sollte gleich erscheinen." : "Konnte nicht zugestellt werden. Bitte Mitteilungen aus- und wieder einschalten."),
+                      (e) => toast(e.message),
+                    )
+                  }
+                />
+              </Group>
+            )}
+            {isIOS() && <p className="tiny" style={{ textAlign: "center" }}>Auf dem iPhone kommen Mitteilungen nur, solange Crate auf dem Home-Bildschirm liegt.</p>}
+          </>
+        )}
       </div>
     </>
   );

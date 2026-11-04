@@ -3,7 +3,8 @@ import { Hono, type Context } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { readConfig, type Config, type Env } from "./env";
 import { seal, unseal, type Session } from "./session";
-import { authorizeUrl, discogsFetch, DiscogsBusy, getAccessToken, getRequestToken } from "./discogs";
+import { authHeaders, authorizeUrl, discogsFetch, DiscogsBusy, getAccessToken, getRequestToken } from "./discogs";
+import { bundle, dueReminders, loadUser, notifyUser, saveUser, sendPush, userKey, wantChange, type Message, type PushSub, type Stat, type UserRec, type WatchedWant } from "./push";
 import { oauthHmacHeader, oauthHmacParams } from "./oauthSign";
 import { recognizeRecord, recognizeRecordFree, tagVibes, tagVibesFree, type VibeInput } from "./ai";
 import { fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
@@ -248,4 +249,180 @@ app.get("/api/lastfm/tags", async (c) => {
 app.onError((err, c) => {
   console.error(err);
   return c.json({ message: err.message }, 500);
+});
+
+// ---------- Push-Mitteilungen ----------
+const emptyRec = (sess: string): UserRec => ({ subs: [], prefs: { friends: true, wants: true, lent: true, sets: true, sellers: true }, sess, wants: [], lent: [], sets: [], cursor: 0, sent: {}, updatedAt: Date.now() });
+
+/** Gerät für Mitteilungen anmelden. Merkt sich den Discogs-Zugang (versiegelt), damit der Zeitplan Wants prüfen kann. */
+app.post("/api/push/subscribe", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const { subscription, prefs } = await c.req.json<{ subscription: PushSub; prefs?: Partial<UserRec["prefs"]> }>();
+  if (!subscription?.endpoint?.startsWith("https://") || !subscription.keys?.p256dh || !subscription.keys?.auth) return c.json({ message: "ungültiges Abo" }, 400);
+  const rec = (await loadUser(cfg.kv, s.username)) ?? emptyRec("");
+  rec.sess = await seal(cfg.sessionSecret, { token: s.token, secret: s.secret, username: s.username });
+  rec.subs = [...rec.subs.filter((x) => x.endpoint !== subscription.endpoint), { endpoint: subscription.endpoint, keys: subscription.keys, addedAt: Date.now() }].slice(-5);
+  if (prefs) rec.prefs = { ...rec.prefs, ...prefs };
+  await saveUser(cfg.kv, s.username, rec);
+  // Liegen gebliebene Freundschaftsanfragen nachreichen
+  const pending = JSON.parse((await cfg.kv.get(`pending:${s.username.toLowerCase()}`)) ?? "[]") as string[];
+  if (pending.length) {
+    await cfg.kv.delete(`pending:${s.username.toLowerCase()}`);
+    const names = [...new Set(pending)];
+    await notifyUser(cfg.kv, cfg.push, s.username, rec, "friends", {
+      title: names.length === 1 ? "Neuer Kumpel auf Crate" : `${names.length} Kumpels auf Crate`,
+      body: names.length === 1 ? `${names[0]} hat dich als Freund hinzugefügt.` : `${names.join(", ")} haben dich hinzugefügt.`,
+      url: names.length === 1 ? `/friends?add=${encodeURIComponent(names[0])}` : "/friends",
+      tag: "friends",
+    });
+  }
+  return c.json({ ok: true, prefs: rec.prefs });
+});
+
+app.post("/api/push/unsubscribe", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ ok: true });
+  const { endpoint } = await c.req.json<{ endpoint?: string }>();
+  const rec = await loadUser(cfg.kv, s.username);
+  if (!rec) return c.json({ ok: true });
+  rec.subs = endpoint ? rec.subs.filter((x) => x.endpoint !== endpoint) : [];
+  // Ohne Geräte nichts mehr aufbewahren
+  if (!rec.subs.length) await cfg.kv.delete(userKey(s.username));
+  else await saveUser(cfg.kv, s.username, rec);
+  return c.json({ ok: true });
+});
+
+app.get("/api/push/status", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  const rec = s?.username ? await loadUser(cfg.kv, s.username) : null;
+  return c.json({ available: Boolean(cfg.push.privateJwk), devices: rec?.subs.length ?? 0, prefs: rec?.prefs ?? null });
+});
+
+app.post("/api/push/prefs", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const rec = await loadUser(cfg.kv, s.username);
+  if (!rec) return c.json({ message: "Mitteilungen sind aus" }, 404);
+  rec.prefs = { ...rec.prefs, ...(await c.req.json<Partial<UserRec["prefs"]>>()) };
+  await saveUser(cfg.kv, s.username, rec);
+  return c.json({ prefs: rec.prefs });
+});
+
+/** Daten für den Zeitplan: Wants mit Wunschpreisen, verliehene Platten, Set-Termine */
+app.post("/api/push/sync", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const rec = await loadUser(cfg.kv, s.username);
+  if (!rec) return c.json({ ok: false });
+  const body = await c.req.json<{ wants?: WatchedWant[]; lent?: UserRec["lent"]; sets?: UserRec["sets"]; currency?: string }>();
+  if (body.wants) {
+    const old = new Map(rec.wants.map((w) => [w.id, w]));
+    rec.wants = body.wants.slice(0, 500).map((w) => ({ id: Number(w.id), t: String(w.t).slice(0, 120), a: String(w.a).slice(0, 80), target: w.target ?? null, n: old.get(Number(w.id))?.n ?? null, low: old.get(Number(w.id))?.low ?? null }));
+  }
+  if (body.lent) rec.lent = body.lent.slice(0, 200).map((l) => ({ id: Number(l.id), t: String(l.t).slice(0, 120), to: String(l.to).slice(0, 60), at: Number(l.at) }));
+  if (body.sets) rec.sets = body.sets.slice(0, 100).filter((x) => /^\d{4}-\d\d-\d\d$/.test(x.date)).map((x) => ({ id: Number(x.id), name: String(x.name).slice(0, 80), date: x.date }));
+  if (body.currency) rec.currency = body.currency.slice(0, 3);
+  await saveUser(cfg.kv, s.username, rec);
+  return c.json({ ok: true, wants: rec.wants.length });
+});
+
+/** Jemand hat jemanden als Freund hinzugefügt: Bescheid geben (einmal pro Paar und Monat) */
+app.post("/api/push/friend-added", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const { friend } = await c.req.json<{ friend: string }>();
+  if (!/^[\w.\-]{2,40}$/.test(friend ?? "") || friend.toLowerCase() === s.username.toLowerCase()) return c.json({ ok: false });
+  const pairKey = `fa:${s.username.toLowerCase()}:${friend.toLowerCase()}`;
+  if (await cfg.kv.get(pairKey)) return c.json({ ok: true, status: "schon-gemeldet" });
+  await cfg.kv.put(pairKey, "1", { expirationTtl: 30 * 86_400 });
+  const rec = await loadUser(cfg.kv, friend);
+  if (rec?.subs.length) {
+    const n = await notifyUser(cfg.kv, cfg.push, friend, rec, "friends", { title: "Neuer Kumpel auf Crate", body: `${s.username} hat dich als Freund hinzugefügt. Tippen, um zurück zu folgen.`, url: `/friends?add=${encodeURIComponent(s.username)}`, tag: `friend-${s.username}` });
+    return c.json({ ok: true, status: n ? "zugestellt" : "aus" });
+  }
+  // Noch keine Mitteilungen an: merken und nachreichen, sobald er sie einschaltet
+  const key = `pending:${friend.toLowerCase()}`;
+  const list = JSON.parse((await cfg.kv.get(key)) ?? "[]") as string[];
+  await cfg.kv.put(key, JSON.stringify([...new Set([...list, s.username])].slice(-20)), { expirationTtl: 60 * 86_400 });
+  return c.json({ ok: true, status: "wartet" });
+});
+
+app.post("/api/push/test", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const rec = await loadUser(cfg.kv, s.username);
+  if (!rec?.subs.length) return c.json({ message: "Auf diesem Gerät sind Mitteilungen aus" }, 404);
+  let ok = 0;
+  for (const sub of rec.subs) if ((await sendPush(cfg.push, sub, { title: "Crate", body: "So sehen Mitteilungen aus. Alles eingerichtet.", url: "/settings/notifications", tag: "test" })) === "ok") ok++;
+  return c.json({ sent: ok, devices: rec.subs.length });
+});
+
+/**
+ * Zeitplan (stündlich vom Worker crate-cron): fällige Erinnerungen und eine Runde Want-Prüfung.
+ * Cloudflare erlaubt ~50 Unteranfragen pro Aufruf, deshalb mit Budget und rotierendem Zeiger.
+ */
+app.post("/api/push/run", async (c) => {
+  const cfg = c.var.cfg;
+  if (!cfg.cronSecret || c.req.header("X-Cron-Secret") !== cfg.cronSecret) return c.json({ message: "nein" }, 403);
+  let budget = 42;
+  const report: Record<string, unknown>[] = [];
+  const startKey = (await cfg.kv.get("cron:next")) ?? "";
+  const keys = (await cfg.kv.list({ prefix: "u:" })).keys.map((k) => k.name).sort();
+  // Reihum beginnen, damit bei vielen Nutzern alle drankommen
+  const order = [...keys.filter((k) => k > startKey), ...keys.filter((k) => k <= startKey)];
+  let last = startKey;
+  for (const key of order) {
+    if (budget < 4) break;
+    last = key;
+    const u = key.slice(2);
+    const rec = await loadUser(cfg.kv, u);
+    if (!rec?.subs.length) continue;
+    let changed = false;
+    // 1. Erinnerungen
+    for (const d of dueReminders(rec)) {
+      budget -= rec.subs.length;
+      await notifyUser(cfg.kv, cfg.push, u, rec, d.kind, d.msg);
+      rec.sent[d.key] = Date.now();
+      changed = true;
+    }
+    // 2. Wants reihum prüfen
+    const msgs: Message[] = [];
+    if (rec.prefs.wants && rec.wants.length) {
+      const sess = await unseal<Session>(cfg.sessionSecret, rec.sess);
+      const n = Math.min(rec.wants.length, Math.max(0, budget - rec.subs.length - 2), 10);
+      for (let i = 0; i < n; i++) {
+        const idx = (rec.cursor + i) % rec.wants.length;
+        const w = rec.wants[idx];
+        budget--;
+        const r = await fetch(`https://api.discogs.com/marketplace/stats/${w.id}?curr_abbr=${rec.currency ?? "EUR"}`, { headers: authHeaders(cfg, sess) }).catch(() => null);
+        if (!r || r.status === 429) break; // Discogs gerade gedrosselt: nächste Runde weiter
+        if (!r.ok) continue;
+        const st = (await r.json()) as Stat;
+        const m = wantChange(w, st, rec.currency ?? "EUR");
+        if (m) msgs.push(m);
+        rec.wants[idx] = { ...w, n: st.num_for_sale ?? 0, low: st.lowest_price?.value ?? null };
+        rec.cursor = (idx + 1) % rec.wants.length;
+        changed = true;
+      }
+    }
+    const b = bundle(msgs);
+    if (b) {
+      budget -= rec.subs.length;
+      await notifyUser(cfg.kv, cfg.push, u, rec, "wants", b);
+    }
+    // Alte Erinnerungs-Merker aufräumen (älter als 120 Tage)
+    for (const [k, t] of Object.entries(rec.sent)) if (Date.now() - t > 120 * 86_400_000) delete rec.sent[k];
+    if (changed) await saveUser(cfg.kv, u, rec);
+    report.push({ u, wants: msgs.length });
+  }
+  await cfg.kv.put("cron:next", last);
+  return c.json({ users: keys.length, done: report, budgetLeft: budget });
 });

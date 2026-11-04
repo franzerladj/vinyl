@@ -7,3 +7,8 @@ pages_build_output_dir = "web/dist"
 # Kostenloses KI-Kontingent (Bilderkennung, Vibes)
 [ai]
 binding = "AI"
+
+# Push-Mitteilungen: Abos, Wants mit Wunschpreisen, Erinnerungen (nur für Nutzer, die Mitteilungen einschalten)
+[[kv_namespaces]]
+binding = "PUSH"
+id = "f33e0e0df2c64fe1a72aafd163992684"

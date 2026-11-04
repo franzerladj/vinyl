@@ -3,7 +3,7 @@
 const { chromium, devices } = require("playwright");
 const install = require("./mock.cjs");
 const ROUTES = ["/", "/collection", "/wants", "/search", "/dig", "/release/5", "/release/9", "/scan", "/shop", "/sets", "/stickers", "/settings",
-  "/settings/sync", "/settings/prices", "/settings/sources", "/settings/sheets", "/settings/data", "/settings/about", "/settings/help",
+  "/settings/sync", "/settings/prices", "/settings/sources", "/settings/sheets", "/settings/data", "/settings/about", "/settings/help", "/settings/notifications",
   "/friends", "/friends/kumpel", "/impressum", "/datenschutz"];
 const widths = (process.env.W ?? "320,375,390").split(",").map(Number);
 const shots = process.env.SHOTS === "1";

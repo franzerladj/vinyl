@@ -1,5 +1,7 @@
 // Konfiguration. Auf Cloudflare kommen die Werte als Bindings (c.env),
 // lokal unter Node aus process.env (.env-Datei).
+import { memoryKV, type KV, type PushConfig } from "./push";
+import { VAPID_PUBLIC_KEY } from "../shared/pushKey";
 
 /** Minimaler Typ für das Workers-AI-Binding (Cloudflare) */
 export interface AiBinding {
@@ -18,7 +20,14 @@ export interface Env {
   GETSONGBPM_API_KEY?: string;
   LASTFM_API_KEY?: string;
   AI?: AiBinding;
+  /** KV-Speicher für Push-Abos (Cloudflare-Binding) */
+  PUSH?: KV;
+  VAPID_PRIVATE_JWK?: string;
+  /** Gemeinsames Geheimnis für den Zeitplan-Worker */
+  CRON_SECRET?: string;
 }
+
+let localKV: KV | null = null;
 
 export interface Config {
   appUrl: string;
@@ -32,6 +41,9 @@ export interface Config {
   lastfmKey: string;
   ai?: AiBinding;
   userAgent: string;
+  kv: KV;
+  push: PushConfig;
+  cronSecret: string;
 }
 
 export function readConfig(env: Env, requestUrl: string): Config {
@@ -47,5 +59,18 @@ export function readConfig(env: Env, requestUrl: string): Config {
     lastfmKey: env.LASTFM_API_KEY ?? "",
     ai: env.AI,
     userAgent: "CrateDJ/0.2 +https://github.com/franzerladj/vinyl",
+    kv: env.PUSH ?? (localKV ??= memoryKV()),
+    push: {
+      privateJwk: (() => {
+        try {
+          return env.VAPID_PRIVATE_JWK ? (JSON.parse(env.VAPID_PRIVATE_JWK) as JsonWebKey) : null;
+        } catch {
+          return null;
+        }
+      })(),
+      publicKey: VAPID_PUBLIC_KEY,
+      subject: `${(env.APP_URL || new URL(requestUrl).origin).replace(/\/$/, "")}/impressum`,
+    },
+    cronSecret: env.CRON_SECRET ?? "",
   };
 }

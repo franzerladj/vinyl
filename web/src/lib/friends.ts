@@ -211,6 +211,7 @@ export async function friendFeed(limit = 20) {
 export async function lendRecord(releaseId: number, to: string | null) {
   const m = await db.recordMeta.get(releaseId);
   await db.recordMeta.put({ ...m, releaseId, lentTo: to, lentAt: to ? Date.now() : null });
+  void import("./push").then((p) => p.syncPushData());
 }
 
 export async function lentRecords() {

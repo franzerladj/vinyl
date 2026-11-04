@@ -403,7 +403,17 @@ export async function autoPipeline(opts: { force?: boolean; resume?: boolean } =
       await Promise.all([step("Tracklists", () => fetchMissingDetails("collection")), step("Preise", () => refreshPrices(wantIds, { maxAgeHours: 24 }))]);
       discogsDone = true;
       await step("Details der Wants", () => fetchMissingDetails("wants"));
-      await step("Lieblingshändler", () => scanFavorites(24));
+      await step("Lieblingshändler", async () => {
+        // Neue Angebote für Wants bei Lieblingshändlern: Mitteilung, falls eingeschaltet
+        const before = new Set(await db.listings.toCollection().primaryKeys());
+        await scanFavorites(24);
+        const fresh = (await db.listings.toArray()).filter((l) => !before.has(l.listingId));
+        if (fresh.length) {
+          const { localNotify } = await import("./push");
+          const sellers = [...new Set(fresh.map((l) => l.seller))];
+          await localNotify("sellers", fresh.length === 1 ? "Neues Angebot für eine Want" : `${fresh.length} neue Angebote für deine Wants`, `bei ${sellers.slice(0, 3).join(", ")}${sellers.length > 3 ? " und weiteren" : ""}`, "/shop");
+        }
+      });
       const { syncFriends } = await import("./friends");
       await step("Freunde", () => syncFriends(24));
     };
@@ -422,6 +432,8 @@ export async function autoPipeline(opts: { force?: boolean; resume?: boolean } =
     };
     await Promise.all([discogsLane(), audioLane()]);
     await setKV("lastAutoRun", Date.now());
+    // Wants und Termine für Mitteilungen aktuell halten
+    void import("./push").then((m) => m.syncPushData());
   } finally {
     release();
     pipelineRunning = false;

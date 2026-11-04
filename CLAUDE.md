@@ -27,6 +27,7 @@ Wichtige Eigenheiten:
 - BPM: Deezer-Album-Matching (`server/audio.ts`, `POST /api/audio/release`, Artist wird getrennt geprüft), dann Einzelsuche, dann Analyse der Hörprobe im Web Worker (`shared/audioAnalysis.ts`, Bassdrum-Band + Kammfilter, Style als Tempo-Hinweis). Gemessen an echten Hörproben: rund 95 % richtig. Keys: nur Analyse (Schätzung) oder GetSongBPM. AcousticBrainz liefert für typische Platten nichts.
 - Hörproben laufen über den Server (`/api/audio/preview`). iOS: Ton nur nach Tippen, deshalb ein einziges Audio-Element wiederverwenden.
 - Schriften selbst gehostet (`@fontsource-variable/*`), YouTube erst nach Antippen (DSGVO).
+- Push-Mitteilungen: `server/push.ts` (VAPID + aes128gcm selbst gebaut, getestet in `tests/push.test.ts`), Routen `/api/push/*` in `server/app.ts`, Client `web/src/lib/push.ts`, Service Worker `web/public/push-sw.js` (per `importScripts`). Speicher: KV-Binding `PUSH` (Namespace `crate-push`). Zeitplan: Worker `crate-cron` (`workers/cron/`, stündlich, ruft `/api/push/run` mit `X-Cron-Secret`). Öffentlicher VAPID-Schlüssel in `shared/pushKey.ts`, privater als Secret `VAPID_PRIVATE_JWK`. Server-Daten nur für Nutzer mit eingeschalteten Mitteilungen, beim Ausschalten gelöscht. iPhone: nur als Home-Bildschirm-App.
 
 ## Befehle
 
@@ -44,6 +45,7 @@ node tools/e2e/yt.cjs       # YouTube-Einwilligung
 node tools/e2e/djo.cjs      # DJ-Übersicht auf Start
 node tools/e2e/ship.cjs     # Versand-Schätzung
 node tools/e2e/tap.cjs      # Tap-Tempo
+node tools/e2e/push.cjs     # Mitteilungen-Seite und Freund-Rückmeldung
 node tools/e2e/wrap.cjs     # Umbruch-Audit aller Seiten (320/375/390 px, hell/dunkel; SHOTS=1 für Screenshots)
 ```
 
@@ -59,7 +61,7 @@ npm run build && npx wrangler pages deploy --project-name crate --branch main --
 
 Braucht `CLOUDFLARE_API_TOKEN` (und ggf. `CLOUDFLARE_ACCOUNT_ID`) als Umgebungs-Secret der Sitzung. Fehlt es, Franz bitten, es in den Umgebungseinstellungen von Claude Code anzulegen, nicht im Chat.
 
-Gesetzte Secrets in Cloudflare (nur Namen): `DISCOGS_CONSUMER_KEY`, `DISCOGS_CONSUMER_SECRET`, `SESSION_SECRET`, `LASTFM_API_KEY`. Optional: `GETSONGBPM_API_KEY` (beantragt, noch offen), `ANTHROPIC_API_KEY`, `AI_ALLOWLIST`, `APP_URL`. Workers AI ist als Binding `AI` in `wrangler.toml`.
+Gesetzte Secrets in Cloudflare (nur Namen): `DISCOGS_CONSUMER_KEY`, `DISCOGS_CONSUMER_SECRET`, `SESSION_SECRET`, `LASTFM_API_KEY`, `VAPID_PRIVATE_JWK`, `CRON_SECRET` (auch im Worker `crate-cron`). Optional: `GETSONGBPM_API_KEY` (beantragt, noch offen), `ANTHROPIC_API_KEY`, `AI_ALLOWLIST`, `APP_URL`. Workers AI ist als Binding `AI` in `wrangler.toml`.
 
 ## Offen
 

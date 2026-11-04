@@ -96,6 +96,7 @@ export default function SetEditor() {
   const save = async () => {
     const s = { ...set, name: set.name || `Set ${new Date().toLocaleDateString("de-DE")}` };
     const newId = await db.sets.put(s);
+    void import("../lib/push").then((p) => p.syncPushData());
     toast("Set gespeichert");
     if (isNew) nav(`/sets/${newId}`, { replace: true });
     setSet({ ...s, id: newId });

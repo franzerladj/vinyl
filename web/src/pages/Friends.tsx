@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
+import { notifyFriendAdded } from "../lib/push";
 import { addFriend, collectionUrl, friendFeed, friendMatches, inviteLink, lentRecords, messageUrl, profileUrl, removeFriend, syncFriend, tasteMatch, type FriendMatch } from "../lib/friends";
 import { toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, RecordRow, Seg, SkeletonRows, useDebounced } from "../components/bits";
@@ -37,7 +38,15 @@ function FriendList() {
     try {
       const f = await addFriend(u);
       haptic(12);
-      toast(`${f.username} hinzugefügt`);
+      // Der andere bekommt eine Mitteilung, sobald er sie in Crate eingeschaltet hat
+      const status = await notifyFriendAdded(f.username);
+      toast(
+        status === "zugestellt"
+          ? `${f.username} hinzugefügt und benachrichtigt`
+          : status === "wartet"
+            ? `${f.username} hinzugefügt. Die Nachricht kommt an, sobald dort Mitteilungen in Crate an sind.`
+            : `${f.username} hinzugefügt`,
+      );
       setName("");
       setParams({}, { replace: true });
       void syncFriend(f.username).catch((e) => toast(e.message));
