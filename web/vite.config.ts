@@ -22,8 +22,8 @@ export default defineConfig({
         name: "Crate – Vinyl DJ",
         short_name: "Crate",
         description: "Wantlist, Sammlung, Setlists und Sticker für Vinyl-DJs (mit Discogs)",
-        theme_color: "#121212",
-        background_color: "#121212",
+        theme_color: "#000000",
+        background_color: "#000000",
         display: "standalone",
         start_url: "/",
         icons: [
@@ -35,6 +35,11 @@ export default defineConfig({
       workbox: {
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,
+            handler: "StaleWhileRevalidate",
+            options: { cacheName: "fonts", expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 } },
+          },
           {
             urlPattern: /^https:\/\/i\.discogs\.com\//,
             handler: "CacheFirst",

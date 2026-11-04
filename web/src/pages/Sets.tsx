@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type Release, type TrackMeta } from "../lib/db";
-import { Cover, Energy, KeyBadge, Seg, useDebounced } from "../components/bits";
+import { Cover, Empty, Energy, KeyBadge, Seg, useDebounced } from "../components/bits";
 import { IconPlus } from "../components/icons";
 import { bpmDelta, keyDistance, parseKey, pitchRange } from "../../../shared/music";
 
@@ -14,7 +14,7 @@ export default function Sets() {
     <>
       <div className="page-head">
         <h1>Sets</h1>
-        <button className="btn small primary" onClick={() => nav("/sets/new")}>
+        <button className="btn small primary" onClick={() => nav("/sets/new", { viewTransition: true })}>
           <IconPlus /> Neues Set
         </button>
       </div>
@@ -30,7 +30,10 @@ export default function Sets() {
         {tab === "sets" ? (
           <div className="list">
             {sets.map((s) => (
-              <Link key={s.id} to={`/sets/${s.id}`} className="rec">
+              <Link key={s.id} to={`/sets/${s.id}`} viewTransition className="rec">
+                <div className="cover" style={{ display: "grid", placeItems: "center", background: "linear-gradient(135deg,#60a5fa,#7c3aed)", color: "#fff", fontWeight: 800, fontSize: 18 }}>
+                  {s.trackIds.length}
+                </div>
                 <div className="rec-main">
                   <div className="rec-title">{s.name}</div>
                   <div className="rec-meta">
@@ -42,9 +45,9 @@ export default function Sets() {
               </Link>
             ))}
             {sets.length === 0 && (
-              <div className="empty">
-                Noch keine Sets. Lass dir für deinen nächsten Gig eins vorschlagen: nach Energie-Verlauf, BPM und harmonischen Übergängen.
-              </div>
+              <Empty title="Noch keine Sets" action={<button className="btn primary" onClick={() => nav("/sets/new", { viewTransition: true })}>Erstes Set planen</button>}>
+                Die App schlägt dir ein Set vor: nach Energie-Verlauf, BPM und harmonischen Übergängen.
+              </Empty>
             )}
           </div>
         ) : (
@@ -130,7 +133,7 @@ function NextTrack() {
               <TrackLine t={t} r={data?.rels.get(t.releaseId)} extra={<span className="sub">{d.toFixed(1)} % · {kd <= 1 ? "harmonisch" : kd <= 2 ? "Energy-Boost" : "Key-Clash"}</span>} />
             </div>
           ))}
-          {suggestions.length === 0 && <div className="empty">Keine passenden Tracks mit BPM gefunden.</div>}
+          {suggestions.length === 0 && <Empty title="Nichts im Pitch-Bereich">Pitch-Bereich erweitern oder mehr Tracks mit BPM versehen.</Empty>}
         </div>
       )}
     </div>
@@ -153,7 +156,7 @@ export function TrackLine({ t, r, extra, actions }: { t: TrackMeta; r?: Release;
       </div>
       <div className="rec-side stack" style={{ gap: 4, alignItems: "flex-end" }}>
         <div className="row" style={{ gap: 4 }}>
-          {t.bpm ? <b>{t.bpm}</b> : <span className="sub">–</span>}
+          {t.bpm ? <span className="bpm">{t.bpm}</span> : <span className="tiny">BPM?</span>}
           <KeyBadge k={t.key} />
         </div>
         <Energy v={t.energy} />

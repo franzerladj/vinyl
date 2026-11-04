@@ -261,7 +261,7 @@ export default function SetEditor() {
                     r={data?.rels.get(t.releaseId)}
                     extra={<span className="sub">#{i + 1}</span>}
                     actions={
-                      <div className="row" style={{ gap: 0 }}>
+                      <div className="mini-actions">
                         <button className="icon-btn" onClick={() => move(i, -1)} aria-label="hoch">
                           <IconUp />
                         </button>

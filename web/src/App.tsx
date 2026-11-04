@@ -1,15 +1,16 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { getMe } from "./lib/api";
 import { setState, useStore } from "./lib/store";
-import { Jobs } from "./components/bits";
+import { haptic, Jobs } from "./components/bits";
 import { IconHeart, IconHome, IconList, IconRecord, IconSearch } from "./components/icons";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+// Detailseite direkt laden, damit die Cover-Animation sofort ein Ziel hat
+import ReleasePage from "./pages/Release";
 const Collection = lazy(() => import("./pages/Collection"));
 const Wantlist = lazy(() => import("./pages/Wantlist"));
 const Search = lazy(() => import("./pages/Search"));
-const ReleasePage = lazy(() => import("./pages/Release"));
 const Scan = lazy(() => import("./pages/Scan"));
 const Shop = lazy(() => import("./pages/Shop"));
 const Sets = lazy(() => import("./pages/Sets"));
@@ -20,6 +21,30 @@ const Settings = lazy(() => import("./pages/Settings"));
 export default function App() {
   const me = useStore((s) => s.me);
   const [loaded, setLoaded] = useState(false);
+  const loc = useLocation();
+  const [barTitle, setBarTitle] = useState<string | null>(null);
+
+  // Kompakte Titelleiste einblenden, sobald der große Titel aus dem Bild scrollt
+  useEffect(() => {
+    setBarTitle(null);
+    window.scrollTo(0, 0);
+    let io: IntersectionObserver | undefined;
+    let tries = 0;
+    const attach = () => {
+      const h = document.querySelector<HTMLElement>(".page-head h1, .stage h1");
+      if (!h) {
+        if (tries++ < 30) timer = setTimeout(attach, 100);
+        return;
+      }
+      io = new IntersectionObserver(([e]) => setBarTitle(e.isIntersecting ? null : h.textContent), { rootMargin: "-48px 0px 0px 0px" });
+      io.observe(h);
+    };
+    let timer = setTimeout(attach, 30);
+    return () => {
+      clearTimeout(timer);
+      io?.disconnect();
+    };
+  }, [loc.pathname]);
 
   useEffect(() => {
     // Offline (z.B. im Club ohne Netz) mit dem zuletzt bekannten Login weitermachen
@@ -48,7 +73,10 @@ export default function App() {
 
   return (
     <div className="app">
-      <Suspense fallback={<div className="empty">Lade …</div>}>
+      <div className={`topbar no-print ${barTitle ? "on" : ""}`} aria-hidden={!barTitle}>
+        <div className="topbar-inner">{barTitle}</div>
+      </div>
+      <Suspense fallback={<div className="page" />}>
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/collection" element={<Collection />} />
@@ -66,23 +94,23 @@ export default function App() {
       <Jobs />
       <nav className="nav no-print">
         <div className="nav-inner">
-          <NavLink to="/" end>
+          <NavLink to="/" end viewTransition onClick={() => haptic(5)}>
             <IconHome />
             Start
           </NavLink>
-          <NavLink to="/search">
+          <NavLink to="/search" viewTransition onClick={() => haptic(5)}>
             <IconSearch />
             Suche
           </NavLink>
-          <NavLink to="/collection">
+          <NavLink to="/collection" viewTransition onClick={() => haptic(5)}>
             <IconRecord />
             Sammlung
           </NavLink>
-          <NavLink to="/wants">
+          <NavLink to="/wants" viewTransition onClick={() => haptic(5)}>
             <IconHeart />
             Wants
           </NavLink>
-          <NavLink to="/sets">
+          <NavLink to="/sets" viewTransition onClick={() => haptic(5)}>
             <IconList />
             Sets
           </NavLink>

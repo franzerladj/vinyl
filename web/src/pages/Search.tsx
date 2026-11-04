@@ -6,7 +6,7 @@ import { db } from "../lib/db";
 import { addWant } from "../lib/sync";
 import { toast } from "../lib/store";
 import type { Pagination, SearchResult } from "../lib/types";
-import { Cover } from "../components/bits";
+import { Cover, Empty, haptic, markHero, SkeletonRows } from "../components/bits";
 import { IconBarcode, IconHeart, IconSearch } from "../components/icons";
 
 const GENRES = ["Electronic", "Hip Hop", "Funk / Soul", "Jazz", "Rock", "Reggae", "Latin", "Pop", "Disco"];
@@ -65,17 +65,19 @@ export default function Search() {
   };
 
   const open = async (r: SearchResult) => {
+    const [artist, ...rest] = r.title.split(" - ");
+    const state = { preview: { thumb: r.thumb, cover: r.cover_image, title: rest.join(" - ") || r.title, artist } };
     if (r.type === "master") {
       const m = await discogs<{ main_release: number }>(`/masters/${r.id}`);
-      nav(`/release/${m.main_release}`);
-    } else nav(`/release/${r.id}`);
+      nav(`/release/${m.main_release}`, { state, viewTransition: true });
+    } else nav(`/release/${r.id}`, { state, viewTransition: true });
   };
 
   return (
     <>
       <div className="page-head">
         <h1>Suche</h1>
-        <button className="btn small ghost" onClick={() => nav("/scan")}>
+        <button className="btn small tinted" onClick={() => nav("/scan", { viewTransition: true })}>
           <IconBarcode /> Scan
         </button>
       </div>
@@ -133,11 +135,19 @@ export default function Search() {
           </div>
         )}
 
-        <div className="list">
+        <div className="list rise">
           {results.map((r) => {
             const [artist, ...rest] = r.title.split(" - ");
             return (
-              <div key={`${r.type}${r.id}`} className="rec" onClick={() => open(r)} style={{ cursor: "pointer" }}>
+              <div
+                key={`${r.type}${r.id}`}
+                className="rec"
+                onClick={(e) => {
+                  markHero(e.currentTarget);
+                  haptic();
+                  void open(r);
+                }}
+              >
                 <Cover src={r.thumb} />
                 <div className="rec-main">
                   <div className="rec-title">{rest.join(" - ") || r.title}</div>
@@ -160,6 +170,7 @@ export default function Search() {
                       onClick={(e) => {
                         e.stopPropagation();
                         if (wanted.has(r.id)) return;
+                        haptic(12);
                         addWant(r.id).then(() => toast("Zur Wantlist hinzugefügt"), (err) => toast(err.message));
                       }}
                     >
@@ -172,9 +183,9 @@ export default function Search() {
             );
           })}
         </div>
-        {loading && <div className="empty">Suche …</div>}
-        {!loading && hasQuery && results.length === 0 && <div className="empty">Nichts gefunden.</div>}
-        {!hasQuery && <div className="empty">Suche in der kompletten Discogs-Datenbank. Filter für Genre, Style, Label, Jahr und Land sind oben.</div>}
+        {loading && page === 1 && <SkeletonRows />}
+        {!loading && hasQuery && results.length === 0 && <Empty title="Nichts gefunden">Anders schreiben oder Filter entfernen.</Empty>}
+        {!hasQuery && <Empty title="Die ganze Discogs-Datenbank">Nach Artist, Titel oder Katalognummer suchen. Filter für Genre, Style, Label, Jahr und Land sind oben.</Empty>}
         {pagination && pagination.page < pagination.pages && !loading && (
           <button className="btn block" onClick={() => update({ page: String(page + 1) })}>
             Mehr laden ({pagination.items.toLocaleString("de-DE")} Treffer)

@@ -147,7 +147,7 @@ export default function Scan() {
         {mode === "photo" &&
           (ai ? (
             <>
-              <label className="card stack" style={{ alignItems: "center", padding: 28, cursor: "pointer" }}>
+              <label className="card stack press" style={{ alignItems: "center", padding: 32, cursor: "pointer", textAlign: "center", border: "1.5px dashed var(--surface-3)", background: "transparent" }}>
                 {preview ? <img src={preview} style={{ maxHeight: 220, borderRadius: 10 }} alt="" /> : <IconCamera />}
                 <b>{busy ? "Erkenne Platte …" : "Cover, Label oder Runout fotografieren"}</b>
                 <span className="sub">Die KI liest Artist, Titel, Label, Katalognummer und Barcode ab.</span>
@@ -165,7 +165,13 @@ export default function Scan() {
             <div className="card sub">Für die Foto-Erkennung braucht der Server einen ANTHROPIC_API_KEY. Barcode und Katalognummer funktionieren ohne.</div>
           ))}
 
-        {mode === "barcode" && !results && <video ref={video} className="scan" muted playsInline />}
+        {mode === "barcode" && !results && (
+          <div className="scan-wrap">
+            <video ref={video} className="scan" muted playsInline />
+            <div className="scan-frame" />
+            <p className="sub" style={{ position: "absolute", left: 0, right: 0, bottom: 14, textAlign: "center", color: "#fff" }}>Barcode in den Rahmen halten</p>
+          </div>
+        )}
 
         {(mode === "manual" || (mode === "barcode" && results)) && (
           <form
@@ -195,6 +201,7 @@ export default function Scan() {
         {results && (
           <>
             <h2>{results.length ? "Welche Pressung ist es?" : "Nichts gefunden"}</h2>
+            {results.length > 0 && <p className="sub" style={{ marginTop: -6 }}>Katalognummer und Land auf dem Label vergleichen.</p>}
             <div className="list">
               {results.map((r) => {
                 const [artist, ...rest] = r.title.split(" - ");

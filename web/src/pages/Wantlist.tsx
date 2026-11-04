@@ -5,7 +5,7 @@ import { db } from "../lib/db";
 import { fetchMarketStats, fetchMissingDetails, syncWants } from "../lib/sync";
 import { money } from "../lib/format";
 import { toast, useStore } from "../lib/store";
-import { RecordRow, useDebounced } from "../components/bits";
+import { Empty, RecordRow, SkeletonRows, useDebounced } from "../components/bits";
 import { IconCart, IconSearch } from "../components/icons";
 
 type Sort = "added" | "artist" | "title" | "year" | "label" | "price" | "forsale" | "rating";
@@ -93,7 +93,7 @@ export default function Wantlist() {
             {list.length} Platten{totalLowest > 0 && ` · ab ${money(totalLowest)} gesamt (ohne Versand)`}
           </div>
         </div>
-        <Link to="/shop" className="btn small primary">
+        <Link to="/shop" viewTransition className="btn small primary">
           <IconCart /> Shoppen
         </Link>
       </div>
@@ -153,7 +153,7 @@ export default function Wantlist() {
           </button>
         </div>
         {(sort === "price" || sort === "forsale" || onlyAvailable || maxPrice) && priced === 0 && (
-          <div className="card sub">Für diese Sortierung braucht die App Marktpreise. Tippe auf „Preise laden“ (ca. 1 Sekunde pro Platte).</div>
+          <div className="card sub" style={{ background: "var(--accent-soft)" }}>Für diese Sortierung braucht die App Marktpreise. Tippe auf „Preise laden“ (ca. 1 Sekunde pro Platte).</div>
         )}
 
         {grouped.map(([g, items]) => (
@@ -163,7 +163,7 @@ export default function Wantlist() {
                 {g} <span className="sub">{items.length}</span>
               </h3>
             )}
-            <div className="list">
+            <div className="list rise">
               {items.slice(0, 400).map(({ r, s, owned }) => (
                 <RecordRow
                   key={r.id}
@@ -173,8 +173,8 @@ export default function Wantlist() {
                       {s ? (
                         s.numForSale > 0 ? (
                           <>
-                            <b>{money(s.lowest, s.currency)}</b>
-                            <span className="sub">{s.numForSale} Angebote</span>
+                            <span className="bpm" style={{ fontSize: 15 }}>{money(s.lowest, s.currency)}</span>
+                            <span className="tiny">{s.numForSale} Angebote</span>
                           </>
                         ) : (
                           <span className="badge bad">nicht verfügbar</span>
@@ -188,7 +188,8 @@ export default function Wantlist() {
             </div>
           </div>
         ))}
-        {data && data.length === 0 && <div className="empty">Deine Wantlist ist leer oder noch nicht geladen.</div>}
+        {!data && <SkeletonRows />}
+        {data && data.length === 0 && <Empty title="Wantlist ist leer">Herz-Symbol in der Suche antippen, um Platten zu merken.</Empty>}
       </div>
     </>
   );

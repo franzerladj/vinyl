@@ -1,20 +1,23 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { api } from "../lib/api";
 import { db, realTracks, trackId, type TrackMeta } from "../lib/db";
 import { addToCollection, addWant, fetchMarketStats, fetchRelease, lookupAudioFor, removeWant, tagVibes } from "../lib/sync";
-import { discogsReleaseUrl, discogsSellUrl, formatLine, money } from "../lib/format";
+import { discogsReleaseUrl, discogsSellUrl, formatLine, money, sideOf } from "../lib/format";
 import { toast, useStore } from "../lib/store";
-import { Cover, Energy, KeyBadge, Sheet, TapTempo } from "../components/bits";
-import { IconBack, IconPlay } from "../components/icons";
+import { Cover, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, TapTempo, type Preview } from "../components/bits";
+import { IconBack, IconCart, IconExternal, IconHeart, IconPlay, IconPlus, IconPrint, IconSparkle, IconWave } from "../components/icons";
 
 export default function ReleasePage() {
   const id = Number(useParams().id);
   const nav = useNavigate();
+  const loc = useLocation();
+  const preview = (loc.state as { preview?: Preview } | null)?.preview;
   const me = useStore((s) => s.me);
   const [loading, setLoading] = useState(false);
   const [edit, setEdit] = useState<TrackMeta | null>(null);
+  const [playing, setPlaying] = useState(false);
 
   const rel = useLiveQuery(() => db.releases.get(id), [id]);
   const tracks = useLiveQuery(() => db.tracks.where("releaseId").equals(id).toArray(), [id], []);
@@ -35,150 +38,185 @@ export default function ReleasePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  if (!rel) return <div className="empty">{loading ? "Lade …" : "Nicht gefunden"}</div>;
+  const coverSrc = rel?.cover || rel?.thumb || preview?.cover || preview?.thumb;
+  const back = () => (history.length > 1 ? nav(-1) : nav("/"));
+
+  const top = (
+    <div className="stage">
+      {coverSrc && <div className="stage-bg" style={{ backgroundImage: `url("${coverSrc}")` }} />}
+      <div className="stage-top">
+        <button className="icon-btn" onClick={back} aria-label="Zurück">
+          <IconBack />
+        </button>
+        <a className="icon-btn" href={discogsReleaseUrl(id)} target="_blank" rel="noreferrer" aria-label="Auf Discogs öffnen">
+          <IconExternal />
+        </a>
+      </div>
+      <div className="deck">
+        <div className={`vinyl ${playing ? "spin" : ""}`} aria-hidden="true">
+          {coverSrc && <div className="label" style={{ backgroundImage: `url("${coverSrc}")` }} />}
+        </div>
+        <Cover src={coverSrc} className="cover lg" style={{ viewTransitionName: "hero-cover" }} />
+      </div>
+      <h1>{rel?.title ?? preview?.title ?? ""}</h1>
+      <div className="artist">{rel?.artist ?? preview?.artist ?? ""}</div>
+      {rel && (
+        <div className="meta">
+          {[rel.labels[0] && `${rel.labels[0].name.replace(/\s\(\d+\)$/, "")} · ${rel.labels[0].catno}`, rel.country, rel.year || null].filter(Boolean).join(" · ")}
+        </div>
+      )}
+      {rel && <div className="tiny" style={{ marginTop: 4 }}>{formatLine(rel)}</div>}
+    </div>
+  );
+
+  if (!rel) return <>{top}<div className="page">{loading || preview ? <SkeletonRows n={4} /> : <Empty title="Nicht gefunden" />}</div></>;
   const tm = new Map(tracks.map((t) => [t.id, t]));
   const tl = realTracks(rel.tracklist);
+  let lastSide = "";
 
   const setMeta = (patch: Record<string, unknown>) => db.recordMeta.put({ ...meta, releaseId: id, ...patch });
   const saveTrack = (t: TrackMeta, patch: Partial<TrackMeta>) => db.tracks.update(t.id, patch);
+  const toggleWant = () => {
+    haptic();
+    (isWant ? removeWant(id).then(() => toast("Aus der Wantlist entfernt")) : addWant(id).then(() => toast("Auf der Wantlist"))).catch((e) => toast(e.message));
+  };
 
   return (
     <>
-      <div className="page-head">
-        <button className="icon-btn" onClick={() => nav(-1)} aria-label="Zurück">
-          <IconBack />
-        </button>
-        <span className="spacer" />
-        <a className="btn small ghost" href={discogsReleaseUrl(id)} target="_blank" rel="noreferrer">
-          Discogs ↗
-        </a>
-      </div>
-      <div className="page">
-        <div className="row" style={{ alignItems: "flex-start", gap: 14 }}>
-          <div style={{ width: "40%", flex: "none" }}>
-            <Cover src={rel.cover || rel.thumb} className="cover lg" />
-          </div>
-          <div className="stack" style={{ gap: 4, minWidth: 0 }}>
-            <div className="sub">{rel.artist}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2 }}>{rel.title}</div>
-            <div className="sub">
-              {rel.labels.map((l) => `${l.name.replace(/\s\(\d+\)$/, "")} – ${l.catno}`).join(", ")}
-            </div>
-            <div className="sub">
-              {[rel.country, rel.year || null, formatLine(rel)].filter(Boolean).join(" · ")}
-            </div>
-            <div className="chips" style={{ flexWrap: "wrap" }}>
-              {rel.styles.map((s) => (
-                <span key={s} className="badge">
-                  {s}
-                </span>
-              ))}
-            </div>
-            {inColl > 0 && <span className="badge ok">In deiner Sammlung</span>}
-          </div>
-        </div>
-
-        <div className="row wrap" style={{ marginTop: 14 }}>
-          {inColl === 0 && (
-            <button className="btn primary small" onClick={() => addToCollection(id).then(() => toast("Zur Sammlung hinzugefügt, Sticker vorgemerkt"), (e) => toast(e.message))}>
-              + Sammlung
+      {top}
+      <div className="page" style={{ paddingTop: 0 }}>
+        <div className="actions">
+          {inColl === 0 ? (
+            <button className="action on" onClick={() => (haptic(), addToCollection(id).then(() => toast("In der Sammlung · Sticker vorgemerkt"), (e) => toast(e.message)))}>
+              <IconPlus />
+              Sammlung
+            </button>
+          ) : (
+            <button className="action" onClick={() => nav(`/stickers?ids=${id}`, { viewTransition: true })}>
+              <IconPrint />
+              Drucken
             </button>
           )}
-          <button
-            className={`btn small ${isWant ? "" : "ghost"}`}
-            onClick={() => (isWant ? removeWant(id).then(() => toast("Aus Wantlist entfernt")) : addWant(id).then(() => toast("Auf die Wantlist gesetzt"))).catch((e) => toast(e.message))}
-          >
-            {isWant ? "♥ In Wantlist" : "♡ Wantlist"}
+          <button className={`action ${isWant ? "on" : ""}`} onClick={toggleWant} aria-pressed={isWant}>
+            <IconHeart />
+            {isWant ? "Gewünscht" : "Wantlist"}
           </button>
-          <a className="btn small ghost" href={discogsSellUrl(id)} target="_blank" rel="noreferrer">
-            Marktplatz ↗
+          <a className="action" href={discogsSellUrl(id)} target="_blank" rel="noreferrer">
+            <IconCart />
+            Marktplatz
           </a>
-          {inColl > 0 && (
-            <button className="btn small ghost" onClick={() => nav(`/stickers?ids=${id}`)}>
-              Sticker
-            </button>
-          )}
         </div>
 
-        {stat && (
-          <div className="card row" style={{ marginTop: 14 }}>
-            <div>
-              <div className="sub">Günstigstes Angebot</div>
-              <b>{stat.numForSale ? money(stat.lowest, stat.currency) : "keins"}</b>
-            </div>
-            <span className="spacer" />
-            <div style={{ textAlign: "right" }}>
-              <div className="sub">Angebote</div>
-              <b>{stat.numForSale}</b>
-            </div>
-            {rel.community && (
-              <div style={{ textAlign: "right", marginLeft: 14 }}>
-                <div className="sub">Have / Want</div>
-                <b>
-                  {rel.community.have} / {rel.community.want}
-                </b>
-              </div>
-            )}
+        <div className="grid3" style={{ marginTop: 10 }}>
+          <div className="stat">
+            <span>ab</span>
+            <b style={{ fontSize: 20 }}>{stat ? (stat.numForSale ? money(stat.lowest, stat.currency) : "–") : "…"}</b>
+          </div>
+          <div className="stat">
+            <span>Angebote</span>
+            <b style={{ fontSize: 20 }}>{stat?.numForSale ?? "…"}</b>
+          </div>
+          <div className="stat">
+            <span>Have / Want</span>
+            <b style={{ fontSize: 20 }}>{rel.community ? `${rel.community.have}/${rel.community.want}` : "–"}</b>
+          </div>
+        </div>
+
+        {rel.styles.length > 0 && (
+          <div className="chips" style={{ marginTop: 14 }}>
+            {[...rel.genres, ...rel.styles].map((s) => (
+              <Link key={s} to={`/search?style=${encodeURIComponent(s)}`} className="chip">
+                {s}
+              </Link>
+            ))}
           </div>
         )}
 
-        {inColl > 0 && (
-          <div className="row" style={{ marginTop: 12 }}>
-            <input
-              className="input"
-              placeholder="Regalplatz, z.B. Kallax 2 · Fach C"
-              defaultValue={meta?.shelf ?? ""}
-              onBlur={(e) => setMeta({ shelf: e.target.value })}
-              key={meta?.shelf}
-            />
-            <input
-              className="input"
-              placeholder="Crates, z.B. Freitag, Disco"
-              defaultValue={(meta?.crates ?? []).join(", ")}
-              onBlur={(e) => setMeta({ crates: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-              key={(meta?.crates ?? []).join()}
-            />
-          </div>
-        )}
-
-        <div className="row" style={{ marginTop: 18 }}>
+        <div className="row" style={{ marginTop: 22 }}>
           <h2 style={{ margin: 0 }}>Tracks</h2>
           <span className="spacer" />
-          <button className="btn small ghost" onClick={() => lookupAudioFor(tracks.map((t) => t.id)).then((n) => toast(n ? `${n} Track(s) ergänzt` : "Keine neuen Daten gefunden"), (e) => toast(e.message))}>
-            BPM/Key suchen
+          <button className="btn small tinted" onClick={() => lookupAudioFor(tracks.map((t) => t.id)).then((n) => toast(n ? `${n} Track(s) ergänzt` : "Keine neuen Daten gefunden"), (e) => toast(e.message))}>
+            <IconWave /> BPM & Key
           </button>
           {me?.features.ai && (
-            <button className="btn small ghost" onClick={() => tagVibes(tracks.map((t) => t.id)).then(() => toast("Vibes getaggt"), (e) => toast(e.message))}>
-              Vibes
+            <button className="btn small tinted" onClick={() => tagVibes(tracks.map((t) => t.id)).then(() => toast("Vibes getaggt"), (e) => toast(e.message))} aria-label="Vibes per KI">
+              <IconSparkle />
             </button>
           )}
         </div>
         <table className="tracks">
           <tbody>
-            {tl.map((t, i) => {
+            {tl.flatMap((t, i) => {
               const m = tm.get(trackId(id, t.position, i));
-              return (
-                <tr key={t.position + i} onClick={() => m && setEdit(m)} style={{ cursor: "pointer" }}>
+              const side = sideOf(t.position);
+              const rows = [];
+              if (side && side !== lastSide) {
+                rows.push(
+                  <tr key={`side-${side}`} className="side-head">
+                    <td colSpan={3}>SEITE {side}</td>
+                  </tr>,
+                );
+              }
+              lastSide = side;
+              rows.push(
+                <tr key={t.position + i} onClick={() => m && (haptic(5), setEdit(m))} style={{ cursor: "pointer" }}>
                   <td className="pos">{t.position}</td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{t.title}</div>
-                    <div className="sub">
-                      {m?.artist !== rel.artist ? m?.artist : ""} {t.duration}
-                      {m?.moods?.length ? ` · ${m.moods.join(", ")}` : ""}
+                    <div className="sub" style={{ fontSize: 13 }}>
+                      {[m?.artist !== rel.artist ? m?.artist : "", t.duration, m?.moods?.slice(0, 3).join(", ")].filter(Boolean).join(" · ")}
                     </div>
                   </td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                    {m?.bpm ? <b>{m.bpm}</b> : <span className="sub">–</span>} <KeyBadge k={m?.key} />
-                    <div>
+                    <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
+                      {m?.bpm ? <span className="bpm">{m.bpm}</span> : <span className="tiny">BPM?</span>}
+                      <KeyBadge k={m?.key} />
+                    </div>
+                    <div style={{ marginTop: 4 }}>
                       <Energy v={m?.energy} />
                     </div>
                   </td>
-                </tr>
+                </tr>,
               );
+              return rows;
             })}
           </tbody>
         </table>
         {!tl.length && <div className="sub">{loading ? "Lade Tracklist …" : "Keine Tracklist bei Discogs."}</div>}
+
+        {inColl > 0 && (
+          <>
+            <h2>In deiner Kiste</h2>
+            <div className="group">
+              <label className="group-row">
+                <span style={{ width: 92 }} className="sub">Regalplatz</span>
+                <input
+                  className="input"
+                  style={{ background: "transparent", padding: 0, minHeight: 32 }}
+                  placeholder="z.B. Kallax 2 · Fach C"
+                  defaultValue={meta?.shelf ?? ""}
+                  onBlur={(e) => setMeta({ shelf: e.target.value })}
+                  key={meta?.shelf}
+                />
+              </label>
+              <label className="group-row">
+                <span style={{ width: 92 }} className="sub">Crates</span>
+                <input
+                  className="input"
+                  style={{ background: "transparent", padding: 0, minHeight: 32 }}
+                  placeholder="z.B. Freitag, Disco"
+                  defaultValue={(meta?.crates ?? []).join(", ")}
+                  onBlur={(e) => setMeta({ crates: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
+                  key={(meta?.crates ?? []).join()}
+                />
+              </label>
+              <div className="group-row">
+                <span style={{ width: 92 }} className="sub">Beschriftung</span>
+                <span>{meta?.stickerPrintedAt ? `gedruckt am ${new Date(meta.stickerPrintedAt).toLocaleDateString("de-DE")}` : "noch offen"}</span>
+              </div>
+            </div>
+          </>
+        )}
 
         {rel.videos?.length ? (
           <>
@@ -193,14 +231,14 @@ export default function ReleasePage() {
         ) : null}
       </div>
 
-      <Sheet open={!!edit} onClose={() => setEdit(null)}>
-        {edit && <TrackEdit t={edit} onSave={(p) => saveTrack(edit, p).then(() => setEdit(null))} />}
+      <Sheet open={!!edit} onClose={() => (setEdit(null), setPlaying(false))}>
+        {edit && <TrackEdit t={edit} onPlaying={setPlaying} onSave={(p) => saveTrack(edit, p).then(() => (setEdit(null), setPlaying(false), toast("Gespeichert")))} />}
       </Sheet>
     </>
   );
 }
 
-function TrackEdit({ t, onSave }: { t: TrackMeta; onSave: (p: Partial<TrackMeta>) => void }) {
+function TrackEdit({ t, onSave, onPlaying }: { t: TrackMeta; onSave: (p: Partial<TrackMeta>) => void; onPlaying: (p: boolean) => void }) {
   const [bpm, setBpm] = useState(String(t.bpm ?? ""));
   const [key, setKey] = useState(t.key ?? "");
   const [energy, setEnergy] = useState(t.energy ?? 5);
@@ -217,7 +255,7 @@ function TrackEdit({ t, onSave }: { t: TrackMeta; onSave: (p: Partial<TrackMeta>
         <b style={{ fontSize: 18 }}>{t.title}</b>
       </div>
       {preview ? (
-        <audio controls autoPlay src={preview} style={{ width: "100%" }} />
+        <audio controls autoPlay src={preview} style={{ width: "100%" }} onPlay={() => onPlaying(true)} onPause={() => onPlaying(false)} onEnded={() => onPlaying(false)} />
       ) : (
         <button
           className="btn small ghost"
@@ -253,7 +291,7 @@ function TrackEdit({ t, onSave }: { t: TrackMeta; onSave: (p: Partial<TrackMeta>
       <div className="row">
         <span className="sub">Bewertung</span>
         {[1, 2, 3, 4, 5].map((s) => (
-          <button key={s} className="icon-btn" style={{ color: s <= stars ? "var(--accent)" : undefined, fontSize: 22 }} onClick={() => setStars(s === stars ? 0 : s)}>
+          <button key={s} className="icon-btn" style={{ color: s <= stars ? "var(--accent)" : "var(--surface-3)", fontSize: 24 }} aria-label={`${s} Sterne`} onClick={() => setStars(s === stars ? 0 : s)}>
             ★
           </button>
         ))}
@@ -263,7 +301,7 @@ function TrackEdit({ t, onSave }: { t: TrackMeta; onSave: (p: Partial<TrackMeta>
         <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
       </label>
       <button
-        className="btn primary block"
+        className="btn primary block lg"
         onClick={() =>
           onSave({
             bpm: Number(bpm.replace(",", ".")) ? Math.round(Number(bpm.replace(",", ".")) * 10) / 10 : null,

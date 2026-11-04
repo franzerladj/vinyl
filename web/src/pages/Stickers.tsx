@@ -2,61 +2,80 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import QRCode from "qrcode";
-import { db, getKV, realTracks, setKV, trackId, type Release, type TrackMeta } from "../lib/db";
-import { discogsReleaseUrl, sideOf } from "../lib/format";
+import { db, getKV, realTracks, setKV, trackId } from "../lib/db";
+import { discogsReleaseUrl } from "../lib/format";
 import { fetchMissingDetails, lookupAudioFor } from "../lib/sync";
 import { toast } from "../lib/store";
-import { Seg } from "../components/bits";
-import { camelotString, parseKey } from "../../../shared/music";
+import { Empty, haptic, Seg } from "../components/bits";
+import { IconPrint } from "../components/icons";
+import { Sticker } from "../components/print/Sticker";
+import { InsertCard, ObiStrip, type CardTheme } from "../components/print/InsertCard";
+import type { Layout, PrintItem, PrintOpts } from "../components/print/types";
 
-/** Etiketten-Vorlagen (Maße in mm). Eigene Größe ist auch möglich. */
-const TEMPLATES = {
-  "a4-3x8": { name: "A4 · 70 × 37 mm (24 pro Blatt, z.B. Avery Zweckform 3475)", w: 70, h: 37, cols: 3, rows: 8, mx: 0, my: 0.5, gx: 0, gy: 0, page: "A4" },
-  "a4-2x7": { name: "A4 · 99,1 × 38,1 mm (14 pro Blatt, z.B. Avery L7163)", w: 99.1, h: 38.1, cols: 2, rows: 7, mx: 4.7, my: 15.1, gx: 2.5, gy: 0, page: "A4" },
-  "a4-2x4": { name: "A4 · 99,1 × 67,7 mm (8 pro Blatt, z.B. Avery L7165)", w: 99.1, h: 67.7, cols: 2, rows: 4, mx: 4.7, my: 13.1, gx: 2.5, gy: 0, page: "A4" },
-  "a4-3x7-round": { name: "A4 · 63,5 × 38,1 mm (21 pro Blatt, z.B. Avery L7160)", w: 63.5, h: 38.1, cols: 3, rows: 7, mx: 7.2, my: 15.1, gx: 2.5, gy: 0, page: "A4" },
-  "roll-62": { name: "Etikettendrucker 62 mm Endlos (Brother QL), 62 × 45 mm", w: 62, h: 45, cols: 1, rows: 1, mx: 0, my: 0, gx: 0, gy: 0, page: "62mm 45mm" },
-  "roll-62-long": { name: "Etikettendrucker 62 mm Endlos, 62 × 70 mm", w: 62, h: 70, cols: 1, rows: 1, mx: 0, my: 0, gx: 0, gy: 0, page: "62mm 70mm" },
-} as const;
-type TplKey = keyof typeof TEMPLATES;
+type Kind = "card" | "obi" | "sticker";
 
-interface StickerOpts {
-  template: TplKey;
-  showBpm: boolean;
-  showKey: boolean;
-  showCamelot: boolean;
-  showEnergy: boolean;
-  showStyles: boolean;
-  showShelf: boolean;
-  showQr: boolean;
-  showDuration: boolean;
-  skip: number; // bereits benutzte Etiketten auf dem ersten Blatt
+/** Einleger-Formate (mm). A4 hoch = 210 × 297 */
+const CARD_LAYOUTS = {
+  a6: { name: "A6-Karte · 105 × 148 mm · 4 pro A4", w: 105, h: 148, cols: 2, rows: 2, mx: 0, my: 0.5, gx: 0, gy: 0, page: "A4", cutMarks: true },
+  sq: { name: "Quadrat · 100 × 100 mm · 4 pro A4", w: 100, h: 100, cols: 2, rows: 2, mx: 5, my: 48.5, gx: 0, gy: 0, page: "A4", cutMarks: true },
+  a5: { name: "A5-Karte · 148 × 210 mm · 2 pro A4 quer", w: 148, h: 210, cols: 2, rows: 1, mx: 0.5, my: 0, gx: 0, gy: 0, page: "A4 landscape", cutMarks: true },
+} satisfies Record<string, Layout>;
+const OBI_LAYOUTS = {
+  obi: { name: "Obi-Streifen · 50 × 287 mm · 4 pro A4", w: 50, h: 287, cols: 4, rows: 1, mx: 5, my: 5, gx: 0, gy: 0, page: "A4", cutMarks: true },
+} satisfies Record<string, Layout>;
+/** Etiketten-Vorlagen für Sticker */
+const STICKER_LAYOUTS = {
+  "a4-2x7": { name: "A4 · 99,1 × 38,1 mm (14/Blatt, z.B. Avery L7163)", w: 99.1, h: 38.1, cols: 2, rows: 7, mx: 4.7, my: 15.1, gx: 2.5, gy: 0, page: "A4" },
+  "a4-3x8": { name: "A4 · 70 × 37 mm (24/Blatt, z.B. Avery 3475)", w: 70, h: 37, cols: 3, rows: 8, mx: 0, my: 0.5, gx: 0, gy: 0, page: "A4" },
+  "a4-2x4": { name: "A4 · 99,1 × 67,7 mm (8/Blatt, z.B. Avery L7165)", w: 99.1, h: 67.7, cols: 2, rows: 4, mx: 4.7, my: 13.1, gx: 2.5, gy: 0, page: "A4" },
+  "a4-3x7": { name: "A4 · 63,5 × 38,1 mm (21/Blatt, z.B. Avery L7160)", w: 63.5, h: 38.1, cols: 3, rows: 7, mx: 7.2, my: 15.1, gx: 2.5, gy: 0, page: "A4" },
+  "roll-62": { name: "Etikettendrucker 62 mm, 62 × 45 mm (Brother QL)", w: 62, h: 45, cols: 1, rows: 1, mx: 0, my: 0, gx: 0, gy: 0, page: "62mm 45mm" },
+  "roll-62-long": { name: "Etikettendrucker 62 mm, 62 × 70 mm", w: 62, h: 70, cols: 1, rows: 1, mx: 0, my: 0, gx: 0, gy: 0, page: "62mm 70mm" },
+} satisfies Record<string, Layout>;
+const ALL_LAYOUTS: Record<string, Layout> = { ...CARD_LAYOUTS, ...OBI_LAYOUTS, ...STICKER_LAYOUTS };
+
+interface Opts extends PrintOpts {
+  kind: Kind;
+  cardLayout: keyof typeof CARD_LAYOUTS;
+  stickerLayout: keyof typeof STICKER_LAYOUTS;
+  theme: CardTheme;
+  skip: number;
 }
-const DEFAULT_OPTS: StickerOpts = { template: "a4-2x7", showBpm: true, showKey: true, showCamelot: true, showEnergy: false, showStyles: true, showShelf: false, showQr: true, showDuration: false, skip: 0 };
+const DEFAULTS: Opts = {
+  kind: "card",
+  cardLayout: "a6",
+  stickerLayout: "a4-2x7",
+  theme: "light",
+  showBpm: true,
+  showKey: true,
+  showCamelot: true,
+  showEnergy: true,
+  showStyles: true,
+  showShelf: false,
+  showQr: true,
+  showDuration: false,
+  showCover: true,
+  skip: 0,
+};
 
-interface StickerData {
-  r: Release;
-  tracks: { position: string; title: string; artist?: string; duration?: string; meta?: TrackMeta }[];
-  shelf?: string;
-  qr?: string;
-}
+const KIND_LABEL: Record<Kind, string> = { card: "Einleger", obi: "Obi-Streifen", sticker: "Sticker" };
 
 export default function Stickers() {
   const [params] = useSearchParams();
   const preset = params.get("ids")?.split(",").map(Number).filter(Boolean);
   const [mode, setMode] = useState<"new" | "all" | "pick">(preset ? "pick" : "new");
   const [picked, setPicked] = useState<Set<number>>(new Set(preset ?? []));
-  const [opts, setOpts] = useState<StickerOpts>(DEFAULT_OPTS);
-  const [qrs, setQrs] = useState<Map<number, string>>(new Map());
+  const [opts, setOpts] = useState<Opts>(DEFAULTS);
+  const [qrs, setQrs] = useState<Map<string, string>>(new Map());
   const [q, setQ] = useState("");
 
   useEffect(() => {
-    getKV("stickerOpts", DEFAULT_OPTS).then((o) => setOpts({ ...DEFAULT_OPTS, ...o }));
+    getKV("printOpts", DEFAULTS).then((o) => setOpts({ ...DEFAULTS, ...o }));
   }, []);
-  const upd = (p: Partial<StickerOpts>) => {
+  const upd = (p: Partial<Opts>) => {
     const o = { ...opts, ...p };
     setOpts(o);
-    void setKV("stickerOpts", o);
+    void setKV("printOpts", o);
   };
 
   const data = useLiveQuery(async () => {
@@ -82,27 +101,45 @@ export default function Stickers() {
     return data;
   }, [data, mode, picked]);
 
+  // QR-Codes passend zum Farbschema (auf dunklen Karten weiß)
+  const darkQr = opts.kind !== "sticker" && opts.theme !== "light";
+  const qrKey = (id: number) => `${id}:${darkQr ? "d" : "l"}`;
   useEffect(() => {
     if (!opts.showQr) return;
-    const missing = selected.filter((s) => !qrs.has(s.r.id));
+    const missing = selected.filter((s) => !qrs.has(qrKey(s.r.id)));
     if (!missing.length) return;
-    Promise.all(missing.map(async (s) => [s.r.id, await QRCode.toDataURL(discogsReleaseUrl(s.r.id), { margin: 0, width: 160, errorCorrectionLevel: "L" })] as const)).then((pairs) =>
-      setQrs((m) => new Map([...m, ...pairs])),
-    );
-  }, [selected, opts.showQr, qrs]);
+    Promise.all(
+      missing.map(
+        async (s) =>
+          [qrKey(s.r.id), await QRCode.toDataURL(discogsReleaseUrl(s.r.id), { margin: 0, width: 220, errorCorrectionLevel: "L", color: darkQr ? { dark: "#ffffff", light: "#00000000" } : { dark: "#000000", light: "#ffffff" } })] as const,
+      ),
+    ).then((pairs) => setQrs((m) => new Map([...m, ...pairs])));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, opts.showQr, darkQr, qrs]);
 
-  const tpl = TEMPLATES[opts.template];
+  const layoutKey = opts.kind === "card" ? opts.cardLayout : opts.kind === "obi" ? "obi" : opts.stickerLayout;
+  const tpl = ALL_LAYOUTS[layoutKey];
   const perPage = tpl.cols * tpl.rows;
-  const cells: (StickerData | null)[] = [...Array(opts.skip).fill(null), ...selected.map((s) => ({ ...s, qr: qrs.get(s.r.id) }))];
-  const pages: (StickerData | null)[][] = [];
-  for (let i = 0; i < cells.length; i += perPage) pages.push(cells.slice(i, i + perPage));
+  const items: (PrintItem | null)[] = [...Array(opts.skip).fill(null), ...selected.map((s) => ({ ...s, qr: qrs.get(qrKey(s.r.id)) }))];
+  const pages: (PrintItem | null)[][] = [];
+  for (let i = 0; i < items.length; i += perPage) pages.push(items.slice(i, i + perPage));
 
   const missingTracks = selected.filter((s) => !s.r.detailFetchedAt).length;
   const missingBpm = selected.reduce((n, s) => n + s.tracks.filter((t) => !t.meta?.bpm).length, 0);
 
+  const render = (s: PrintItem, key: string | number) =>
+    opts.kind === "card" ? (
+      <InsertCard key={key} s={s} w={tpl.w} h={tpl.h} o={opts} theme={opts.theme} />
+    ) : opts.kind === "obi" ? (
+      <ObiStrip key={key} s={s} w={tpl.w} h={tpl.h} o={opts} theme={opts.theme} />
+    ) : (
+      <Sticker key={key} s={s} w={tpl.w} h={tpl.h} o={opts} />
+    );
+
   const print = async () => {
+    haptic();
     window.print();
-    if (selected.length && confirm(`${selected.length} Sticker als gedruckt markieren?`)) {
+    if (selected.length && confirm(`${selected.length} Platten als beschriftet markieren?`)) {
       const now = Date.now();
       await db.transaction("rw", db.recordMeta, async () => {
         for (const s of selected) {
@@ -110,32 +147,63 @@ export default function Stickers() {
           await db.recordMeta.put({ ...m, releaseId: s.r.id, stickerPrintedAt: now });
         }
       });
-      toast("Als gedruckt markiert");
+      toast("Als beschriftet markiert");
     }
   };
 
   const filtered = useMemo(() => (data ?? []).filter((d) => `${d.r.artist} ${d.r.title} ${d.r.labels[0]?.catno}`.toLowerCase().includes(q.toLowerCase())).slice(0, 200), [data, q]);
+  // Vorschau verkleinern, damit eine Karte auf den Handy-Bildschirm passt
+  const previewScale = Math.min(1, (Math.min(window.innerWidth, 760) - 64) / ((tpl.w / 25.4) * 96), opts.kind === "obi" ? 0.62 : 1);
+  const newCount = data?.filter((d) => !d.printed).length ?? 0;
 
   return (
     <>
       <style>{`@media print { @page { size: ${tpl.page}; margin: 0; } }`}</style>
       <div className="page-head no-print">
         <div>
-          <h1>Sticker</h1>
+          <h1>Beschriften</h1>
           <div className="sub">
-            {selected.length} Sticker · {pages.length} {tpl.cols * tpl.rows > 1 ? "Blatt" : "Etiketten"}
+            {selected.length} {KIND_LABEL[opts.kind]} · {pages.length} {perPage > 1 ? (pages.length === 1 ? "Blatt" : "Blätter") : "Etiketten"}
           </div>
         </div>
         <button className="btn primary" onClick={print} disabled={!selected.length}>
-          Drucken
+          <IconPrint /> Drucken
         </button>
       </div>
       <div className="page stack no-print">
         <Seg
+          value={opts.kind}
+          options={[
+            ["card", "Einleger"],
+            ["obi", "Obi"],
+            ["sticker", "Sticker"],
+          ]}
+          onChange={(kind) => upd({ kind, skip: 0 })}
+        />
+        <p className="sub" style={{ margin: "-2px 2px 0" }}>
+          {opts.kind === "card" && "Karte, die vor dem Cover in die transparente Außenhülle kommt. Von außen lesbar, nichts klebt auf dem Original."}
+          {opts.kind === "obi" && "Schmaler Streifen für die Seite der Hülle, wie das Obi bei japanischen Pressungen. Auch im Regal gut sichtbar."}
+          {opts.kind === "sticker" && "Etikett zum Aufkleben auf die Außenhülle. Passend für gängige Etikettenbögen und Etikettendrucker."}
+        </p>
+
+        {/* Vorschau */}
+        {selected.length > 0 ? (
+          <div className="preview-scroll">
+            {selected.slice(0, 8).map((s) => (
+              <div key={s.r.id} style={{ width: `${tpl.w * previewScale}mm`, height: `${tpl.h * previewScale}mm` }}>
+                <div style={{ transform: `scale(${previewScale})`, transformOrigin: "top left" }}>{render({ ...s, qr: qrs.get(qrKey(s.r.id)) }, s.r.id)}</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <Empty title={mode === "new" ? "Alles beschriftet" : "Nichts ausgewählt"}>Neue Platten landen automatisch hier.</Empty>
+        )}
+
+        <Seg
           value={mode}
           options={[
-            ["new", `Neue (${data?.filter((d) => !d.printed).length ?? 0})`],
-            ["all", "Alle"],
+            ["new", `Neue (${newCount})`],
+            ["all", `Alle (${data?.length ?? 0})`],
             ["pick", "Auswahl"],
           ]}
           onChange={setMode}
@@ -143,9 +211,9 @@ export default function Stickers() {
         {mode === "pick" && (
           <div className="card stack">
             <input className="input" placeholder="Platte suchen …" value={q} onChange={(e) => setQ(e.target.value)} />
-            <div className="list" style={{ maxHeight: 260, overflow: "auto" }}>
+            <div className="list" style={{ maxHeight: 280, overflow: "auto" }}>
               {filtered.map((d) => (
-                <label key={d.r.id} className="row" style={{ padding: "6px 0" }}>
+                <label key={d.r.id} className="row" style={{ padding: "8px 0", minHeight: 44 }}>
                   <input
                     type="checkbox"
                     checked={picked.has(d.r.id)}
@@ -159,7 +227,7 @@ export default function Stickers() {
                   <span style={{ flex: 1, minWidth: 0 }} className="rec-title">
                     {d.r.artist} – {d.r.title}
                   </span>
-                  {d.printed && <span className="badge ok">gedruckt</span>}
+                  {d.printed && <span className="badge ok">erledigt</span>}
                 </label>
               ))}
             </div>
@@ -167,79 +235,92 @@ export default function Stickers() {
         )}
 
         {(missingTracks > 0 || missingBpm > 0) && (
-          <div className="card stack">
+          <div className="group">
             {missingTracks > 0 && (
-              <div className="row">
-                <span className="sub">{missingTracks} Platten ohne Tracklist</span>
-                <span className="spacer" />
-                <button className="btn small" onClick={() => fetchMissingDetails("collection").catch((e) => toast(e.message))}>
-                  laden
-                </button>
-              </div>
+              <button className="group-row" onClick={() => fetchMissingDetails("collection").catch((e) => toast(e.message))}>
+                <span>{missingTracks} Platten ohne Tracklist</span>
+                <span className="chev" style={{ color: "var(--accent)" }}>Laden</span>
+              </button>
             )}
             {missingBpm > 0 && (
-              <div className="row">
-                <span className="sub">{missingBpm} Tracks ohne BPM</span>
-                <span className="spacer" />
-                <button className="btn small" onClick={() => lookupAudioFor(selected.flatMap((s) => s.tracks.map((t) => t.meta?.id).filter(Boolean) as string[])).then((n) => toast(`${n} ergänzt`))}>
-                  automatisch suchen
-                </button>
-              </div>
+              <button className="group-row" onClick={() => lookupAudioFor(selected.flatMap((s) => s.tracks.map((t) => t.meta?.id).filter(Boolean) as string[])).then((n) => toast(`${n} Tracks ergänzt`))}>
+                <span>{missingBpm} Tracks ohne BPM</span>
+                <span className="chev" style={{ color: "var(--accent)" }}>Suchen</span>
+              </button>
             )}
           </div>
         )}
 
-        <details className="card">
-          <summary style={{ cursor: "pointer", fontWeight: 600 }}>Format & Inhalt</summary>
-          <div className="stack" style={{ marginTop: 10 }}>
-            <select className="input" value={opts.template} onChange={(e) => upd({ template: e.target.value as TplKey })}>
-              {Object.entries(TEMPLATES).map(([k, t]) => (
-                <option key={k} value={k}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-            <div className="grid2">
-              {(
-                [
-                  ["showBpm", "BPM"],
-                  ["showKey", "Tonart"],
-                  ["showCamelot", "Camelot (8A …)"],
-                  ["showEnergy", "Energie"],
-                  ["showDuration", "Länge"],
-                  ["showStyles", "Styles"],
-                  ["showShelf", "Regalplatz"],
-                  ["showQr", "QR-Code zu Discogs"],
-                ] as [keyof StickerOpts, string][]
-              ).map(([k, l]) => (
-                <label key={k} className="row sub">
-                  <input type="checkbox" checked={Boolean(opts[k])} onChange={(e) => upd({ [k]: e.target.checked })} /> {l}
-                </label>
-              ))}
-            </div>
-            {perPage > 1 && (
-              <label className="field">
-                Bereits benutzte Etiketten auf dem ersten Blatt überspringen
-                <input className="input" inputMode="numeric" value={opts.skip} onChange={(e) => upd({ skip: Math.max(0, Math.min(perPage - 1, Number(e.target.value) || 0)) })} />
-              </label>
-            )}
-            <span className="sub">Beim Drucken „Tatsächliche Größe / 100 %“ wählen und Kopf-/Fußzeilen ausschalten.</span>
-          </div>
-        </details>
+        <h3>Format</h3>
+        {opts.kind === "card" && (
+          <select className="input" value={opts.cardLayout} onChange={(e) => upd({ cardLayout: e.target.value as Opts["cardLayout"], skip: 0 })}>
+            {Object.entries(CARD_LAYOUTS).map(([k, t]) => (
+              <option key={k} value={k}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {opts.kind === "sticker" && (
+          <select className="input" value={opts.stickerLayout} onChange={(e) => upd({ stickerLayout: e.target.value as Opts["stickerLayout"], skip: 0 })}>
+            {Object.entries(STICKER_LAYOUTS).map(([k, t]) => (
+              <option key={k} value={k}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {opts.kind === "obi" && <div className="sub">{OBI_LAYOUTS.obi.name}</div>}
 
-        <h2>Vorschau</h2>
-        <div className="stack" style={{ alignItems: "center" }}>
-          {selected.slice(0, 6).map((s) => (
-            <div key={s.r.id} style={{ background: "#fff", borderRadius: 6, boxShadow: "0 2px 12px rgba(0,0,0,.4)" }}>
-              <Sticker s={{ ...s, qr: qrs.get(s.r.id) }} w={tpl.w} h={tpl.h} o={opts} />
-            </div>
+        {opts.kind !== "sticker" && (
+          <>
+            <h3>Look</h3>
+            <Seg
+              value={opts.theme}
+              options={[
+                ["light", "Weiß"],
+                ["dark", "Schwarz"],
+                ["cover", "Cover-Farben"],
+              ]}
+              onChange={(theme) => upd({ theme })}
+            />
+          </>
+        )}
+
+        <h3>Inhalt</h3>
+        <div className="group">
+          {(
+            [
+              ["showBpm", "BPM"],
+              ["showCamelot", "Camelot-Key (8A …)"],
+              ["showKey", "Tonart (Am …)"],
+              ["showEnergy", "Energie"],
+              ["showDuration", "Länge"],
+              ["showStyles", "Styles"],
+              ["showShelf", "Regalplatz"],
+              ["showQr", "QR-Code zu Discogs"],
+              ...(opts.kind === "card" ? ([["showCover", "Cover-Bild"]] as const) : []),
+            ] as [keyof PrintOpts, string][]
+          ).map(([k, l]) => (
+            <label key={k} className="group-row">
+              <span>{l}</span>
+              <input type="checkbox" style={{ marginLeft: "auto" }} checked={Boolean(opts[k])} onChange={(e) => upd({ [k]: e.target.checked } as Partial<Opts>)} />
+            </label>
           ))}
-          {selected.length === 0 && <div className="empty">Alles bestickert. Neue Platten landen automatisch hier.</div>}
         </div>
+        {perPage > 1 && (
+          <label className="field">
+            Schon benutzte Plätze auf dem ersten Blatt überspringen
+            <input className="input" inputMode="numeric" value={opts.skip} onChange={(e) => upd({ skip: Math.max(0, Math.min(perPage - 1, Number(e.target.value) || 0)) })} />
+          </label>
+        )}
+        <p className="tiny">
+          Druckdialog: „Tatsächliche Größe / 100 %“, Kopf- und Fußzeilen aus{opts.kind !== "sticker" && ", Hintergrundgrafiken an"}. Für Einleger eignet sich mattes Papier mit 200 bis 300 g/m².
+        </p>
       </div>
 
       <div className="print-area print-only">
-        {pages.map((cellsOnPage, pi) => (
+        {pages.map((cells, pi) => (
           <div
             key={pi}
             style={{
@@ -254,109 +335,14 @@ export default function Stickers() {
               rowGap: `${tpl.gy}mm`,
             }}
           >
-            {cellsOnPage.map((c, i) => (c ? <Sticker key={i} s={c} w={tpl.w} h={tpl.h} o={opts} /> : <div key={i} />))}
+            {cells.map((c, i) => (
+              <div key={i} style={{ position: "relative", outline: tpl.cutMarks && c ? "0.1mm dashed rgba(0,0,0,.25)" : undefined, outlineOffset: "-0.05mm" }}>
+                {c && render(c, i)}
+              </div>
+            ))}
           </div>
         ))}
       </div>
     </>
-  );
-}
-
-/** Ein Sticker. Alles in mm, damit Vorschau und Druck identisch sind. */
-function Sticker({ s, w, h, o }: { s: StickerData; w: number; h: number; o: StickerOpts }) {
-  const { r } = s;
-  const sides = new Map<string, StickerData["tracks"]>();
-  for (const t of s.tracks) {
-    const side = sideOf(t.position) || "·";
-    sides.set(side, [...(sides.get(side) ?? []), t]);
-  }
-  const lines = s.tracks.length + sides.size;
-  const headerH = 11;
-  const avail = h - headerH - 3;
-  // Schriftgröße so wählen, dass alle Tracks passen (in mm, 1pt ≈ 0.353mm)
-  const twoCols = lines * 2.6 > avail && sides.size > 1;
-  const perCol = twoCols ? Math.ceil(lines / 2) : lines;
-  const lineH = Math.max(1.75, Math.min(3.2, avail / Math.max(1, perCol)));
-  const fs = lineH * 0.78;
-  const qrSize = o.showQr ? Math.min(11, headerH) : 0;
-  const label = r.labels[0];
-
-  const meta = (t: StickerData["tracks"][0]) => {
-    const parts: string[] = [];
-    if (o.showBpm && t.meta?.bpm) parts.push(String(Math.round(t.meta.bpm)));
-    const c = parseKey(t.meta?.key);
-    if (o.showCamelot && c) parts.push(camelotString(c));
-    else if (o.showKey && t.meta?.key) parts.push(t.meta.key);
-    if (o.showKey && o.showCamelot && c && t.meta?.key && !/^\d/.test(t.meta.key)) parts.push(t.meta.key);
-    if (o.showEnergy && t.meta?.energy) parts.push(`E${t.meta.energy}`);
-    if (o.showDuration && t.duration) parts.push(t.duration);
-    return parts.join(" · ");
-  };
-
-  const sideBlocks = [...sides.entries()];
-  const colA: typeof sideBlocks = [];
-  const colB: typeof sideBlocks = [];
-  if (twoCols) {
-    let count = 0;
-    for (const b of sideBlocks) {
-      (count < perCol ? colA : colB).push(b);
-      count += b[1].length + 1;
-    }
-  } else colA.push(...sideBlocks);
-
-  const renderCol = (blocks: typeof sideBlocks) => (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      {blocks.map(([side, ts]) => (
-        <div key={side}>
-          {sides.size > 1 && (
-            <div style={{ fontSize: `${fs * 0.9}mm`, lineHeight: `${lineH}mm`, fontWeight: 800, letterSpacing: "0.08em" }}>
-              SIDE {side}
-            </div>
-          )}
-          {ts.map((t) => (
-            <div key={t.position} style={{ display: "flex", gap: "1mm", fontSize: `${fs}mm`, lineHeight: `${lineH}mm`, whiteSpace: "nowrap" }}>
-              <span style={{ width: `${fs * 2.2}mm`, flex: "none", fontWeight: 700 }}>{t.position}</span>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
-                {t.meta?.artist && t.meta.artist !== r.artist ? `${t.meta.artist} – ` : ""}
-                {t.title}
-              </span>
-              <span style={{ flex: "none", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{meta(t)}</span>
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
-
-  return (
-    <div
-      style={{
-        width: `${w}mm`,
-        height: `${h}mm`,
-        padding: "2mm 2.5mm",
-        boxSizing: "border-box",
-        color: "#000",
-        background: "#fff",
-        fontFamily: "'Helvetica Neue', Arial, sans-serif",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      <div style={{ display: "flex", gap: "2mm", height: `${headerH}mm`, borderBottom: "0.3mm solid #000", marginBottom: "1mm", flex: "none" }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: "3.3mm", lineHeight: "3.8mm", fontWeight: 800, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.artist}</div>
-          <div style={{ fontSize: "2.8mm", lineHeight: "3.3mm", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</div>
-          <div style={{ fontSize: "2.1mm", lineHeight: "2.8mm", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "#333" }}>
-            {[label && `${label.name.replace(/\s\(\d+\)$/, "")} ${label.catno}`, r.year || null, o.showStyles ? r.styles.slice(0, 2).join(", ") : null, o.showShelf ? s.shelf : null].filter(Boolean).join(" · ")}
-          </div>
-        </div>
-        {o.showQr && s.qr && <img src={s.qr} style={{ width: `${qrSize - 1}mm`, height: `${qrSize - 1}mm` }} alt="" />}
-      </div>
-      <div style={{ display: "flex", gap: "2mm", flex: 1, minHeight: 0 }}>
-        {renderCol(colA)}
-        {twoCols && renderCol(colB)}
-      </div>
-    </div>
   );
 }

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type Release, type TrackMeta } from "../lib/db";
-import { Cover, KeyBadge, RecordRow, Seg, useDebounced } from "../components/bits";
+import { Cover, Empty, KeyBadge, markHero, RecordRow, Seg, SkeletonRows, useDebounced } from "../components/bits";
 import { IconCamera, IconSearch } from "../components/icons";
 import { keyDistance, parseKey } from "../../../shared/music";
 
@@ -118,9 +118,9 @@ export default function Collection() {
           </button>
         </div>
         <div className="row">
-          <input className="input" inputMode="numeric" placeholder="BPM von" value={bpmMin} onChange={(e) => setBpmMin(e.target.value)} />
+          <input className="input" inputMode="numeric" placeholder="BPM ab" value={bpmMin} onChange={(e) => setBpmMin(e.target.value)} />
           <input className="input" inputMode="numeric" placeholder="bis" value={bpmMax} onChange={(e) => setBpmMax(e.target.value)} />
-          <input className="input" placeholder="passt zu Key (z.B. 8A)" value={keyMatch} onChange={(e) => setKeyMatch(e.target.value)} />
+          <input className="input" placeholder="Key, z.B. 8A" value={keyMatch} onChange={(e) => setKeyMatch(e.target.value)} />
         </div>
         {styles.length > 0 && (
           <div className="chips">
@@ -133,14 +133,14 @@ export default function Collection() {
         )}
 
         {view === "list" ? (
-          <div className="list">
+          <div className="list rise" key={`${sort}${style}${filter}`}>
             {list.slice(0, 400).map(({ r, tracks, meta }) => (
               <RecordRow
                 key={r.id}
                 r={r as Release}
                 side={
                   <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
-                    {bpmRange(tracks) && <span className="badge">{bpmRange(tracks)} BPM</span>}
+                    {bpmRange(tracks) && <span className="bpm" style={{ fontSize: 14 }}>{bpmRange(tracks)}</span>}
                     <div className="row" style={{ gap: 3 }}>
                       {[...new Set(tracks.map((t) => t.key).filter(Boolean))].slice(0, 2).map((k) => (
                         <KeyBadge key={k} k={k} />
@@ -155,16 +155,18 @@ export default function Collection() {
         ) : (
           <div className="cover-grid">
             {list.slice(0, 600).map(({ r }) => (
-              <Link key={r.id} to={`/release/${r.id}`}>
+              <Link key={r.id} to={`/release/${r.id}`} viewTransition state={{ preview: { thumb: r.thumb, cover: r.cover, title: r.title, artist: r.artist } }} onClick={(e) => markHero(e.currentTarget)} className="press">
                 <Cover src={r.cover || r.thumb} />
               </Link>
             ))}
           </div>
         )}
         {list.length > 400 && view === "list" && <div className="sub">Zeige 400 von {list.length}. Nutze die Suche oder Filter.</div>}
-        {data && data.length === 0 && <div className="empty">Noch keine Platten. Auf der Startseite synchronisieren oder eine Platte scannen.</div>}
+        {!data && <SkeletonRows />}
+        {data && data.length === 0 && <Empty title="Noch keine Platten">Auf der Startseite synchronisieren oder eine Platte scannen.</Empty>}
+        {data && data.length > 0 && list.length === 0 && <Empty title="Nichts gefunden">Filter lockern oder anders suchen.</Empty>}
       </div>
-      <Link to="/scan" className="fab no-print" aria-label="Platte scannen">
+      <Link to="/scan" viewTransition className="fab no-print" aria-label="Platte scannen">
         <IconCamera />
       </Link>
     </>

@@ -6,6 +6,7 @@ WebApp fürs Handy für Vinyl-DJs, aufgebaut auf deinem Discogs-Account. Läuft 
 
 | Bereich | Funktionen |
 |---|---|
+| **Design** | Orientiert an Apples Gestaltungsregeln: Hell- und Dunkelmodus, große Titel mit kompakter Leiste beim Scrollen, Cover-Übergänge zwischen Liste und Detailseite, Bottom-Sheets zum Wegwischen, Platte, die beim Reinhören hinter dem Cover rotiert, Haptik auf Android, reduzierte Bewegung wird respektiert. |
 | **Login** | Anmeldung mit deinem Discogs-Account (OAuth). Sammlung und Wantlist werden synchronisiert und lokal auf dem Handy gespeichert, die App ist dadurch schnell und funktioniert auch im Club ohne Netz. |
 | **Wantlist** | Sortieren nach Neueste, Preis, Anzahl Angebote, Artist, Label, Jahr, Titel, Bewertung. Filtern nach Style, „nur verfügbar“, Maximalpreis. Gruppieren nach Label, Style oder Jahrzehnt. Marktpreise (günstigstes Angebot, Anzahl) per Knopfdruck. |
 | **Shoppen** | Händler-Optimierer: sucht die Kombination aus möglichst wenigen Händlern mit möglichst geringen Gesamtkosten inkl. Versand. Rangliste „welcher Händler hat die meisten meiner Wants“. Regeln für Maximalpreis, Mindestzustand, Händler-Bewertung und maximale Händleranzahl. Zeigt die Ersparnis gegenüber Einzelkäufen. |
@@ -15,7 +16,7 @@ WebApp fürs Handy für Vinyl-DJs, aufgebaut auf deinem Discogs-Account. Läuft 
 | **Track-Daten** | BPM und Tonart automatisch (Deezer, GetSongBPM), Tap-Tempo zum Selbermessen, Energie 1 bis 10, Vibe-Tags, Sterne, Notizen. 30-Sekunden-Hörproben, YouTube-Videos von Discogs. Optional schätzt die KI Energie und Vibes. |
 | **Setlists** | Vorschlag nach Energie-Kurve (Warm-up, Journey, Peak-Time, Bar, Closing), Start- und End-BPM, maximalem BPM-Sprung und harmonischem Mixen über das Camelot-Rad. Anzeige jedes Übergangs (BPM-Differenz, harmonisch / Energy-Boost / Key-Clash), manuell umsortieren, Tracks ergänzen, teilen. **Einpackliste** mit Regalplätzen für den Gig. |
 | **Was passt als Nächstes?** | Live-Helfer: aktuellen Track wählen, die App zeigt passende Tracks aus deiner Sammlung innerhalb deines Pitch-Bereichs. |
-| **Sticker** | Druckfertige Sticker für die Outer Sleeves: Artist, Titel, Label, Katalognummer, Jahr, Styles, Tracks nach Seite mit BPM, Key/Camelot, Energie, QR-Code zur Discogs-Seite. Vorlagen für A4-Etikettenbögen und 62-mm-Etikettendrucker. **Neue Platten werden automatisch vorgemerkt**, nach dem Druck als erledigt markiert. Bereits benutzte Etiketten auf angebrochenen Bögen lassen sich überspringen. |
+| **Beschriften** | Drei Varianten für die Außenhülle: **Einleger-Karte** (A6, A5 oder Quadrat, kommt vor das Cover in die transparente Hülle, nichts klebt auf dem Original), **Obi-Streifen** (schmal für die Seite, auch im Regal lesbar) und **Sticker** (A4-Etikettenbögen, 62-mm-Etikettendrucker). Inhalt: Artist, Titel, Katalognummer, Tracks nach Seite mit BPM, farbigem Camelot-Key, Energie, Styles, QR-Code. Looks: Weiß, Schwarz oder in den Farben des Covers. **Neue Platten werden automatisch vorgemerkt**, nach dem Druck als erledigt markiert. |
 | **Google Sheets** | Spiegel von Sammlung, Wantlist, Tracks und Sets in dein eigenes Sheet. BPM/Key-Änderungen aus dem Sheet lassen sich zurückholen. Siehe [google-sheets/README.md](google-sheets/README.md). |
 | **Backup** | JSON-Backup aller eigenen Daten, CSV-Export der Tracks. |
 
