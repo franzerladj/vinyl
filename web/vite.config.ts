@@ -40,7 +40,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        navigateFallbackDenylist: [/^\/api\//, /^\/credits\.html/],
+        navigateFallbackDenylist: [/^\/api\//, /^\/credits/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.(googleapis|gstatic)\.com\//,

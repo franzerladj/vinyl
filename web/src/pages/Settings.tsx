@@ -538,7 +538,7 @@ function AboutPage() {
           <Row label="GetSongBPM" sub="BPM und Tonarten" value="↗" right={<span />} onClick={() => window.open("https://getsongbpm.com", "_blank")} />
         </Group>
         <p className="tiny" style={{ textAlign: "center" }}>
-          <a href="/credits.html" style={{ color: "var(--accent)" }}>Alle Datenquellen</a>
+          <a href="/credits" style={{ color: "var(--accent)" }}>Alle Datenquellen</a>
         </p>
         <p className="tiny" style={{ textAlign: "center" }}>Diese App nutzt die Discogs-API, ist aber nicht von Discogs entwickelt oder unterstützt.</p>
       </div>
