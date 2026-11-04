@@ -185,7 +185,7 @@ export function InsertCard({ s, w, h, o, theme }: { s: PrintItem; w: number; h: 
 }
 
 /** Obi-Streifen: schmal und hoch, steckt seitlich in der Hülle wie bei japanischen Pressungen */
-export function ObiStrip({ s, w, h, o, theme }: { s: PrintItem; w: number; h: number; o: PrintOpts; theme: CardTheme }) {
+export function ObiStrip({ s, w, h, o, theme, front }: { s: PrintItem; w: number; h: number; o: PrintOpts; theme: CardTheme; front?: boolean }) {
   const t = THEMES[theme];
   const { r } = s;
   const label = r.labels[0];
@@ -194,7 +194,7 @@ export function ObiStrip({ s, w, h, o, theme }: { s: PrintItem; w: number; h: nu
   const fs = 2.55;
   const lineH = 4.1;
   const sidesCount = new Set(s.tracks.map((t) => sideOf(t.position))).size;
-  const tracksH = s.tracks.length * lineH + sidesCount * 1.2;
+  const tracksH = front ? 10 : s.tracks.length * lineH + sidesCount * 1.2;
   // Platz für den senkrechten Text: Höhe minus Kopf, Tracks, Fuß
   const availH = h - pad * 2 - 12 - tracksH - (o.showQr ? 20 : 12);
   const longest = Math.max(4, ...r.artist.split(/\s+/).map((w) => w.length));
@@ -216,29 +216,75 @@ export function ObiStrip({ s, w, h, o, theme }: { s: PrintItem; w: number; h: nu
           <div style={{ fontFamily: BRAND, fontWeight: 500, fontSize: mm(titleSize), lineHeight: 1.05, color: t.muted, maxHeight: "100%", overflow: "hidden" }}>{r.title}</div>
         </div>
         <div style={{ height: "0.3mm", background: t.line }} />
+        {front ? (
+          <ObiSummary s={s} t={t} />
+        ) : (
         <div>
-          {groupSides(s.tracks).map(([side, ts]) => (
-            <div key={side} style={{ marginBottom: mm(1.2) }}>
-              {ts.map((tr) => (
-                <div key={tr.position} style={{ display: "flex", alignItems: "center", gap: mm(1.2), height: mm(lineH), fontSize: mm(fs), whiteSpace: "nowrap" }}>
-                  <span style={{ width: mm(Math.max(...s.tracks.map((x) => x.position.length)) * fs * 0.7 + 0.8), flex: "none", fontWeight: 800, color: t.muted }}>{tr.position}</span>
-                  <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{tr.title}</span>
-                  {o.showBpm && <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{tr.meta?.bpm ? Math.round(tr.meta.bpm) : ""}</span>}
-                  {(o.showCamelot || o.showKey) && <Pill k={tr.meta?.key} size={fs} />}
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
+            {groupSides(s.tracks).map(([side, ts]) => (
+              <div key={side} style={{ marginBottom: mm(1.2) }}>
+                {ts.map((tr) => (
+                  <div key={tr.position} style={{ display: "flex", alignItems: "center", gap: mm(1.2), height: mm(lineH), fontSize: mm(fs), whiteSpace: "nowrap" }}>
+                    <span style={{ width: mm(Math.max(...s.tracks.map((x) => x.position.length)) * fs * 0.7 + 0.8), flex: "none", fontWeight: 800, color: t.muted }}>{tr.position}</span>
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{tr.title}</span>
+                    {o.showBpm && <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{tr.meta?.bpm ? Math.round(tr.meta.bpm) : ""}</span>}
+                    {(o.showCamelot || o.showKey) && <Pill k={tr.meta?.key} size={fs} />}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: mm(2) }}>
           <div style={{ fontSize: mm(2.2), color: t.muted, lineHeight: 1.3, minWidth: 0 }}>
             <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label?.name.replace(/\s\(\d+\)$/, "")}</div>
             {o.showStyles && <div style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.styles.slice(0, 2).join(" · ")}</div>}
             {o.showShelf && s.shelf && <div>Regal {s.shelf}</div>}
           </div>
-          {o.showQr && s.qr && <img src={s.qr} alt="" style={{ width: mm(12), height: mm(12), flex: "none" }} />}
+          {!front && o.showQr && s.qr && <img src={s.qr} alt="" style={{ width: mm(12), height: mm(12), flex: "none" }} />}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Kurzfassung für die Vorderseite des Knick-Obis: Tempo-Spanne und Keys */
+function ObiSummary({ s, t }: { s: PrintItem; t: (typeof THEMES)[CardTheme] }) {
+  const bpms = s.tracks.map((x) => x.meta?.bpm).filter(Boolean).map((b) => Math.round(b!));
+  const keys = [...new Set(s.tracks.map((x) => x.meta?.key).filter(Boolean))].slice(0, 4);
+  if (!bpms.length && !keys.length) return <div style={{ fontSize: mm(2.4), color: t.muted }}>{s.tracks.length} Tracks</div>;
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: mm(1.2) }}>
+      {bpms.length > 0 && (
+        <span style={{ fontSize: mm(3.2), fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>
+          {Math.min(...bpms) === Math.max(...bpms) ? bpms[0] : `${Math.min(...bpms)}–${Math.max(...bpms)}`}
+          <span style={{ fontSize: mm(2.2), fontWeight: 600, color: t.muted }}> BPM</span>
+        </span>
+      )}
+      {keys.map((k) => (
+        <Pill key={k} k={k} size={2.6} />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Knick-Obi: Rückseite | Falz | Vorderseite. Wird um die linke Kante der Hülle gelegt.
+ * Der Falz läuft senkrecht, deshalb stehen beide Hälften nach dem Knicken richtig herum.
+ */
+export function ObiFold({ s, w, h, o, theme }: { s: PrintItem; w: number; h: number; o: PrintOpts; theme: CardTheme }) {
+  const t = THEMES[theme];
+  const spine = 4;
+  const panel = (w - spine) / 2;
+  const label = s.r.labels[0];
+  return (
+    <div style={{ position: "relative", display: "flex", width: mm(w), height: mm(h), background: t.bg, overflow: "hidden" }}>
+      <ObiStrip s={s} w={panel} h={h} o={o} theme={theme} />
+      <div style={{ position: "relative", width: mm(spine), height: "100%", background: t.bg, borderLeft: `0.2mm dashed ${t.line}`, borderRight: `0.2mm dashed ${t.line}`, boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ writingMode: "vertical-rl", fontSize: mm(2), fontWeight: 800, letterSpacing: "0.2em", color: t.muted, fontFamily: "'Inter', system-ui, sans-serif", whiteSpace: "nowrap" }}>
+          {[label?.catno && label.catno !== "none" ? label.catno : "", s.r.artist].filter(Boolean).join("  ·  ").toUpperCase()}
+        </span>
+      </div>
+      <ObiStrip s={s} w={panel} h={h} o={o} theme={theme} front />
     </div>
   );
 }

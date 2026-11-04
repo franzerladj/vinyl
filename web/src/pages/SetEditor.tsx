@@ -1,3 +1,4 @@
+import { NavBar } from "../components/ui";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -118,27 +119,31 @@ export default function SetEditor() {
 
   return (
     <>
-      <div className="page-head">
-        <button className="icon-btn" onClick={() => nav("/sets")} aria-label="Zurück">
-          <IconBack />
-        </button>
-        <span className="spacer" />
-        {!isNew && (
-          <button
-            className="btn small ghost"
-            onClick={async () => {
-              if (!confirm("Set löschen?")) return;
-              await db.sets.delete(Number(id));
-              nav("/sets");
-            }}
-          >
-            Löschen
-          </button>
-        )}
-        <button className="btn small primary" onClick={save}>
-          Speichern
-        </button>
-      </div>
+      <NavBar
+        title={set.name || (isNew ? "Neues Set" : "Set")}
+        backTo="/sets"
+        backLabel="Sets"
+        right={
+          <>
+            {!isNew && (
+              <button
+                className="text-btn"
+                style={{ color: "var(--bad)", fontWeight: 500 }}
+                onClick={async () => {
+                  if (!confirm("Set löschen?")) return;
+                  await db.sets.delete(Number(id));
+                  nav("/sets", { viewTransition: true });
+                }}
+              >
+                Löschen
+              </button>
+            )}
+            <button className="text-btn" onClick={save}>
+              Speichern
+            </button>
+          </>
+        }
+      />
       <div className="page stack">
         <input className="input" placeholder="Name, z.B. Freitag Klubraum" value={set.name} onChange={(e) => setSet({ ...set, name: e.target.value })} style={{ fontSize: 18, fontWeight: 600 }} />
         <div className="grid2">
@@ -339,7 +344,7 @@ function EnergyCurve({ curve, actual }: { curve: Curve; actual: (number | null)[
   const act = actual.map((e, i) => (e == null ? null : `${(i / Math.max(1, actual.length - 1)) * W},${H - (e / 10) * H}`)).filter(Boolean);
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 60 }} aria-label="Energie-Kurve">
-      <polyline points={pts.join(" ")} fill="none" stroke="var(--muted)" strokeDasharray="4 4" strokeWidth="2" />
+      <polyline points={pts.join(" ")} fill="none" stroke="var(--text-3)" strokeDasharray="4 4" strokeWidth="2" />
       {act.length > 1 && <polyline points={act.join(" ")} fill="none" stroke="var(--accent)" strokeWidth="2" />}
     </svg>
   );

@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { parseKey, camelotString } from "../../../shared/music";
 import type { Release } from "../lib/db";
 import { useStore } from "../lib/store";
+import { hapticsEnabled } from "../lib/theme";
 
 /** Kurzes haptisches Feedback (Android; iOS-Safari ignoriert es) */
 export const haptic = (ms = 8) => {
+  if (!hapticsEnabled()) return;
   try {
     navigator.vibrate?.(ms);
   } catch {
@@ -94,6 +96,7 @@ export function RecordRow({ r, side, to }: { r: Release; side?: React.ReactNode;
 
 export function Jobs() {
   const jobs = useStore((s) => s.jobs);
+  const loc = useLocation();
   const toastMsg = useStore((s) => s.toast);
   const list = Object.values(jobs);
   return (
@@ -103,7 +106,7 @@ export function Jobs() {
           {toastMsg}
         </div>
       )}
-      {list.length > 0 && (
+      {list.length > 0 && loc.pathname !== "/" && (
         <div className="jobs" aria-live="polite">
           {list.map((j) => (
             <div key={j.id} className="job">

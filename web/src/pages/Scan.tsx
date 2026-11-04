@@ -1,3 +1,4 @@
+import { NavBar } from "../components/ui";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
@@ -153,13 +154,7 @@ export default function Scan() {
 
   return (
     <>
-      <div className="page-head">
-        <button className="icon-btn" onClick={() => nav(-1)} aria-label="Zurück">
-          <IconBack />
-        </button>
-        <h1 style={{ fontSize: 20 }}>Platte hinzufügen</h1>
-        <span className="spacer" />
-      </div>
+      <NavBar title="Platte hinzufügen" />
       <div className="page stack">
         <Seg
           value={mode}
@@ -178,7 +173,15 @@ export default function Scan() {
         {mode === "photo" && (
           <>
             <label className="card stack press" style={{ alignItems: "center", padding: 32, cursor: "pointer", textAlign: "center", border: "1.5px dashed var(--surface-3)", background: "transparent" }}>
-              {preview ? <img src={preview} style={{ maxHeight: 220, borderRadius: 10 }} alt="" /> : <IconCamera />}
+              {preview ? (
+                <img src={preview} style={{ maxHeight: 220, borderRadius: 10 }} alt="" />
+              ) : (
+                <span style={{ width: 64, height: 64, borderRadius: 20, display: "grid", placeItems: "center", background: "var(--accent-soft)", color: "var(--accent)" }}>
+                  <span style={{ width: 32, height: 32, display: "grid" }}>
+                    <IconCamera />
+                  </span>
+                </span>
+              )}
               <b>{ocrProgress != null ? `Lese Text … ${Math.round(ocrProgress * 100)} %` : busy ? "Erkenne Platte …" : "Cover, Label oder Runout fotografieren"}</b>
               <span className="sub">
                 {serverAi ? "Die KI liest Artist, Titel, Label, Katalognummer und Barcode ab." : "Die App liest Katalognummer und Text direkt auf dem Handy. Am besten klappt das Center-Label oder die Rückseite."}

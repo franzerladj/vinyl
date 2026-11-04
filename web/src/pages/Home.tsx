@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV } from "../lib/db";
@@ -39,14 +38,6 @@ export default function Home() {
     };
   });
 
-  // Beim ersten Start automatisch synchronisieren, danach höchstens alle 6 Stunden
-  useEffect(() => {
-    if (!stats || busy) return;
-    if (Date.now() - stats.lastSync > 6 * 3600_000 && navigator.onLine) {
-      autoPipeline().catch((e) => toast(`Sync fehlgeschlagen: ${e.message}`));
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stats?.lastSync]);
 
   const sync = async () => {
     haptic();
@@ -82,6 +73,29 @@ export default function Home() {
       </div>
 
       <div className="page">
+        {busy && (
+          <div className="card progress-card" style={{ marginBottom: 12, animation: "pop .5s var(--spring) both" }} aria-live="polite">
+            <span className="spin" />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b>{stats?.records ? "Crate bringt alles auf den neuesten Stand" : "Deine Sammlung wird geladen"}</b>
+              {Object.values(jobs).map((j) => (
+                <div key={j.id} style={{ marginTop: 8 }}>
+                  <div className="row sub" style={{ fontSize: 13 }}>
+                    <span>{j.label}</span>
+                    <span className="spacer" />
+                    <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                      {j.done}/{j.total || "?"}
+                    </span>
+                  </div>
+                  <div className="progress" style={{ height: 4, marginTop: 4 }}>
+                    <div style={{ width: `${j.total ? (100 * j.done) / j.total : 4}%` }} />
+                  </div>
+                </div>
+              ))}
+              <div className="tiny" style={{ marginTop: 8 }}>Läuft im Hintergrund weiter, du kannst die App normal benutzen.</div>
+            </div>
+          </div>
+        )}
         {stats && stats.records === 0 && !busy ? (
           <Empty title="Deine Kiste ist noch leer" action={<button className="btn primary" onClick={sync}>Sammlung von Discogs laden</button>}>
             Wir holen Sammlung und Wantlist von Discogs. Danach geht alles auch offline.

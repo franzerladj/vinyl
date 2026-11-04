@@ -1,3 +1,4 @@
+import { NavBar } from "../components/ui";
 import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV, setKV } from "../lib/db";
@@ -120,7 +121,8 @@ export default function Shop() {
 
   return (
     <>
-      <div className="page-head">
+      <NavBar backLabel="Zurück" title="Shoppen" titleOnScroll />
+      <div className="page-head" style={{ paddingTop: 0 }}>
         <div>
           <h1>Shoppen</h1>
           <div className="sub">
@@ -255,7 +257,30 @@ export default function Shop() {
               )}
             </>
           ) : (
-            <div className="empty">Noch keine Angebote. Unter „Angebote“ geht es los, oder Lieblingshändler unter „Händler“ anlegen.</div>
+            <div className="stack" style={{ marginTop: 8 }}>
+              <div style={{ textAlign: "center", padding: "12px 12px 4px" }}>
+                <b style={{ fontSize: 19 }}>So findest du die besten Händler</b>
+                <p className="sub" style={{ margin: "6px 0 0" }}>Crate braucht Angebote, um den günstigsten Warenkorb mit möglichst wenig Versand zu berechnen.</p>
+              </div>
+              <div className="group">
+                {(
+                  [
+                    ["sellers", "★", "#ff9f0a", "Lieblingshändler anlegen", "Ihr Inventar wird nach jedem Sync automatisch durchsucht"],
+                    ["import", "⌕", "#0a84ff", "Ganzen Marktplatz einlesen", "Per Lesezeichen auf discogs.com, einmal einrichten"],
+                    ["budget", "€", "#30d158", "Budget planen", "Was bekomme ich für mein Geld? Geht auch ohne Angebote"],
+                  ] as const
+                ).map(([t, i, c, l, d]) => (
+                  <button key={t} className="set-row press" onClick={() => setTab(t)}>
+                    <span className="ico" style={{ background: c, fontWeight: 800 }}>{i}</span>
+                    <span className="label">
+                      {l}
+                      <small>{d}</small>
+                    </span>
+                    <span className="chev" style={{ color: "var(--text-3)" }}>›</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
 
         {tab === "sellers" && (

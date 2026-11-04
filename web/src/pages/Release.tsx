@@ -10,7 +10,7 @@ import { Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, S
 import { loadPriceInfo, setTargetPrice } from "../lib/prices";
 import { previewUrl } from "../lib/free";
 import { matchVideo, parseDuration, youtubeId } from "../../../shared/match";
-import { IconBack, IconCart, IconExternal, IconHeart, IconPlay, IconPlus, IconPrint, IconSparkle } from "../components/icons";
+import { IconBack, IconCart, IconExternal, IconShare, IconHeart, IconPlay, IconPlus, IconPrint, IconSparkle } from "../components/icons";
 
 export default function ReleasePage() {
   const id = Number(useParams().id);
@@ -54,9 +54,23 @@ export default function ReleasePage() {
         <button className="icon-btn" onClick={back} aria-label="Zurück">
           <IconBack />
         </button>
-        <a className="icon-btn" href={discogsReleaseUrl(id)} target="_blank" rel="noreferrer" aria-label="Auf Discogs öffnen">
-          <IconExternal />
-        </a>
+        <div className="row" style={{ gap: 8 }}>
+          <button
+            className="icon-btn"
+            aria-label="Teilen"
+            onClick={() => {
+              const url = discogsReleaseUrl(id);
+              const text = `${rel?.artist ?? preview?.artist ?? ""} – ${rel?.title ?? preview?.title ?? ""}`;
+              if (navigator.share) navigator.share({ title: text, text, url }).catch(() => undefined);
+              else navigator.clipboard.writeText(`${text} ${url}`).then(() => toast("Link kopiert"));
+            }}
+          >
+            <IconShare />
+          </button>
+          <a className="icon-btn" href={discogsReleaseUrl(id)} target="_blank" rel="noreferrer" aria-label="Auf Discogs öffnen">
+            <IconExternal />
+          </a>
+        </div>
       </div>
       <div className="deck">
         <div className={`vinyl ${playing ? "spin" : ""}`} aria-hidden="true">
@@ -246,7 +260,7 @@ export default function ReleasePage() {
                   </td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
-                      {m?.bpm ? <span className="bpm">{m.bpm}</span> : <span className="tiny">BPM?</span>}
+                      {m?.bpm ? <span className="bpm">{m.bpm}</span> : <span className="tiny">–</span>}
                       <KeyBadge k={m?.key} />
                     </div>
                     <div style={{ marginTop: 4 }}>

@@ -18,6 +18,18 @@ const SetEditor = lazy(() => import("./pages/SetEditor"));
 const Stickers = lazy(() => import("./pages/Stickers"));
 const Settings = lazy(() => import("./pages/Settings"));
 
+/** Nach dem Start: einmalige Bereinigung, dann Sync, wenn der letzte länger als 6 Stunden her ist (egal auf welcher Seite) */
+async function startupSync() {
+  const { migrateAudioMatching, autoPipeline } = await import("./lib/sync");
+  const { getKV } = await import("./lib/db");
+  const { toast } = await import("./lib/store");
+  await migrateAudioMatching();
+  const last = await getKV<number>("lastCollectionSync", 0);
+  if (Date.now() - last > 6 * 3600_000 && navigator.onLine) {
+    autoPipeline().catch((e) => toast(`Sync fehlgeschlagen: ${e.message}`));
+  }
+}
+
 export default function App() {
   const me = useStore((s) => s.me);
   const [loaded, setLoaded] = useState(false);
@@ -27,16 +39,26 @@ export default function App() {
   // Kompakte Titelleiste einblenden, sobald der große Titel aus dem Bild scrollt
   useEffect(() => {
     setBarTitle(null);
+    document.documentElement.classList.remove("bar-on");
     window.scrollTo(0, 0);
     let io: IntersectionObserver | undefined;
     let tries = 0;
     const attach = () => {
+      // Seiten mit eigener Navigationsleiste brauchen keine zusätzliche Titelleiste
+      if (document.querySelector(".navbar")) return;
       const h = document.querySelector<HTMLElement>(".page-head h1, .stage h1");
       if (!h) {
         if (tries++ < 30) timer = setTimeout(attach, 100);
         return;
       }
-      io = new IntersectionObserver(([e]) => setBarTitle(e.isIntersecting ? null : h.textContent), { rootMargin: "-48px 0px 0px 0px" });
+      io = new IntersectionObserver(
+        ([e]) => {
+          setBarTitle(e.isIntersecting ? null : h.textContent);
+          // Klebende Werkzeugleisten rücken unter die kompakte Titelleiste
+          document.documentElement.classList.toggle("bar-on", !e.isIntersecting);
+        },
+        { rootMargin: "-48px 0px 0px 0px" },
+      );
       io.observe(h);
     };
     let timer = setTimeout(attach, 30);
@@ -58,7 +80,7 @@ export default function App() {
     getMe()
       .then((m) => {
         setState({ me: m });
-        if (m.username) void import("./lib/sync").then((x) => x.migrateAudioMatching());
+        if (m.username) void startupSync();
         try {
           localStorage.setItem("crate_me", JSON.stringify(m.username ? m : null));
         } catch {
@@ -90,6 +112,7 @@ export default function App() {
         <Route path="/sets/:id" element={<SetEditor />} />
         <Route path="/stickers" element={<Stickers />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/settings/:section" element={<Settings />} />
       </Routes>
       </Suspense>
       <Jobs />

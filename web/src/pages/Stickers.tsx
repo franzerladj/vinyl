@@ -1,3 +1,4 @@
+import { NavBar } from "../components/ui";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -9,7 +10,7 @@ import { toast } from "../lib/store";
 import { Empty, haptic, Seg } from "../components/bits";
 import { IconPrint } from "../components/icons";
 import { Sticker } from "../components/print/Sticker";
-import { InsertCard, ObiStrip, type CardTheme } from "../components/print/InsertCard";
+import { InsertCard, ObiFold, ObiStrip, type CardTheme } from "../components/print/InsertCard";
 import type { Layout, PrintItem, PrintOpts } from "../components/print/types";
 
 type Kind = "card" | "obi" | "sticker";
@@ -21,7 +22,8 @@ const CARD_LAYOUTS = {
   a5: { name: "A5-Karte · 148 × 210 mm · 2 pro A4 quer", w: 148, h: 210, cols: 2, rows: 1, mx: 0.5, my: 0, gx: 0, gy: 0, page: "A4 landscape", cutMarks: true },
 } satisfies Record<string, Layout>;
 const OBI_LAYOUTS = {
-  obi: { name: "Obi-Streifen · 50 × 287 mm · 4 pro A4", w: 50, h: 287, cols: 4, rows: 1, mx: 5, my: 5, gx: 0, gy: 0, page: "A4", cutMarks: true },
+  "obi-fold": { name: "Knick-Obi · 2 × 40 mm + Falz · 2 pro A4", w: 84, h: 287, cols: 2, rows: 1, mx: 21, my: 5, gx: 0, gy: 0, page: "A4", cutMarks: true },
+  obi: { name: "Einzelstreifen · 50 × 287 mm · 4 pro A4 (ohne Knick)", w: 50, h: 287, cols: 4, rows: 1, mx: 5, my: 5, gx: 0, gy: 0, page: "A4", cutMarks: true },
 } satisfies Record<string, Layout>;
 /** Etiketten-Vorlagen für Sticker */
 const STICKER_LAYOUTS = {
@@ -37,6 +39,7 @@ const ALL_LAYOUTS: Record<string, Layout> = { ...CARD_LAYOUTS, ...OBI_LAYOUTS, .
 interface Opts extends PrintOpts {
   kind: Kind;
   cardLayout: keyof typeof CARD_LAYOUTS;
+  obiLayout: keyof typeof OBI_LAYOUTS;
   stickerLayout: keyof typeof STICKER_LAYOUTS;
   theme: CardTheme;
   skip: number;
@@ -44,6 +47,7 @@ interface Opts extends PrintOpts {
 const DEFAULTS: Opts = {
   kind: "card",
   cardLayout: "a6",
+  obiLayout: "obi-fold",
   stickerLayout: "a4-2x7",
   theme: "light",
   showBpm: true,
@@ -117,7 +121,7 @@ export default function Stickers() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, opts.showQr, darkQr, qrs]);
 
-  const layoutKey = opts.kind === "card" ? opts.cardLayout : opts.kind === "obi" ? "obi" : opts.stickerLayout;
+  const layoutKey = opts.kind === "card" ? opts.cardLayout : opts.kind === "obi" ? opts.obiLayout : opts.stickerLayout;
   const tpl = ALL_LAYOUTS[layoutKey];
   const perPage = tpl.cols * tpl.rows;
   const items: (PrintItem | null)[] = [...Array(opts.skip).fill(null), ...selected.map((s) => ({ ...s, qr: qrs.get(qrKey(s.r.id)) }))];
@@ -131,7 +135,7 @@ export default function Stickers() {
     opts.kind === "card" ? (
       <InsertCard key={key} s={s} w={tpl.w} h={tpl.h} o={opts} theme={opts.theme} />
     ) : opts.kind === "obi" ? (
-      <ObiStrip key={key} s={s} w={tpl.w} h={tpl.h} o={opts} theme={opts.theme} />
+      opts.obiLayout === "obi-fold" ? <ObiFold key={key} s={s} w={tpl.w} h={tpl.h} o={opts} theme={opts.theme} /> : <ObiStrip key={key} s={s} w={tpl.w} h={tpl.h} o={opts} theme={opts.theme} />
     ) : (
       <Sticker key={key} s={s} w={tpl.w} h={tpl.h} o={opts} />
     );
@@ -153,13 +157,14 @@ export default function Stickers() {
 
   const filtered = useMemo(() => (data ?? []).filter((d) => `${d.r.artist} ${d.r.title} ${d.r.labels[0]?.catno}`.toLowerCase().includes(q.toLowerCase())).slice(0, 200), [data, q]);
   // Vorschau verkleinern, damit eine Karte auf den Handy-Bildschirm passt
-  const previewScale = Math.min(1, (Math.min(window.innerWidth, 760) - 64) / ((tpl.w / 25.4) * 96), opts.kind === "obi" ? 0.62 : 1);
+  const previewScale = Math.min(1, (Math.min(window.innerWidth, 760) - 64) / ((tpl.w / 25.4) * 96), opts.kind === "obi" ? (opts.obiLayout === "obi-fold" ? 0.5 : 0.62) : 1);
   const newCount = data?.filter((d) => !d.printed).length ?? 0;
 
   return (
     <>
       <style>{`@media print { @page { size: ${tpl.page}; margin: 0; } }`}</style>
-      <div className="page-head no-print">
+      <NavBar backLabel="Zurück" title="Beschriften" titleOnScroll />
+      <div className="page-head no-print" style={{ paddingTop: 0 }}>
         <div>
           <h1>Beschriften</h1>
           <div className="sub">
@@ -182,7 +187,7 @@ export default function Stickers() {
         />
         <p className="sub" style={{ margin: "-2px 2px 0" }}>
           {opts.kind === "card" && "Karte, die vor dem Cover in die transparente Außenhülle kommt. Von außen lesbar, nichts klebt auf dem Original."}
-          {opts.kind === "obi" && "Schmaler Streifen für die Seite der Hülle, wie das Obi bei japanischen Pressungen. Auch im Regal gut sichtbar."}
+          {opts.kind === "obi" && "Papierstreifen, der wie bei japanischen Pressungen um die linke Kante der Hülle gelegt wird: vorne Artist und Titel, hinten die Tracks mit BPM und Key."}
           {opts.kind === "sticker" && "Etikett zum Aufkleben auf die Außenhülle. Passend für gängige Etikettenbögen und Etikettendrucker."}
         </p>
 
@@ -270,7 +275,22 @@ export default function Stickers() {
             ))}
           </select>
         )}
-        {opts.kind === "obi" && <div className="sub">{OBI_LAYOUTS.obi.name}</div>}
+        {opts.kind === "obi" && (
+          <>
+            <select className="input" value={opts.obiLayout} onChange={(e) => upd({ obiLayout: e.target.value as Opts["obiLayout"], skip: 0 })}>
+              {Object.entries(OBI_LAYOUTS).map(([k, t]) => (
+                <option key={k} value={k}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+            {opts.obiLayout === "obi-fold" && (
+              <p className="tiny" style={{ margin: 0 }}>
+                Entlang der gestrichelten Linien knicken und um die linke Kante der Hülle legen: rechte Hälfte vorne, linke Hälfte hinten. Der Falz läuft senkrecht, deshalb stehen beide Seiten richtig herum.
+              </p>
+            )}
+          </>
+        )}
 
         {opts.kind !== "sticker" && (
           <>
