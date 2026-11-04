@@ -8,6 +8,7 @@ import { money } from "../lib/format";
 import { toast, useStore } from "../lib/store";
 import { DealDot, Empty, RecordRow, Sheet, SkeletonRows, useDebounced } from "../components/bits";
 import { IconCart, IconCoin, IconMore, IconRows, IconSearch, IconSync } from "../components/icons";
+import { matchesQuery } from "../../../shared/textSearch";
 import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
 
 const SORTS: SortOption[] = [
@@ -88,8 +89,8 @@ export default function Wantlist() {
     const mp = Number(f.maxPrice.replace(",", ".")) || Infinity;
     const out = data.filter(({ r, s, w, p, owned, friends }) => {
       if (dq) {
-        const hay = `${r.artist} ${r.title} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")} ${r.styles.join(" ")} ${w.notes ?? ""} ${r.year}`.toLowerCase();
-        if (!dq.split(/\s+/).every((x) => hay.includes(x))) return false;
+        const hay = `${r.artist} ${r.title} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")} ${r.styles.join(" ")} ${w.notes ?? ""} ${r.year}`;
+        if (!matchesQuery(hay, dq)) return false;
       }
       if (f.styles.length && !f.styles.some((st) => r.styles.includes(st))) return false;
       if (f.decades.length && !f.decades.includes(decadeOf(r.year))) return false;

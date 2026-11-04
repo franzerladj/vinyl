@@ -2,14 +2,16 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, getKV, setKV } from "../lib/db";
-import { canClaude, logout, ownAnthropicKey, setOwnAnthropicKey } from "../lib/api";
+import { db, getKV, setKV, type Release } from "../lib/db";
+import { canClaude, discogs as discogsApi, logout, ownAnthropicKey, setOwnAnthropicKey } from "../lib/api";
 import { getSheetsConfig, pullTracksFromSheets, pushToSheets, type SheetsConfig } from "../lib/sheets";
 import { autoPipeline, fetchMissingDetails, getAutoSettings, lookupAudioFor, tagVibes, type AutoSettings } from "../lib/sync";
 import { suggestionsState } from "../lib/prices";
 import { toast, useStore } from "../lib/store";
 import { getTheme, hapticsEnabled, setHaptics, setTheme, setYtConsent, ytConsent, type Theme } from "../lib/theme";
-import { Avatar, haptic, Seg } from "../components/bits";
+import { Avatar, Cover, haptic, Seg, useDebounced } from "../components/bits";
+import { matchesQuery, matchScore as textScore, queryTokens } from "../../../shared/textSearch";
+import type { SearchResult } from "../lib/types";
 import type { MyProfile } from "../lib/friends";
 import { NavBar, Switch } from "../components/ui";
 import { ShippingEditor } from "../components/ShippingEditor";
@@ -813,12 +815,35 @@ function ProfileEditPage() {
     for (const r of await db.releases.bulkGet(ids)) for (const st of r?.styles ?? []) count.set(st, (count.get(st) ?? 0) + 1);
     return [...count.entries()].sort((a, b) => b[1] - a[1]).slice(0, 18).map(([k]) => k);
   }, [], [] as string[]);
+  // Sammlung und Wantlist durchsuchen, auch in Tracks und Label; Titel-Treffer zuerst
+  const dqPick = useDebounced(q, 200);
   const picks = useLiveQuery(async () => {
-    if (q.trim().length < 2) return [];
-    const ids = [...new Set((await db.collection.toArray()).map((c) => c.releaseId))];
-    const ql = q.toLowerCase();
-    return (await db.releases.bulkGet(ids)).filter((r) => r && `${r.artist} ${r.title}`.toLowerCase().includes(ql)).slice(0, 6);
-  }, [q], []);
+    const tokens = queryTokens(dqPick);
+    if (!tokens.length || dqPick.trim().length < 2) return [] as { r: Release; where: "coll" | "want" }[];
+    const [coll, wants] = await Promise.all([db.collection.toArray(), db.wants.toArray()]);
+    const own = new Set(coll.map((c) => c.releaseId));
+    const ids = [...new Set([...own, ...wants.map((w) => w.releaseId)])];
+    const rels = (await db.releases.bulkGet(ids)).filter(Boolean) as Release[];
+    return rels
+      .filter((r) => matchesQuery(`${r.artist} ${r.title} ${(r.tracklist ?? []).map((t) => t.title).join(" ")} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")}`, tokens))
+      .map((r) => ({ r, where: own.has(r.id) ? ("coll" as const) : ("want" as const), score: textScore(`${r.artist} ${r.title}`, tokens) + (own.has(r.id) ? 0.1 : 0) }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8);
+  }, [dqPick], []);
+  // Nichts in der eigenen Kiste? Dann direkt bei Discogs suchen
+  const [remote, setRemote] = useState<SearchResult[]>([]);
+  const dqRemote = useDebounced(q, 600);
+  useEffect(() => {
+    setRemote([]);
+    if (dqRemote.trim().length < 3) return;
+    let alive = true;
+    discogsApi<{ results: SearchResult[] }>(`/database/search?type=release&per_page=8&q=${encodeURIComponent(queryTokens(dqRemote).join(" "))}`)
+      .then((d) => alive && setRemote(d.results))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [dqRemote]);
   const set = (patch: Partial<CrateProfile>) => setP((x) => ({ ...x, ...patch }));
   const addLink = () => {
     const l = parseLink(linkIn);
@@ -933,25 +958,57 @@ function ProfileEditPage() {
           <div style={{ padding: "10px 14px" }}>
             <input className="input" placeholder={p.spotlight ? "Andere Platte suchen …" : "Platte aus deiner Kiste suchen …"} value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
-          {picks.map(
-            (r) =>
-              r && (
-                <button
-                  key={r.id}
-                  className="set-row"
-                  onClick={() => {
-                    set({ spotlight: { id: r.id, title: r.title, artist: r.artist, cover: r.cover || r.thumb } });
-                    setQ("");
-                  }}
-                >
-                  <span className="label">
-                    {r.title}
-                    <small>{r.artist}</small>
-                  </span>
-                  <span className="chev">+</span>
-                </button>
-              ),
+          {picks.map(({ r, where }) => (
+            <button
+              key={r.id}
+              className="set-row pick-row"
+              onClick={() => {
+                set({ spotlight: { id: r.id, title: r.title, artist: r.artist, cover: r.cover || r.thumb } });
+                setQ("");
+              }}
+            >
+              <Cover src={r.thumb || r.cover} />
+              <span className="label">
+                {r.title}
+                <small>
+                  {r.artist}
+                  {where === "want" ? " · auf deiner Wantlist" : ""}
+                </small>
+              </span>
+              <span className="chev">+</span>
+            </button>
+          ))}
+          {q.trim().length >= 3 && remote.filter((x) => !picks.some((p) => p.r.id === x.id)).length > 0 && (
+            <>
+              <div className="pick-head">{picks.length ? "Weitere bei Discogs" : "Nicht in deiner Kiste, aber bei Discogs"}</div>
+              {remote
+                .filter((x) => !picks.some((p) => p.r.id === x.id))
+                .slice(0, 6)
+                .map((x) => {
+                  const i = x.title.indexOf(" - ");
+                  const artist = i > 0 ? x.title.slice(0, i).replace(/\s\(\d+\)$/, "") : "";
+                  const title = i > 0 ? x.title.slice(i + 3) : x.title;
+                  return (
+                    <button
+                      key={x.id}
+                      className="set-row pick-row"
+                      onClick={() => {
+                        set({ spotlight: { id: x.id, title, artist, cover: x.cover_image || x.thumb } });
+                        setQ("");
+                      }}
+                    >
+                      <Cover src={x.thumb} />
+                      <span className="label">
+                        {title}
+                        <small>{[artist, x.label?.[0], x.year].filter(Boolean).join(" · ")}</small>
+                      </span>
+                      <span className="chev">+</span>
+                    </button>
+                  );
+                })}
+            </>
           )}
+          {q.trim().length >= 2 && !picks.length && !remote.length && <div className="pick-head">Suche …</div>}
         </Group>
 
         <button className="btn primary block" onClick={save} disabled={saving || !loaded}>

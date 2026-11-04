@@ -9,6 +9,7 @@ import { IconBack, IconDown, IconUp, IconX } from "../components/icons";
 import { TrackLine } from "./Sets";
 import { buildSetlist, targetEnergy, type Curve } from "../../../shared/setlist";
 import { estimateBpm, estimateVibe } from "../../../shared/vibes";
+import { matchesQuery } from "../../../shared/textSearch";
 import { bpmDelta, keyDistance, parseKey } from "../../../shared/music";
 
 const CURVES: [Curve, string, string][] = [
@@ -341,7 +342,7 @@ function AddTrack({ tracks, rels, last, onPick, exclude }: { tracks: TrackMeta[]
   const list = useMemo(() => {
     const lq = q.toLowerCase();
     let l = tracks.filter((t) => !exclude.has(t.id));
-    if (lq) l = l.filter((t) => `${t.artist} ${t.title} ${rels?.get(t.releaseId)?.title}`.toLowerCase().includes(lq));
+    if (lq) l = l.filter((t) => matchesQuery(`${t.artist} ${t.title} ${rels?.get(t.releaseId)?.title}`, lq));
     else if (last) l = [...l].sort((a, b) => bpmDelta(last.bpm, a.bpm) + keyDistance(parseKey(last.key), parseKey(a.key)) * 2 - (bpmDelta(last.bpm, b.bpm) + keyDistance(parseKey(last.key), parseKey(b.key)) * 2));
     return l.slice(0, 40);
   }, [q, tracks, rels, last, exclude]);

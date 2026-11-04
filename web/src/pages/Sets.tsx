@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, type Release, type TrackMeta } from "../lib/db";
 import { Cover, Empty, Energy, KeyBadge, Seg, useDebounced } from "../components/bits";
 import { IconPlus } from "../components/icons";
+import { matchesQuery } from "../../../shared/textSearch";
 import { bpmDelta, keyDistance, parseKey, pitchRange } from "../../../shared/music";
 
 export default function Sets() {
@@ -73,7 +74,7 @@ function NextTrack() {
 
   const matches = useMemo(() => {
     if (!data || !dq) return [];
-    return data.tracks.filter((t) => `${t.artist} ${t.title} ${data.rels.get(t.releaseId)?.title}`.toLowerCase().includes(dq)).slice(0, 20);
+    return data.tracks.filter((t) => matchesQuery(`${t.artist} ${t.title} ${data.rels.get(t.releaseId)?.title}`, dq)).slice(0, 20);
   }, [data, dq]);
 
   const suggestions = useMemo(() => {

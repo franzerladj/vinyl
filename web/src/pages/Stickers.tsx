@@ -11,6 +11,7 @@ import { Empty, haptic, Seg } from "../components/bits";
 import { IconPrint } from "../components/icons";
 import { Sticker } from "../components/print/Sticker";
 import { DEFAULT_ACCENT, InsertCard, ObiFold, ObiStrip, type CardTheme } from "../components/print/InsertCard";
+import { matchesQuery } from "../../../shared/textSearch";
 import { FONTS, type Layout, type PrintFont, type PrintItem, type PrintOpts } from "../components/print/types";
 
 type Kind = "card" | "obi" | "sticker";
@@ -181,7 +182,7 @@ export default function Stickers() {
     }
   };
 
-  const filtered = useMemo(() => (data ?? []).filter((d) => `${d.r.artist} ${d.r.title} ${d.r.labels[0]?.catno}`.toLowerCase().includes(q.toLowerCase())).slice(0, 200), [data, q]);
+  const filtered = useMemo(() => (data ?? []).filter((d) => matchesQuery(`${d.r.artist} ${d.r.title} ${d.r.labels[0]?.catno} ${d.tracks.map((t) => t.title).join(" ")}`, q)).slice(0, 200), [data, q]);
   // Vorschau verkleinern, damit eine Karte auf den Handy-Bildschirm passt
   const previewScale = Math.min(1, (Math.min(window.innerWidth, 760) - 64) / ((tpl.w / 25.4) * 96), opts.kind === "obi" ? (opts.obiLayout === "obi-fold" ? 0.5 : 0.62) : 1);
   const newCount = data?.filter((d) => !d.printed).length ?? 0;

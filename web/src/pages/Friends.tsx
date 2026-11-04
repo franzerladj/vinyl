@@ -12,6 +12,7 @@ import { addFriend, collectionUrl, friendFeed, friendMatches, inviteLink, lentRe
 import { toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, RecordRow, Seg, SkeletonRows, useDebounced } from "../components/bits";
 import { IconMore, IconPlus, IconSearch, IconShare, IconSync, IconTrash, IconUser } from "../components/icons";
+import { matchesQuery } from "../../../shared/textSearch";
 import { MenuSheet, NavBar } from "../components/ui";
 
 export default function Friends() {
@@ -298,7 +299,7 @@ function FriendDetail({ u }: { u: string }) {
     return base.filter((id) => {
       if (!dq) return true;
       const r = data.rels.get(id);
-      return r && `${r.artist} ${r.title} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")} ${r.styles.join(" ")}`.toLowerCase().includes(dq);
+      return r && matchesQuery(`${r.artist} ${r.title} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")} ${r.styles.join(" ")}`, dq);
     });
   }, [data, tab, dq, m]);
 

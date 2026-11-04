@@ -767,3 +767,5 @@ details > summary::after { float: none; position: absolute; right: 0; top: 50%; 
 .pe-add { display: flex; gap: 8px; padding: 10px 14px; border-top: 0.5px solid var(--hairline); }
 .pe-add input { flex: 1; min-width: 0; }
 .people-main .people-bio { font-size: 13px; color: var(--text-2); display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.pick-row .cover { width: 40px; height: 40px; border-radius: 6px; flex: none; }
+.pick-head { padding: 10px 14px 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-3); border-top: 0.5px solid var(--hairline); }

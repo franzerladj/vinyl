@@ -7,6 +7,7 @@ import { toast } from "../lib/store";
 import { CAMELOT_COLORS, Cover, Empty, KeyBadge, markHero, RecordRow, Sheet, SkeletonRows, useDebounced } from "../components/bits";
 import { IconCamera, IconGrid, IconMore, IconRows, IconSearch, IconSparkle, IconTag } from "../components/icons";
 import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
+import { matchesQuery } from "../../../shared/textSearch";
 import { keyDistance, parseKey } from "../../../shared/music";
 
 const SORTS: SortOption[] = [
@@ -120,8 +121,8 @@ export default function Collection() {
     const keys = f.keys.map(parseKey).filter(Boolean);
     const out = data.filter(({ r, meta, tracks, rating }) => {
       if (dq) {
-        const hay = `${r.artist} ${r.title} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")} ${tracks.map((t) => t.title).join(" ")} ${meta?.shelf ?? ""} ${r.styles.join(" ")} ${r.year}`.toLowerCase();
-        if (!dq.split(/\s+/).every((w) => hay.includes(w))) return false;
+        const hay = `${r.artist} ${r.title} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")} ${tracks.map((t) => t.title).join(" ")} ${meta?.shelf ?? ""} ${r.styles.join(" ")} ${r.year}`;
+        if (!matchesQuery(hay, dq)) return false;
       }
       if (f.styles.length && !f.styles.some((s) => r.styles.includes(s))) return false;
       if (f.decades.length && !f.decades.includes(decadeOf(r.year))) return false;
