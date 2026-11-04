@@ -1,6 +1,6 @@
 import { NavBar } from "../components/ui";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import QRCode from "qrcode";
 import { db, getKV, realTracks, setKV, trackId } from "../lib/db";
@@ -148,7 +148,14 @@ export default function Stickers() {
   for (let i = 0; i < items.length; i += perPage) pages.push(items.slice(i, i + perPage));
 
   const missingTracks = selected.filter((s) => !s.r.detailFetchedAt).length;
-  const missingBpm = selected.reduce((n, s) => n + s.tracks.filter((t) => !t.meta?.bpm).length, 0);
+  // Platten, bei denen mindestens ein Track kein Tempo hat (statt einer abstrakten Track-Summe)
+  const noBpm = selected
+    .map((s) => ({ s, missing: s.tracks.filter((t) => !t.meta?.bpm), total: s.tracks.length }))
+    .filter((x) => x.total > 0 && x.missing.length > 0)
+    .sort((a, b) => b.missing.length / b.total - a.missing.length / a.total);
+  const missingBpm = noBpm.reduce((n, x) => n + x.missing.length, 0);
+  // Noch nicht fertig gesucht (Datenbanken oder Hörprobe)? Dann lohnt „Suchen“, sonst hilft nur TAP
+  const stillSearching = noBpm.flatMap((x) => x.missing).filter((t) => t.meta && (!t.meta.lookedUpAt || (!t.meta.analyzedAt && (t.meta.analyzeTries ?? 0) < 3))).length;
 
   const render = (s: PrintItem, key: string | number) =>
     opts.kind === "card" ? (
@@ -266,11 +273,38 @@ export default function Stickers() {
                 <span className="chev" style={{ color: "var(--accent)" }}>Laden</span>
               </button>
             )}
-            {missingBpm > 0 && (
-              <button className="group-row" onClick={() => lookupAudioFor(selected.flatMap((s) => s.tracks.map((t) => t.meta?.id).filter(Boolean) as string[])).then((n) => toast(`${n} Tracks ergänzt`))}>
-                <span>{missingBpm} Tracks ohne BPM</span>
-                <span className="chev" style={{ color: "var(--accent)" }}>Suchen</span>
-              </button>
+            {noBpm.length > 0 && (
+              <details className="nobpm">
+                <summary className="group-row">
+                  <span>
+                    Bei {noBpm.length} von {selected.length} Platten fehlt ein Tempo
+                    <small>
+                      {stillSearching > 0
+                        ? `${stillSearching} Tracks werden noch gesucht. Antippen für die Liste.`
+                        : "Online nicht zu finden. Antippen für die Liste, dann per TAP ergänzen."}
+                    </small>
+                  </span>
+                </summary>
+                <div className="nobpm-list">
+                  {noBpm.slice(0, 60).map(({ s: x, missing, total }) => (
+                    <Link key={x.r.id} to={`/release/${x.r.id}`} viewTransition className="nobpm-row">
+                      <img src={x.r.thumb || x.r.cover} alt="" />
+                      <span>
+                        <b>{x.r.title}</b>
+                        <small>
+                          {x.r.artist} · {missing.length === total ? "kein Track mit Tempo" : `${missing.length} von ${total} Tracks ohne Tempo`} ({missing.map((t) => t.position).join(", ")})
+                        </small>
+                      </span>
+                      <span className="chev">›</span>
+                    </Link>
+                  ))}
+                </div>
+                {stillSearching > 0 && (
+                  <button className="btn small tinted" style={{ margin: "4px 14px 12px" }} onClick={() => lookupAudioFor(noBpm.flatMap((x) => x.missing.map((t) => t.meta?.id).filter(Boolean) as string[])).then((n) => toast(n ? `${n} Tempi gefunden` : "Nichts Neues gefunden"))}>
+                    Jetzt weitersuchen
+                  </button>
+                )}
+              </details>
             )}
           </div>
         )}
