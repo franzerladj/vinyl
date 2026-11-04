@@ -1,42 +1,70 @@
 import { NavBar } from "../components/ui";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
+import { useLiveQuery } from "dexie-react-hooks";
 import { api, canRecognize, discogs } from "../lib/api";
 import { ocrImage } from "../lib/free";
+import { decodeBarcodeImage, startLiveScan, type LiveScan } from "../lib/barcode";
 import { addToCollection, addWant } from "../lib/sync";
+import { db } from "../lib/db";
 import { toast, useStore } from "../lib/store";
 import type { SearchResult } from "../lib/types";
-import { Cover, Seg } from "../components/bits";
-import { IconBack, IconCamera } from "../components/icons";
+import { Cover, Seg, haptic } from "../components/bits";
+import { IconCamera } from "../components/icons";
 
-interface Recognition { artist: string; title: string; label: string; catno: string; barcode: string; year: string; matrix: string; confidence: string; notes: string; engine?: string; q?: string }
+interface Fields {
+  artist: string;
+  title: string;
+  label: string;
+  catno: string;
+  barcode: string;
+}
+const EMPTY: Fields = { artist: "", title: "", label: "", catno: "", barcode: "" };
 
-async function resizeImage(file: File, max = 1568): Promise<string> {
+interface Recognition extends Partial<Fields> {
+  confidence?: string;
+  notes?: string;
+  engine?: string;
+}
+
+async function loadImage(file: File, max = 1568) {
   const bmp = await createImageBitmap(file);
   const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
   const c = document.createElement("canvas");
   c.width = Math.round(bmp.width * scale);
   c.height = Math.round(bmp.height * scale);
   c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
-  return c.toDataURL("image/jpeg", 0.85).split(",")[1];
+  return { bmp, b64: c.toDataURL("image/jpeg", 0.85).split(",")[1] };
 }
 
-async function findCandidates(p: Partial<Recognition>): Promise<SearchResult[]> {
+/** Katalognummern stehen auf Labels mal mit, mal ohne Leerzeichen oder Bindestrich */
+export function catnoVariants(raw: string): string[] {
+  const c = raw.trim().toUpperCase();
+  if (!c) return [];
+  const compact = c.replace(/[\s.-]+/g, "");
+  const spaced = compact.replace(/^([A-Z]+)(\d)/, "$1 $2");
+  const dashed = compact.replace(/^([A-Z]+)(\d)/, "$1-$2");
+  return [...new Set([c, spaced, compact, dashed])];
+}
+
+async function findCandidates(p: Partial<Fields> & { q?: string }): Promise<SearchResult[]> {
+  const enc = encodeURIComponent;
   const queries: string[] = [];
-  const base = "type=release&per_page=15";
-  if (p.barcode) queries.push(`barcode=${encodeURIComponent(p.barcode)}`);
-  if (p.catno) queries.push(`catno=${encodeURIComponent(p.catno)}${p.label ? `&label=${encodeURIComponent(p.label)}` : ""}`);
-  if (p.catno) queries.push(`catno=${encodeURIComponent(p.catno)}`);
-  if (p.artist || p.title) queries.push(`artist=${encodeURIComponent(p.artist ?? "")}&release_title=${encodeURIComponent(p.title ?? "")}&format=Vinyl`);
-  if (p.artist || p.title) queries.push(`q=${encodeURIComponent(`${p.artist ?? ""} ${p.title ?? ""}`.trim())}&format=Vinyl`);
-  if (p.q) queries.push(`q=${encodeURIComponent(p.q)}`);
+  if (p.barcode) queries.push(`barcode=${enc(p.barcode)}`);
+  const cats = catnoVariants(p.catno ?? "");
+  if (cats.length && p.label) queries.push(`catno=${enc(cats[0])}&label=${enc(p.label)}`);
+  for (const c of cats) queries.push(`catno=${enc(c)}`);
+  if (cats.length && p.artist) queries.push(`q=${enc(`${p.artist} ${cats[0]}`)}`);
+  if (p.artist && p.title) queries.push(`artist=${enc(p.artist)}&release_title=${enc(p.title)}&format=Vinyl`);
+  if (p.artist || p.title) queries.push(`q=${enc(`${p.artist ?? ""} ${p.title ?? ""}`.trim())}&format=Vinyl`);
+  if (p.q) queries.push(`q=${enc(p.q)}`);
   const seen = new Set<number>();
   const out: SearchResult[] = [];
-  for (const q of queries) {
-    const r = await discogs<{ results: SearchResult[] }>(`/database/search?${base}&${q}`);
+  for (const q of queries.slice(0, 7)) {
+    const r = await discogs<{ results: SearchResult[] }>(`/database/search?type=release&per_page=15&${q}`);
     for (const x of r.results) if (!seen.has(x.id)) (seen.add(x.id), out.push(x));
-    if (out.length >= 10) break;
+    // Eindeutiger Treffer per Barcode oder Katalognummer: nicht weiter suchen
+    if (out.length >= 10 || (out.length && (q.startsWith("barcode") || q.startsWith("catno")))) break;
   }
   return out;
 }
@@ -45,67 +73,70 @@ export default function Scan() {
   const nav = useNavigate();
   const me = useStore((s) => s.me);
   const serverAi = canRecognize(me);
-  const [mode, setMode] = useState<"photo" | "barcode" | "manual">("photo");
-  const [ocrProgress, setOcrProgress] = useState<number | null>(null);
+  const [mode, setMode] = useState<"scan" | "photo" | "manual">("scan");
+  const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [rec, setRec] = useState<Recognition | null>(null);
   const [results, setResults] = useState<SearchResult[] | null>(null);
-  const [manual, setManual] = useState({ catno: "", artist: "", title: "", barcode: "" });
+  const [fields, setFields] = useState<Fields>(EMPTY);
   const [preview, setPreview] = useState<string | null>(null);
+  const [camError, setCamError] = useState<string | null>(null);
+  const [torch, setTorch] = useState<boolean | null>(null);
   const video = useRef<HTMLVideoElement>(null);
-  const controls = useRef<IScannerControls | null>(null);
+  const scan = useRef<LiveScan | null>(null);
+  const owned = useLiveQuery(async () => new Set((await db.collection.toArray()).map((c) => c.releaseId)), []);
+  const wanted = useLiveQuery(async () => new Set((await db.wants.toArray()).map((w) => w.releaseId)), []);
 
-  const search = async (p: Partial<Recognition>) => {
+  const search = async (p: Partial<Fields> & { q?: string }) => {
     setBusy(true);
+    setStatus("Suche bei Discogs …");
     try {
       setResults(await findCandidates(p));
     } catch (e) {
       toast((e as Error).message);
     } finally {
       setBusy(false);
+      setStatus("");
     }
   };
 
-  // Barcode-Scanner (funktioniert auch auf dem iPhone, da ZXing statt BarcodeDetector)
+  const reset = (m = mode) => {
+    setResults(null);
+    setRec(null);
+    setPreview(null);
+    setFields(EMPTY);
+    setMode(m);
+  };
+
+  // Live-Scanner
   useEffect(() => {
-    if (mode !== "barcode" || results) return;
-    const reader = new BrowserMultiFormatReader();
-    let stopped = false;
-    reader
-      .decodeFromVideoDevice(undefined, video.current!, (res) => {
-        if (res && !stopped) {
-          stopped = true;
-          controls.current?.stop();
-          navigator.vibrate?.(80);
-          const code = res.getText();
-          setManual((m) => ({ ...m, barcode: code }));
-          void search({ barcode: code });
-        }
+    if (mode !== "scan" || results || !video.current) return;
+    let cancelled = false;
+    setCamError(null);
+    startLiveScan(video.current, (code) => {
+      haptic(30);
+      setFields({ ...EMPTY, barcode: code });
+      setRec({ barcode: code, engine: "barcode" });
+      void search({ barcode: code });
+    })
+      .then((s) => {
+        if (cancelled) return s.stop();
+        scan.current = s;
+        setTorch(s.torch ? false : null);
       })
-      .then((c) => {
-        controls.current = c;
-        if (stopped) c.stop();
-      })
-      .catch((e) => toast(`Kamera: ${e.message}`));
+      .catch((e: Error) => setCamError(e.name === "NotAllowedError" ? "Kein Zugriff auf die Kamera. Bitte in den Einstellungen des Browsers erlauben." : `Kamera nicht verfügbar (${e.message}).`));
     return () => {
-      stopped = true;
-      controls.current?.stop();
+      cancelled = true;
+      scan.current?.stop();
+      scan.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, results]);
 
-  /** Texterkennung direkt auf dem Gerät (kostenlos, ohne Server) */
-  const runOcr = async (dataUrl: string) => {
-    setOcrProgress(0);
-    try {
-      const g = await ocrImage(dataUrl, setOcrProgress);
-      const r: Recognition = { artist: "", title: "", label: "", catno: g.catno, barcode: g.barcode, year: "", matrix: "", confidence: "niedrig", notes: "Text auf dem Gerät gelesen.", engine: "ocr", q: g.query };
-      setRec(r);
-      setManual((m) => ({ ...m, catno: g.catno || m.catno, barcode: g.barcode || m.barcode }));
-      setResults(await findCandidates(r));
-    } finally {
-      setOcrProgress(null);
-    }
+  const toggleTorch = async () => {
+    if (!scan.current?.torch || torch == null) return;
+    await scan.current.torch(!torch).catch(() => {});
+    setTorch(!torch);
   };
 
   const onPhoto = async (file?: File) => {
@@ -114,43 +145,68 @@ export default function Scan() {
     setResults(null);
     setRec(null);
     try {
-      const b64 = await resizeImage(file);
+      setStatus("Bild wird gelesen …");
+      const { bmp, b64 } = await loadImage(file);
       const dataUrl = `data:image/jpeg;base64,${b64}`;
       setPreview(dataUrl);
+      // 1. Barcode im Foto? Das ist am zuverlässigsten
+      const code = await decodeBarcodeImage(bmp);
+      if (code) {
+        haptic(30);
+        setRec({ barcode: code, engine: "barcode" });
+        setFields({ ...EMPTY, barcode: code });
+        const found = await findCandidates({ barcode: code });
+        if (found.length) return setResults(found);
+      }
+      // 2. Bildmodell auf dem Server
+      let r: Recognition | null = null;
       if (serverAi) {
+        setStatus("KI liest das Cover …");
         try {
-          const r = await api<Recognition>("/api/ai/recognize", {
+          r = await api<Recognition>("/api/ai/recognize", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ image: b64, mediaType: "image/jpeg" }),
           });
-          setRec(r);
-          const found = await findCandidates(r);
-          if (found.length) {
-            setResults(found);
-            return;
-          }
         } catch (e) {
           console.warn("Server-Erkennung", e);
         }
       }
-      await runOcr(dataUrl);
+      // 3. Texterkennung auf dem Gerät, wenn die KI nichts Brauchbares hat
+      let q = "";
+      if (!r || (!r.catno && !r.artist && !r.title)) {
+        setStatus("Lese Text auf dem Gerät …");
+        const g = await ocrImage(dataUrl, (p) => setStatus(`Lese Text … ${Math.round(p * 100)} %`));
+        r = { ...r, catno: r?.catno || g.catno, barcode: r?.barcode || g.barcode, engine: "ocr", notes: "Text auf dem Gerät gelesen." };
+        q = g.query;
+      }
+      const f: Fields = { artist: r.artist ?? "", title: r.title ?? "", label: r.label ?? "", catno: r.catno ?? "", barcode: code || r.barcode || "" };
+      setRec(r);
+      setFields(f);
+      await search({ ...f, q });
     } catch (e) {
       toast((e as Error).message);
     } finally {
       setBusy(false);
+      setStatus("");
     }
   };
 
   const add = async (id: number) => {
     try {
       await addToCollection(id);
-      toast("Zur Sammlung hinzugefügt. Sticker ist vorgemerkt.");
+      haptic(20);
+      toast("Zur Sammlung hinzugefügt. Einleger ist vorgemerkt.");
       nav(`/release/${id}`);
     } catch (e) {
       toast((e as Error).message);
     }
   };
+
+  const showForm = mode === "manual" || rec || (results && mode !== "photo");
+  const field = (k: keyof Fields, ph: string, mode?: "numeric") => (
+    <input className="input" placeholder={ph} inputMode={mode} value={fields[k]} onChange={(e) => setFields({ ...fields, [k]: e.target.value })} />
+  );
 
   return (
     <>
@@ -159,79 +215,86 @@ export default function Scan() {
         <Seg
           value={mode}
           options={[
+            ["scan", "Barcode"],
             ["photo", "Foto"],
-            ["barcode", "Barcode"],
-            ["manual", "Katalognr."],
+            ["manual", "Eingeben"],
           ]}
-          onChange={(m) => {
-            setMode(m);
-            setResults(null);
-            setRec(null);
-          }}
+          onChange={(m) => reset(m)}
         />
 
-        {mode === "photo" && (
+        {mode === "scan" && !results && (
           <>
-            <label className="card stack press" style={{ alignItems: "center", padding: 32, cursor: "pointer", textAlign: "center", border: "1.5px dashed var(--surface-3)", background: "transparent" }}>
-              {preview ? (
-                <img src={preview} style={{ maxHeight: 220, borderRadius: 10 }} alt="" />
-              ) : (
-                <span style={{ width: 64, height: 64, borderRadius: 20, display: "grid", placeItems: "center", background: "var(--accent-soft)", color: "var(--accent)" }}>
-                  <span style={{ width: 32, height: 32, display: "grid" }}>
-                    <IconCamera />
-                  </span>
-                </span>
+            <div className="scan-wrap">
+              <video ref={video} className="scan" muted playsInline autoPlay />
+              <div className="scan-frame" />
+              {torch != null && (
+                <button className={`scan-torch${torch ? " on" : ""}`} onClick={toggleTorch} aria-label="Licht">
+                  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M8 2h8l-1 6H9zM9 8l1 14h4l1-14" />
+                  </svg>
+                </button>
               )}
-              <b>{ocrProgress != null ? `Lese Text … ${Math.round(ocrProgress * 100)} %` : busy ? "Erkenne Platte …" : "Cover, Label oder Runout fotografieren"}</b>
-              <span className="sub">
-                {serverAi ? "Die KI liest Artist, Titel, Label, Katalognummer und Barcode ab." : "Die App liest Katalognummer und Text direkt auf dem Handy. Am besten klappt das Center-Label oder die Rückseite."}
-              </span>
-              <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => onPhoto(e.target.files?.[0])} />
-            </label>
-            {rec && (
-              <div className="card sub">
-                {rec.engine === "ocr" ? "Gelesen" : `Erkannt (${rec.confidence})`}:{" "}
-                <b style={{ color: "var(--text)" }}>{[rec.artist, rec.title].filter(Boolean).join(" – ") || rec.q || "kein Text"}</b>
-                {rec.label && ` · ${rec.label}`} {rec.catno && ` · ${rec.catno}`} {rec.barcode && ` · ${rec.barcode}`}
-                {rec.notes && <div style={{ marginTop: 4 }}>{rec.notes}</div>}
-                {preview && rec.engine !== "ocr" && (
-                  <button className="btn small ghost" style={{ marginTop: 6, paddingLeft: 0 }} onClick={() => runOcr(preview).catch((e) => toast(e.message))}>
-                    Stattdessen Text auf dem Gerät lesen
-                  </button>
-                )}
-              </div>
-            )}
+              <p className="scan-hint">{busy ? status : camError ?? "Barcode auf der Rückseite in den Rahmen halten"}</p>
+            </div>
+            <p className="sub" style={{ textAlign: "center" }}>
+              Kein Barcode drauf? Ältere Platten haben meist keinen.{" "}
+              <button className="link" onClick={() => reset("photo")}>
+                Label fotografieren
+              </button>{" "}
+              oder{" "}
+              <button className="link" onClick={() => reset("manual")}>
+                Katalognummer eingeben
+              </button>
+              .
+            </p>
           </>
         )}
 
-        {mode === "barcode" && !results && (
-          <div className="scan-wrap">
-            <video ref={video} className="scan" muted playsInline />
-            <div className="scan-frame" />
-            <p className="sub" style={{ position: "absolute", left: 0, right: 0, bottom: 14, textAlign: "center", color: "#fff" }}>Barcode in den Rahmen halten</p>
-          </div>
+        {mode === "photo" && (
+          <label className="card stack press" style={{ alignItems: "center", padding: 28, cursor: "pointer", textAlign: "center", border: "1.5px dashed var(--surface-3)", background: "transparent" }}>
+            {preview ? (
+              <img src={preview} style={{ maxHeight: 200, borderRadius: 10 }} alt="" />
+            ) : (
+              <span style={{ width: 64, height: 64, borderRadius: 20, display: "grid", placeItems: "center", background: "var(--accent-soft)", color: "var(--accent)" }}>
+                <span style={{ width: 32, height: 32, display: "grid" }}>
+                  <IconCamera />
+                </span>
+              </span>
+            )}
+            <b>{busy ? status || "Erkenne Platte …" : preview ? "Anderes Foto" : "Rückseite, Center-Label oder Cover"}</b>
+            <span className="sub">
+              Am besten klappt die Rückseite mit Barcode oder das Center-Label mit Katalognummer, gerade von oben und ohne Spiegelung.
+              {serverAi ? " Für Cover ohne Text hilft die KI." : ""}
+            </span>
+            <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => onPhoto(e.target.files?.[0])} />
+          </label>
         )}
 
-        {(mode === "manual" || (mode === "barcode" && results)) && (
+        {showForm && (
           <form
             className="card stack"
             onSubmit={(e) => {
               e.preventDefault();
-              void search(manual);
+              void search(fields);
             }}
           >
+            {rec && (
+              <div className="sub">
+                {rec.engine === "barcode" ? "Barcode gelesen" : rec.engine === "ocr" ? "Text gelesen" : "Von der KI erkannt"}. Felder bei Bedarf korrigieren.
+              </div>
+            )}
             <div className="grid2">
-              <input className="input" placeholder="Katalognummer" value={manual.catno} onChange={(e) => setManual({ ...manual, catno: e.target.value })} />
-              <input className="input" placeholder="Barcode" value={manual.barcode} onChange={(e) => setManual({ ...manual, barcode: e.target.value })} />
-              <input className="input" placeholder="Artist" value={manual.artist} onChange={(e) => setManual({ ...manual, artist: e.target.value })} />
-              <input className="input" placeholder="Titel" value={manual.title} onChange={(e) => setManual({ ...manual, title: e.target.value })} />
+              {field("catno", "Katalognummer")}
+              {field("barcode", "Barcode", "numeric")}
+              {field("artist", "Artist")}
+              {field("title", "Titel")}
             </div>
             <button className="btn primary" disabled={busy}>
-              {busy ? "Suche …" : "Suchen"}
+              {busy ? "Suche …" : results ? "Neu suchen" : "Suchen"}
             </button>
-            {mode === "barcode" && (
-              <button type="button" className="btn ghost" onClick={() => setResults(null)}>
-                Nochmal scannen
+            {mode === "scan" && results && (
+              <button type="button" className="btn ghost" onClick={() => reset("scan")}>
+                Nächste Platte scannen
               </button>
             )}
           </form>
@@ -239,11 +302,14 @@ export default function Scan() {
 
         {results && (
           <>
-            <h2>{results.length ? "Welche Pressung ist es?" : "Nichts gefunden"}</h2>
-            {results.length > 0 && <p className="sub" style={{ marginTop: -6 }}>Katalognummer und Land auf dem Label vergleichen.</p>}
+            <h2>{results.length ? (results.length === 1 ? "Gefunden" : "Welche Pressung ist es?") : "Nichts gefunden"}</h2>
+            <p className="sub" style={{ marginTop: -6 }}>
+              {results.length ? "Katalognummer und Land auf dem Label vergleichen." : "Katalognummer vom Label probieren, die steht fast immer drauf (z. B. „WARP 12“)."}
+            </p>
             <div className="list">
               {results.map((r) => {
                 const [artist, ...rest] = r.title.split(" - ");
+                const have = owned?.has(r.id);
                 return (
                   <div key={r.id} className="rec">
                     <Cover src={r.thumb} />
@@ -255,16 +321,21 @@ export default function Scan() {
                         <span>{r.catno}</span>
                         <span>{r.year}</span>
                         <span>{r.country}</span>
-                        <span>{r.format?.join(", ")}</span>
                       </div>
                     </div>
                     <div className="stack" style={{ gap: 6 }}>
-                      <button className="btn small primary" onClick={() => add(r.id)}>
-                        + Sammlung
-                      </button>
-                      <button className="btn small ghost" onClick={() => addWant(r.id).then(() => toast("Auf die Wantlist gesetzt"), (e) => toast(e.message))}>
-                        ♡ Want
-                      </button>
+                      {have ? (
+                        <span className="badge">in Sammlung</span>
+                      ) : (
+                        <button className="btn small primary" onClick={() => add(r.id)}>
+                          + Sammlung
+                        </button>
+                      )}
+                      {!have && !wanted?.has(r.id) && (
+                        <button className="btn small ghost" onClick={() => addWant(r.id).then(() => toast("Auf die Wantlist gesetzt"), (e) => toast(e.message))}>
+                          ♡ Want
+                        </button>
+                      )}
                     </div>
                   </div>
                 );

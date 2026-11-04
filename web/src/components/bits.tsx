@@ -113,7 +113,7 @@ export function Jobs() {
           {toastMsg}
         </div>
       )}
-      {list.length > 0 && loc.pathname !== "/" && (
+      {list.length > 0 && loc.pathname !== "/" && loc.pathname !== "/scan" && (
         <div className="jobs" aria-live="polite">
           {list.map((j) => (
             <div key={j.id} className="job">
