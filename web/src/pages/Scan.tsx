@@ -1,0 +1,232 @@
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
+import { api, discogs } from "../lib/api";
+import { addToCollection, addWant } from "../lib/sync";
+import { toast, useStore } from "../lib/store";
+import type { SearchResult } from "../lib/types";
+import { Cover, Seg } from "../components/bits";
+import { IconBack, IconCamera } from "../components/icons";
+
+interface Recognition { artist: string; title: string; label: string; catno: string; barcode: string; year: string; matrix: string; confidence: string; notes: string }
+
+async function resizeImage(file: File, max = 1568): Promise<string> {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * scale);
+  c.height = Math.round(bmp.height * scale);
+  c.getContext("2d")!.drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.85).split(",")[1];
+}
+
+async function findCandidates(p: Partial<Recognition>): Promise<SearchResult[]> {
+  const queries: string[] = [];
+  const base = "type=release&per_page=15";
+  if (p.barcode) queries.push(`barcode=${encodeURIComponent(p.barcode)}`);
+  if (p.catno) queries.push(`catno=${encodeURIComponent(p.catno)}${p.label ? `&label=${encodeURIComponent(p.label)}` : ""}`);
+  if (p.catno) queries.push(`catno=${encodeURIComponent(p.catno)}`);
+  if (p.artist || p.title) queries.push(`artist=${encodeURIComponent(p.artist ?? "")}&release_title=${encodeURIComponent(p.title ?? "")}&format=Vinyl`);
+  if (p.artist || p.title) queries.push(`q=${encodeURIComponent(`${p.artist ?? ""} ${p.title ?? ""}`.trim())}&format=Vinyl`);
+  const seen = new Set<number>();
+  const out: SearchResult[] = [];
+  for (const q of queries) {
+    const r = await discogs<{ results: SearchResult[] }>(`/database/search?${base}&${q}`);
+    for (const x of r.results) if (!seen.has(x.id)) (seen.add(x.id), out.push(x));
+    if (out.length >= 10) break;
+  }
+  return out;
+}
+
+export default function Scan() {
+  const nav = useNavigate();
+  const ai = useStore((s) => s.me?.features.ai);
+  const [mode, setMode] = useState<"photo" | "barcode" | "manual">(ai ? "photo" : "barcode");
+  const [busy, setBusy] = useState(false);
+  const [rec, setRec] = useState<Recognition | null>(null);
+  const [results, setResults] = useState<SearchResult[] | null>(null);
+  const [manual, setManual] = useState({ catno: "", artist: "", title: "", barcode: "" });
+  const [preview, setPreview] = useState<string | null>(null);
+  const video = useRef<HTMLVideoElement>(null);
+  const controls = useRef<IScannerControls | null>(null);
+
+  const search = async (p: Partial<Recognition>) => {
+    setBusy(true);
+    try {
+      setResults(await findCandidates(p));
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Barcode-Scanner (funktioniert auch auf dem iPhone, da ZXing statt BarcodeDetector)
+  useEffect(() => {
+    if (mode !== "barcode" || results) return;
+    const reader = new BrowserMultiFormatReader();
+    let stopped = false;
+    reader
+      .decodeFromVideoDevice(undefined, video.current!, (res) => {
+        if (res && !stopped) {
+          stopped = true;
+          controls.current?.stop();
+          navigator.vibrate?.(80);
+          const code = res.getText();
+          setManual((m) => ({ ...m, barcode: code }));
+          void search({ barcode: code });
+        }
+      })
+      .then((c) => {
+        controls.current = c;
+        if (stopped) c.stop();
+      })
+      .catch((e) => toast(`Kamera: ${e.message}`));
+    return () => {
+      stopped = true;
+      controls.current?.stop();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, results]);
+
+  const onPhoto = async (file?: File) => {
+    if (!file) return;
+    setBusy(true);
+    setResults(null);
+    try {
+      const b64 = await resizeImage(file);
+      setPreview(`data:image/jpeg;base64,${b64}`);
+      const r = await api<Recognition>("/api/ai/recognize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: b64, mediaType: "image/jpeg" }),
+      });
+      setRec(r);
+      setResults(await findCandidates(r));
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const add = async (id: number) => {
+    try {
+      await addToCollection(id);
+      toast("Zur Sammlung hinzugefügt. Sticker ist vorgemerkt.");
+      nav(`/release/${id}`);
+    } catch (e) {
+      toast((e as Error).message);
+    }
+  };
+
+  return (
+    <>
+      <div className="page-head">
+        <button className="icon-btn" onClick={() => nav(-1)} aria-label="Zurück">
+          <IconBack />
+        </button>
+        <h1 style={{ fontSize: 20 }}>Platte hinzufügen</h1>
+        <span className="spacer" />
+      </div>
+      <div className="page stack">
+        <Seg
+          value={mode}
+          options={[
+            ["photo", "Foto"],
+            ["barcode", "Barcode"],
+            ["manual", "Katalognr."],
+          ]}
+          onChange={(m) => {
+            setMode(m);
+            setResults(null);
+            setRec(null);
+          }}
+        />
+
+        {mode === "photo" &&
+          (ai ? (
+            <>
+              <label className="card stack" style={{ alignItems: "center", padding: 28, cursor: "pointer" }}>
+                {preview ? <img src={preview} style={{ maxHeight: 220, borderRadius: 10 }} alt="" /> : <IconCamera />}
+                <b>{busy ? "Erkenne Platte …" : "Cover, Label oder Runout fotografieren"}</b>
+                <span className="sub">Die KI liest Artist, Titel, Label, Katalognummer und Barcode ab.</span>
+                <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => onPhoto(e.target.files?.[0])} />
+              </label>
+              {rec && (
+                <div className="card sub">
+                  Erkannt ({rec.confidence}): <b style={{ color: "var(--text)" }}>{[rec.artist, rec.title].filter(Boolean).join(" – ")}</b>
+                  {rec.label && ` · ${rec.label}`} {rec.catno && ` · ${rec.catno}`} {rec.barcode && ` · ${rec.barcode}`}
+                  {rec.notes && <div style={{ marginTop: 4 }}>{rec.notes}</div>}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="card sub">Für die Foto-Erkennung braucht der Server einen ANTHROPIC_API_KEY. Barcode und Katalognummer funktionieren ohne.</div>
+          ))}
+
+        {mode === "barcode" && !results && <video ref={video} className="scan" muted playsInline />}
+
+        {(mode === "manual" || (mode === "barcode" && results)) && (
+          <form
+            className="card stack"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void search(manual);
+            }}
+          >
+            <div className="grid2">
+              <input className="input" placeholder="Katalognummer" value={manual.catno} onChange={(e) => setManual({ ...manual, catno: e.target.value })} />
+              <input className="input" placeholder="Barcode" value={manual.barcode} onChange={(e) => setManual({ ...manual, barcode: e.target.value })} />
+              <input className="input" placeholder="Artist" value={manual.artist} onChange={(e) => setManual({ ...manual, artist: e.target.value })} />
+              <input className="input" placeholder="Titel" value={manual.title} onChange={(e) => setManual({ ...manual, title: e.target.value })} />
+            </div>
+            <button className="btn primary" disabled={busy}>
+              {busy ? "Suche …" : "Suchen"}
+            </button>
+            {mode === "barcode" && (
+              <button type="button" className="btn ghost" onClick={() => setResults(null)}>
+                Nochmal scannen
+              </button>
+            )}
+          </form>
+        )}
+
+        {results && (
+          <>
+            <h2>{results.length ? "Welche Pressung ist es?" : "Nichts gefunden"}</h2>
+            <div className="list">
+              {results.map((r) => {
+                const [artist, ...rest] = r.title.split(" - ");
+                return (
+                  <div key={r.id} className="rec">
+                    <Cover src={r.thumb} />
+                    <div className="rec-main" onClick={() => nav(`/release/${r.id}`)}>
+                      <div className="rec-title">{rest.join(" - ")}</div>
+                      <div className="rec-artist">{artist}</div>
+                      <div className="rec-meta">
+                        <span>{r.label?.[0]}</span>
+                        <span>{r.catno}</span>
+                        <span>{r.year}</span>
+                        <span>{r.country}</span>
+                        <span>{r.format?.join(", ")}</span>
+                      </div>
+                    </div>
+                    <div className="stack" style={{ gap: 6 }}>
+                      <button className="btn small primary" onClick={() => add(r.id)}>
+                        + Sammlung
+                      </button>
+                      <button className="btn small ghost" onClick={() => addWant(r.id).then(() => toast("Auf die Wantlist gesetzt"), (e) => toast(e.message))}>
+                        ♡ Want
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  );
+}

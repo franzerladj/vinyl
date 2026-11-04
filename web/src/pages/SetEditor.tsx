@@ -1,0 +1,346 @@
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db, type DJSet, type TrackMeta } from "../lib/db";
+import { toast } from "../lib/store";
+import { Seg, Sheet } from "../components/bits";
+import { IconBack, IconDown, IconUp, IconX } from "../components/icons";
+import { TrackLine } from "./Sets";
+import { buildSetlist, targetEnergy, type Curve } from "../../../shared/setlist";
+import { bpmDelta, keyDistance, parseKey } from "../../../shared/music";
+
+const CURVES: [Curve, string, string][] = [
+  ["warmup", "Warm-up", "ruhig starten, langsam steigern"],
+  ["journey", "Journey", "Aufbau, Peak bei 3/4, kurz runter"],
+  ["peak", "Peak-Time", "durchgehend hohe Energie"],
+  ["flat", "Bar / Lounge", "gleichmäßig, mittlere Energie"],
+  ["closing", "Closing", "vom Peak sanft ausklingen"],
+];
+
+export default function SetEditor() {
+  const { id } = useParams();
+  const nav = useNavigate();
+  const isNew = id === "new";
+  const [set, setSet] = useState<DJSet>({ name: "", curve: "journey", trackIds: [], createdAt: Date.now() });
+  const [cfg, setCfg] = useState({ length: 20, startBpm: "", endBpm: "", maxJump: 6, keyWeight: 1, style: "", minStars: 0, onlyWithBpm: true, crate: "" });
+  const [adding, setAdding] = useState(false);
+  const [view, setView] = useState<"set" | "crate">("set");
+
+  useEffect(() => {
+    if (!isNew) db.sets.get(Number(id)).then((s) => s && setSet(s));
+  }, [id, isNew]);
+
+  const data = useLiveQuery(async () => {
+    const ids = [...new Set((await db.collection.toArray()).map((c) => c.releaseId))];
+    const [tracks, rels, metas] = await Promise.all([db.tracks.where("releaseId").anyOf(ids).toArray(), db.releases.bulkGet(ids), db.recordMeta.bulkGet(ids)]);
+    return {
+      tracks,
+      byId: new Map(tracks.map((t) => [t.id, t])),
+      rels: new Map(rels.filter(Boolean).map((r) => [r!.id, r!])),
+      metas: new Map(metas.filter(Boolean).map((m) => [m!.releaseId, m!])),
+    };
+  });
+
+  const styles = useMemo(() => {
+    const c = new Map<string, number>();
+    data?.rels.forEach((r) => r.styles.forEach((s) => c.set(s, (c.get(s) ?? 0) + 1)));
+    return [...c.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25).map(([s]) => s);
+  }, [data]);
+  const crates = useMemo(() => [...new Set([...(data?.metas.values() ?? [])].flatMap((m) => m.crates ?? []))], [data]);
+
+  const pool = useMemo(() => {
+    if (!data) return [];
+    return data.tracks.filter((t) => {
+      const r = data.rels.get(t.releaseId);
+      if (cfg.onlyWithBpm && !t.bpm) return false;
+      if (cfg.style && !r?.styles.includes(cfg.style)) return false;
+      if (cfg.minStars && (t.stars ?? 0) < cfg.minStars) return false;
+      if (cfg.crate && !data.metas.get(t.releaseId)?.crates?.includes(cfg.crate)) return false;
+      return true;
+    });
+  }, [data, cfg]);
+
+  const generate = () => {
+    if (!pool.length) return toast("Keine Tracks im Pool. Filter lockern oder erst BPM ergänzen.");
+    const order = buildSetlist(
+      pool.map((t) => ({ id: t.id, bpm: t.bpm ?? null, key: t.key ?? null, energy: t.energy ?? null })),
+      {
+        length: cfg.length,
+        curve: set.curve as Curve,
+        startBpm: Number(cfg.startBpm) || undefined,
+        endBpm: Number(cfg.endBpm) || undefined,
+        maxBpmJumpPercent: cfg.maxJump,
+        keyWeight: cfg.keyWeight,
+      },
+    );
+    setSet({ ...set, trackIds: order });
+  };
+
+  const save = async () => {
+    const s = { ...set, name: set.name || `Set ${new Date().toLocaleDateString("de-DE")}` };
+    const newId = await db.sets.put(s);
+    toast("Set gespeichert");
+    if (isNew) nav(`/sets/${newId}`, { replace: true });
+    setSet({ ...s, id: newId });
+  };
+
+  const move = (i: number, d: number) => {
+    const ids = [...set.trackIds];
+    const j = i + d;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    setSet({ ...set, trackIds: ids });
+  };
+
+  const tracks = set.trackIds.map((tid) => data?.byId.get(tid)).filter(Boolean) as TrackMeta[];
+
+  const asText = () =>
+    `${set.name}${set.date ? ` · ${new Date(set.date).toLocaleDateString("de-DE")}` : ""}${set.venue ? ` · ${set.venue}` : ""}\n\n` +
+    tracks.map((t, i) => `${String(i + 1).padStart(2, "0")}. ${t.artist} – ${t.title} [${t.position}]${t.bpm ? ` ${t.bpm} BPM` : ""}${t.key ? ` ${t.key}` : ""}`).join("\n");
+
+  const share = async () => {
+    const text = asText();
+    if (navigator.share) await navigator.share({ title: set.name, text }).catch(() => undefined);
+    else await navigator.clipboard.writeText(text).then(() => toast("Setlist kopiert"));
+  };
+
+  // Platten, die für das Set eingepackt werden müssen
+  const crateList = useMemo(() => {
+    const m = new Map<number, string[]>();
+    tracks.forEach((t) => m.set(t.releaseId, [...(m.get(t.releaseId) ?? []), t.position]));
+    return [...m.entries()].map(([rid, pos]) => ({ r: data?.rels.get(rid), meta: data?.metas.get(rid), pos })).sort((a, b) => (a.meta?.shelf ?? "~").localeCompare(b.meta?.shelf ?? "~", "de", { numeric: true }));
+  }, [tracks, data]);
+
+  const addTrack = (t: TrackMeta) => {
+    setSet({ ...set, trackIds: [...set.trackIds, t.id] });
+    setAdding(false);
+  };
+
+  return (
+    <>
+      <div className="page-head">
+        <button className="icon-btn" onClick={() => nav("/sets")} aria-label="Zurück">
+          <IconBack />
+        </button>
+        <span className="spacer" />
+        {!isNew && (
+          <button
+            className="btn small ghost"
+            onClick={async () => {
+              if (!confirm("Set löschen?")) return;
+              await db.sets.delete(Number(id));
+              nav("/sets");
+            }}
+          >
+            Löschen
+          </button>
+        )}
+        <button className="btn small primary" onClick={save}>
+          Speichern
+        </button>
+      </div>
+      <div className="page stack">
+        <input className="input" placeholder="Name, z.B. Freitag Klubraum" value={set.name} onChange={(e) => setSet({ ...set, name: e.target.value })} style={{ fontSize: 18, fontWeight: 600 }} />
+        <div className="grid2">
+          <input className="input" type="date" value={set.date ?? ""} onChange={(e) => setSet({ ...set, date: e.target.value })} />
+          <input className="input" placeholder="Location" value={set.venue ?? ""} onChange={(e) => setSet({ ...set, venue: e.target.value })} />
+        </div>
+
+        <details className="card" open={set.trackIds.length === 0}>
+          <summary style={{ cursor: "pointer", fontWeight: 600 }}>Setlist vorschlagen lassen</summary>
+          <div className="stack" style={{ marginTop: 10 }}>
+            <div className="chips" style={{ flexWrap: "wrap" }}>
+              {CURVES.map(([c, l, d]) => (
+                <button key={c} className={`chip ${set.curve === c ? "on" : ""}`} onClick={() => setSet({ ...set, curve: c })} title={d}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <EnergyCurve curve={set.curve as Curve} actual={tracks.map((t) => t.energy ?? null)} />
+            <div className="grid3">
+              <label className="field">
+                Tracks
+                <input className="input" inputMode="numeric" value={cfg.length} onChange={(e) => setCfg({ ...cfg, length: Number(e.target.value) || 0 })} />
+              </label>
+              <label className="field">
+                Start-BPM
+                <input className="input" inputMode="numeric" placeholder="frei" value={cfg.startBpm} onChange={(e) => setCfg({ ...cfg, startBpm: e.target.value })} />
+              </label>
+              <label className="field">
+                End-BPM
+                <input className="input" inputMode="numeric" placeholder="frei" value={cfg.endBpm} onChange={(e) => setCfg({ ...cfg, endBpm: e.target.value })} />
+              </label>
+              <label className="field">
+                max. BPM-Sprung
+                <select className="input" value={cfg.maxJump} onChange={(e) => setCfg({ ...cfg, maxJump: Number(e.target.value) })}>
+                  {[3, 4, 6, 8, 12].map((v) => (
+                    <option key={v} value={v}>
+                      {v} %
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                Harmonie
+                <select className="input" value={cfg.keyWeight} onChange={(e) => setCfg({ ...cfg, keyWeight: Number(e.target.value) })}>
+                  <option value={0}>egal</option>
+                  <option value={1}>wichtig</option>
+                  <option value={2}>sehr wichtig</option>
+                </select>
+              </label>
+              <label className="field">
+                min. Sterne
+                <select className="input" value={cfg.minStars} onChange={(e) => setCfg({ ...cfg, minStars: Number(e.target.value) })}>
+                  {[0, 1, 2, 3, 4, 5].map((v) => (
+                    <option key={v} value={v}>
+                      {v || "alle"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="grid2">
+              <select className="input" value={cfg.style} onChange={(e) => setCfg({ ...cfg, style: e.target.value })}>
+                <option value="">Alle Styles</option>
+                {styles.map((s) => (
+                  <option key={s}>{s}</option>
+                ))}
+              </select>
+              <select className="input" value={cfg.crate} onChange={(e) => setCfg({ ...cfg, crate: e.target.value })}>
+                <option value="">Ganze Sammlung</option>
+                {crates.map((c) => (
+                  <option key={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+            <label className="row sub">
+              <input type="checkbox" checked={cfg.onlyWithBpm} onChange={(e) => setCfg({ ...cfg, onlyWithBpm: e.target.checked })} /> nur Tracks mit BPM
+            </label>
+            <button className="btn primary" onClick={generate}>
+              Vorschlag erstellen ({pool.length} Tracks im Pool)
+            </button>
+            <span className="sub">Energie-Werte kommen aus deinen Track-Daten (manuell oder per KI „Vibes“). Ohne Energie wird mit 5 gerechnet.</span>
+          </div>
+        </details>
+
+        {tracks.length > 0 && (
+          <div className="row">
+            <Seg
+              value={view}
+              options={[
+                ["set", `Reihenfolge (${tracks.length})`],
+                ["crate", `Einpacken (${crateList.length})`],
+              ]}
+              onChange={setView}
+            />
+            <span className="spacer" />
+            <button className="btn small ghost" onClick={share}>
+              Teilen
+            </button>
+          </div>
+        )}
+
+        {view === "set" ? (
+          <div className="list">
+            {tracks.map((t, i) => {
+              const prev = tracks[i - 1];
+              const d = prev ? bpmDelta(prev.bpm, t.bpm) : 0;
+              const kd = prev ? keyDistance(parseKey(prev.key), parseKey(t.key)) : 0;
+              return (
+                <div key={t.id}>
+                  {prev && (
+                    <div className="transition">
+                      <span className="dot" style={{ background: d <= 3 ? "var(--ok)" : d <= 6 ? "var(--warn)" : "var(--bad)" }} />
+                      {prev.bpm && t.bpm ? `${t.bpm > prev.bpm ? "+" : ""}${(t.bpm - prev.bpm).toFixed(0)} BPM (${d.toFixed(1)} %)` : "BPM ?"}
+                      <span className="dot" style={{ background: kd <= 1 ? "var(--ok)" : kd <= 2 ? "var(--warn)" : "var(--bad)" }} />
+                      {kd <= 1 ? "harmonisch" : kd <= 2 ? "Energy-Boost" : prev.key && t.key ? "Key-Clash" : "Key ?"}
+                    </div>
+                  )}
+                  <TrackLine
+                    t={t}
+                    r={data?.rels.get(t.releaseId)}
+                    extra={<span className="sub">#{i + 1}</span>}
+                    actions={
+                      <div className="row" style={{ gap: 0 }}>
+                        <button className="icon-btn" onClick={() => move(i, -1)} aria-label="hoch">
+                          <IconUp />
+                        </button>
+                        <button className="icon-btn" onClick={() => move(i, 1)} aria-label="runter">
+                          <IconDown />
+                        </button>
+                        <button className="icon-btn" onClick={() => setSet({ ...set, trackIds: set.trackIds.filter((x) => x !== t.id) })} aria-label="entfernen">
+                          <IconX />
+                        </button>
+                      </div>
+                    }
+                  />
+                </div>
+              );
+            })}
+            <button className="btn ghost" style={{ marginTop: 10 }} onClick={() => setAdding(true)}>
+              + Track hinzufügen
+            </button>
+          </div>
+        ) : (
+          <div className="list">
+            {crateList.map(({ r, meta, pos }) =>
+              r ? (
+                <div key={r.id} className="rec">
+                  <img className="cover" src={r.thumb} alt="" />
+                  <div className="rec-main">
+                    <div className="rec-title">{r.title}</div>
+                    <div className="rec-artist">{r.artist}</div>
+                    <div className="rec-meta">
+                      <span>{r.labels[0]?.catno}</span>
+                      <span>Tracks: {pos.join(", ")}</span>
+                    </div>
+                  </div>
+                  <div className="rec-side">{meta?.shelf ? <span className="badge accent">{meta.shelf}</span> : <span className="sub">kein Regalplatz</span>}</div>
+                </div>
+              ) : null,
+            )}
+          </div>
+        )}
+      </div>
+      <Sheet open={adding} onClose={() => setAdding(false)}>
+        <AddTrack tracks={data?.tracks ?? []} rels={data?.rels} last={tracks[tracks.length - 1]} onPick={addTrack} exclude={new Set(set.trackIds)} />
+      </Sheet>
+    </>
+  );
+}
+
+function AddTrack({ tracks, rels, last, onPick, exclude }: { tracks: TrackMeta[]; rels?: Map<number, import("../lib/db").Release>; last?: TrackMeta; onPick: (t: TrackMeta) => void; exclude: Set<string> }) {
+  const [q, setQ] = useState("");
+  const list = useMemo(() => {
+    const lq = q.toLowerCase();
+    let l = tracks.filter((t) => !exclude.has(t.id));
+    if (lq) l = l.filter((t) => `${t.artist} ${t.title} ${rels?.get(t.releaseId)?.title}`.toLowerCase().includes(lq));
+    else if (last) l = [...l].sort((a, b) => bpmDelta(last.bpm, a.bpm) + keyDistance(parseKey(last.key), parseKey(a.key)) * 2 - (bpmDelta(last.bpm, b.bpm) + keyDistance(parseKey(last.key), parseKey(b.key)) * 2));
+    return l.slice(0, 40);
+  }, [q, tracks, rels, last, exclude]);
+  return (
+    <div className="stack">
+      <input className="input" placeholder={last ? "Suchen oder Vorschläge nach dem letzten Track" : "Track suchen"} value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="list">
+        {list.map((t) => (
+          <div key={t.id} onClick={() => onPick(t)} style={{ cursor: "pointer" }}>
+            <TrackLine t={t} r={rels?.get(t.releaseId)} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function EnergyCurve({ curve, actual }: { curve: Curve; actual: (number | null)[] }) {
+  const W = 300;
+  const H = 60;
+  const pts = Array.from({ length: 31 }, (_, i) => i / 30).map((t) => `${t * W},${H - (targetEnergy(curve, t) / 10) * H}`);
+  const act = actual.map((e, i) => (e == null ? null : `${(i / Math.max(1, actual.length - 1)) * W},${H - (e / 10) * H}`)).filter(Boolean);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 60 }} aria-label="Energie-Kurve">
+      <polyline points={pts.join(" ")} fill="none" stroke="var(--muted)" strokeDasharray="4 4" strokeWidth="2" />
+      {act.length > 1 && <polyline points={act.join(" ")} fill="none" stroke="var(--accent)" strokeWidth="2" />}
+    </svg>
+  );
+}

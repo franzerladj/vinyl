@@ -1,0 +1,130 @@
+// Lokale Datenbank im Browser (IndexedDB). Discogs bleibt die Quelle, hier liegen Cache + eigene Daten.
+import Dexie, { type Table } from "dexie";
+import type { DLabel, DFormat, DTrack, DVideo } from "./types";
+import type { Listing } from "../../../shared/optimizer";
+
+export interface Release {
+  id: number;
+  title: string;
+  artist: string;
+  year: number;
+  labels: DLabel[];
+  formats: DFormat[];
+  genres: string[];
+  styles: string[];
+  thumb: string;
+  cover: string;
+  country?: string;
+  tracklist?: DTrack[];
+  videos?: DVideo[];
+  masterId?: number;
+  detailFetchedAt?: number;
+  community?: { have: number; want: number };
+}
+
+export interface CollectionItem {
+  instanceId: number;
+  releaseId: number;
+  folderId: number;
+  dateAdded: string;
+  rating: number;
+}
+
+export interface Want {
+  releaseId: number;
+  dateAdded: string;
+  rating: number;
+  notes?: string;
+}
+
+/** Eigene Track-Daten. id = `${releaseId}:${position}` */
+export interface TrackMeta {
+  id: string;
+  releaseId: number;
+  position: string;
+  title: string;
+  artist: string;
+  bpm?: number | null;
+  key?: string | null;
+  energy?: number | null;
+  moods?: string[];
+  stars?: number; // 0..5, eigene Bewertung
+  notes?: string;
+  previewUrl?: string | null;
+  bpmSource?: string;
+  lookedUpAt?: number;
+}
+
+export interface RecordMeta {
+  releaseId: number;
+  shelf?: string; // Regalplatz, z.B. "Kallax 3 · Fach B"
+  stickerPrintedAt?: number | null;
+  tags?: string[];
+  lentTo?: string;
+  crates?: string[]; // Gig-Taschen
+}
+
+export interface DJSet {
+  id?: number;
+  name: string;
+  date?: string;
+  venue?: string;
+  curve: string;
+  trackIds: string[];
+  played?: string[];
+  createdAt: number;
+  notes?: string;
+}
+
+export interface MarketStat {
+  releaseId: number;
+  lowest: number | null;
+  currency: string;
+  numForSale: number;
+  fetchedAt: number;
+}
+
+export interface StoredListing extends Listing {
+  importedAt: number;
+}
+
+class CrateDB extends Dexie {
+  releases!: Table<Release, number>;
+  collection!: Table<CollectionItem, number>;
+  wants!: Table<Want, number>;
+  tracks!: Table<TrackMeta, string>;
+  recordMeta!: Table<RecordMeta, number>;
+  sets!: Table<DJSet, number>;
+  marketStats!: Table<MarketStat, number>;
+  listings!: Table<StoredListing, string>;
+  kv!: Table<{ key: string; value: unknown }, string>;
+
+  constructor() {
+    super("crate");
+    this.version(1).stores({
+      releases: "id, artist, title, year, *styles, *genres",
+      collection: "instanceId, releaseId, folderId, dateAdded",
+      wants: "releaseId, dateAdded",
+      tracks: "id, releaseId, bpm, key, energy",
+      recordMeta: "releaseId, shelf, stickerPrintedAt, *crates",
+      sets: "++id, createdAt",
+      marketStats: "releaseId, fetchedAt",
+      listings: "listingId, releaseId, seller",
+      kv: "key",
+    });
+  }
+}
+
+export const db = new CrateDB();
+
+export async function getKV<T>(key: string, fallback: T): Promise<T> {
+  const row = await db.kv.get(key);
+  return (row?.value as T) ?? fallback;
+}
+export const setKV = (key: string, value: unknown) => db.kv.put({ key, value });
+
+/** Vinyl-Tracks (ohne Überschriften/Index-Einträge) */
+export const realTracks = (tl: DTrack[] = []) => tl.filter((t) => (t.type_ ?? "track") === "track");
+
+/** Track-ID für eigene Metadaten */
+export const trackId = (releaseId: number, position: string, index: number) => `${releaseId}:${position || `#${index + 1}`}`;
