@@ -4,6 +4,7 @@ import { parseKey, camelotString } from "../../../shared/music";
 import type { Release } from "../lib/db";
 import { useStore } from "../lib/store";
 import { hapticsEnabled } from "../lib/theme";
+import { estimateTapTempo, type TapResult } from "../../../shared/tap";
 
 /** Kurzes haptisches Feedback (Android; iOS-Safari ignoriert es) */
 export const haptic = (ms = 8) => {
@@ -196,39 +197,115 @@ export function Sheet({ open, onClose, children }: { open: boolean; onClose: () 
 }
 
 /** Tap-Tempo: mindestens 4x tippen, Mittelwert der letzten Abstände */
+/**
+ * Tap-Tempo: Gerade durch alle Tipps statt Mittelwert der Abstände, verpasste Schläge zählen mit.
+ * Danach blinkt der Ring im gemessenen Tempo weiter, so lässt sich das Ergebnis gegen die Musik prüfen.
+ */
 export function TapTempo({ onBpm }: { onBpm: (bpm: number) => void }) {
   const taps = useRef<number[]>([]);
-  const [bpm, setBpm] = useState<number | null>(null);
-  const [pulse, setPulse] = useState(0);
-  const tap = () => {
+  const [res, setRes] = useState<TapResult | null>(null);
+  const [factor, setFactor] = useState(1);
+  const btn = useRef<HTMLButtonElement>(null);
+  const ring = useRef<HTMLSpanElement>(null);
+  const resRef = useRef<TapResult | null>(null);
+  resRef.current = res;
+
+  const register = (t: number) => {
     haptic(6);
-    setPulse((p) => p + 1);
-    const now = performance.now();
-    taps.current = [...taps.current.filter((t) => now - t < 3000), now].slice(-12);
-    if (taps.current.length >= 4) {
-      const d = taps.current.slice(1).map((t, i) => t - taps.current[i]);
-      const avg = d.reduce((a, b) => a + b, 0) / d.length;
-      setBpm(Math.round((60000 / avg) * 10) / 10);
+    const last = taps.current.at(-1);
+    // Lange Pause: neue Messung
+    if (last != null && t - last > 4000) {
+      taps.current = [];
+      setFactor(1);
+    }
+    taps.current = [...taps.current, t].slice(-48);
+    setRes(estimateTapTempo(taps.current));
+    const b = btn.current;
+    if (b) {
+      b.classList.remove("hit");
+      void b.offsetWidth;
+      b.classList.add("hit");
     }
   };
+
+  // Ring blinkt im gemessenen Tempo, phasengleich zum letzten Tipp
+  useEffect(() => {
+    let raf = 0;
+    let lastBeat = -1;
+    const loop = () => {
+      raf = requestAnimationFrame(loop);
+      const r = resRef.current;
+      const last = taps.current.at(-1);
+      if (!r || last == null || r.taps < 4 || !ring.current) return;
+      const period = 60000 / r.bpm;
+      const beat = Math.floor((performance.now() - last) / period);
+      if (beat !== lastBeat && beat >= 1) {
+        lastBeat = beat;
+        ring.current.classList.remove("beat");
+        void ring.current.offsetWidth;
+        ring.current.classList.add("beat");
+      }
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  const reset = () => {
+    taps.current = [];
+    setRes(null);
+    setFactor(1);
+  };
+  const bpm = res ? res.bpm * factor : null;
+  const err = res ? res.error * factor : null;
+  const n = res?.taps ?? taps.current.length;
+  // Genauigkeit als Fortschritt: ±3 BPM = leer, ±0,3 BPM = voll
+  const quality = err == null || n < 4 ? Math.min(0.25, n * 0.06) : Math.max(0.08, Math.min(1, (3 - err) / 2.7));
+  const status = !res || n < 4 ? `Im Takt tippen${n ? ` (${n})` : ""}` : err! > 1.5 ? "Weiter tippen …" : err! > 0.5 ? "Fast genau" : "Genau";
+
   return (
-    <div className="card row" style={{ background: "var(--surface-2)" }}>
+    <div className="tap card">
       <button
-        key={pulse}
-        className="btn primary"
-        onPointerDown={tap}
-        style={{ width: 76, height: 76, flex: "none", padding: 0, borderRadius: "50%", fontWeight: 800, animation: pulse ? "pop .35s var(--spring)" : undefined }}
+        ref={btn}
+        className="tap-btn"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          register(e.timeStamp || performance.now());
+        }}
+        onKeyDown={(e) => {
+          if (e.key === " " || e.key === "Enter") {
+            e.preventDefault();
+            if (!e.repeat) register(e.timeStamp || performance.now());
+          }
+        }}
         aria-label="Im Takt tippen"
       >
-        TAP
+        <svg viewBox="0 0 100 100" aria-hidden>
+          <circle cx="50" cy="50" r="46" className="tap-track" />
+          <circle cx="50" cy="50" r="46" className="tap-progress" strokeDasharray={`${quality * 289} 289`} />
+        </svg>
+        <span ref={ring} className="tap-ring" />
+        <b>TAP</b>
       </button>
-      <div>
-        <div className="bpm" style={{ fontSize: 30 }}>{bpm ?? "–"}</div>
-        <div className="sub">{taps.current.length < 4 ? "Mind. 4x im Takt tippen" : "BPM"}</div>
+      <div className="tap-info">
+        <div className="tap-bpm">
+          {bpm ? bpm.toFixed(1).replace(".", ",") : "–"}
+          {err != null && n >= 4 && <small> ±{err < 0.1 ? "0,1" : err.toFixed(1).replace(".", ",")}</small>}
+        </div>
+        <div className={`tap-status${err != null && err <= 0.5 && n >= 4 ? " ok" : ""}`}>{status}</div>
+        <div className="tap-tools">
+          <button onClick={() => setFactor((f) => f / 2)} disabled={!bpm} aria-label="Halbes Tempo">
+            ÷2
+          </button>
+          <button onClick={() => setFactor((f) => f * 2)} disabled={!bpm} aria-label="Doppeltes Tempo">
+            ×2
+          </button>
+          <button onClick={reset} disabled={!n}>
+            Neu
+          </button>
+        </div>
       </div>
-      <span className="spacer" />
-      <button className="btn small tinted" disabled={!bpm} onClick={() => bpm && onBpm(Math.round(bpm))}>
-        Übernehmen
+      <button className="btn small primary tap-take" disabled={!bpm || n < 4} onClick={() => bpm && onBpm(Math.round(bpm))}>
+        {bpm && n >= 4 ? `${Math.round(bpm)} übernehmen` : "Übernehmen"}
       </button>
     </div>
   );
