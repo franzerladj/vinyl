@@ -58,6 +58,8 @@ export interface TrackMeta {
   /** Energie aus der Analyse der Hörprobe (1..10) */
   audioEnergy?: number | null;
   analyzedAt?: number;
+  /** Zugeordneter Deezer-Track (für Hörprobe und Analyse des richtigen Mixes) */
+  deezerId?: number | null;
   /** Fehlgeschlagene Analyse-Versuche (nach 3 wird aufgegeben) */
   analyzeTries?: number;
   lookedUpAt?: number;

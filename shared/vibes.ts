@@ -169,3 +169,19 @@ export function estimateVibe(i: VibeInputs): VibeResult {
   const list = [...moods.entries()].sort((a, b) => b[1] - a[1]).map(([m]) => m).slice(0, 4);
   return { energy: e, moods: list, slot: slotFor(e), sources };
 }
+
+/** Typisches Tempo je Style, wenn für einen Track kein BPM bekannt ist */
+const STYLE_BPM: Record<string, number> = {
+  ambient: 90, downtempo: 100, "trip hop": 92, balearic: 110, dub: 120, "dub techno": 122, jazz: 110, soul: 105, funk: 110, "jazz-funk": 112, boogie: 115,
+  disco: 120, "nu-disco": 120, "italo-disco": 122, "deep house": 121, house: 124, "chicago house": 124, "garage house": 122, "afro house": 122, "tech house": 126,
+  "progressive house": 126, "acid house": 125, "lo-fi house": 122, "broken beat": 118, "uk garage": 132, electro: 128, breakbeat: 130, breaks: 130,
+  "minimal techno": 128, minimal: 126, "detroit techno": 130, techno: 132, acid: 132, trance: 136, ebm: 125, industrial: 135, "hard techno": 145,
+  dubstep: 140, "drum n bass": 172, jungle: 168, "hip hop": 92, "boom bap": 90, "synth-pop": 118, leftfield: 118,
+};
+
+/** BPM schätzen: andere Tracks derselben Platte, sonst typisches Tempo der Styles */
+export function estimateBpm(styles: string[], siblingBpms: number[]): number | null {
+  if (siblingBpms.length) return Math.round(siblingBpms.reduce((a, b) => a + b, 0) / siblingBpms.length);
+  const known = styles.map((s) => STYLE_BPM[s.toLowerCase()]).filter(Boolean);
+  return known.length ? Math.round(known.reduce((a, b) => a + b, 0) / known.length) : null;
+}

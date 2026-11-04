@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { NavLink, Route, Routes, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigationType, type RouteObject } from "react-router-dom";
 import { getMe } from "./lib/api";
 import { setState, useStore } from "./lib/store";
 import { haptic, Jobs } from "./components/bits";
@@ -19,16 +19,126 @@ const Stickers = lazy(() => import("./pages/Stickers"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Friends = lazy(() => import("./pages/Friends"));
 
+/** Alle Seiten der App (Data-Router, damit Seitenübergänge und Zurück-Animationen funktionieren) */
+export const routes: RouteObject[] = [
+  { index: true, element: <Home /> },
+  { path: "collection", element: <Collection /> },
+  { path: "wants", element: <Wantlist /> },
+  { path: "search", element: <Search /> },
+  { path: "release/:id", element: <ReleasePage /> },
+  { path: "scan", element: <Scan /> },
+  { path: "shop", element: <Shop /> },
+  { path: "sets", element: <Sets /> },
+  { path: "sets/:id", element: <SetEditor /> },
+  { path: "stickers", element: <Stickers /> },
+  { path: "settings", element: <Settings /> },
+  { path: "settings/:section", element: <Settings /> },
+  { path: "friends", element: <Friends /> },
+  { path: "friends/:username", element: <Friends /> },
+  { path: "*", element: <NotFound /> },
+];
+
+function NotFound() {
+  return (
+    <div className="empty" style={{ minHeight: "70vh", justifyContent: "center" }}>
+      <b>Seite nicht gefunden</b>
+      <a className="btn primary" href="/">
+        Zur Startseite
+      </a>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Scroll-Position pro Verlaufseintrag merken. Beim Zurückgehen wird sie
+// wiederhergestellt, sobald die (asynchron geladene) Liste lang genug ist,
+// und der zuletzt angetippte Eintrag wird kurz hervorgehoben.
+// ---------------------------------------------------------------------------
+const scrollMemo = new Map<string, number>();
+try {
+  Object.entries(JSON.parse(sessionStorage.getItem("crate:scroll") ?? "{}")).forEach(([k, v]) => scrollMemo.set(k, Number(v)));
+} catch {
+  /* egal */
+}
+const saveScrollMemo = () => {
+  try {
+    sessionStorage.setItem("crate:scroll", JSON.stringify(Object.fromEntries([...scrollMemo].slice(-60))));
+  } catch {
+    /* egal */
+  }
+};
+
+function useScrollMemory() {
+  const loc = useLocation();
+  const type = useNavigationType();
+  useEffect(() => {
+    const key = loc.key;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const onScroll = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        scrollMemo.set(key, window.scrollY);
+        saveScrollMemo();
+      }, 120);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    // Zurück/Vor: alte Position anfahren; neue Seite: nach oben
+    const target = type === "POP" ? scrollMemo.get(key) ?? 0 : 0;
+    let tries = 0;
+    const restore = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      if (max >= target - 4 || tries > 40) {
+        window.scrollTo(0, target);
+        if (type === "POP") {
+          const last = sessionStorage.getItem(`crate:tap:${loc.pathname}`);
+          const el = last ? document.querySelector<HTMLElement>(`[data-key="${CSS.escape(last)}"]`) : null;
+          if (el) {
+            el.classList.remove("last-tapped");
+            void el.offsetWidth;
+            el.classList.add("last-tapped");
+          }
+        }
+        return;
+      }
+      tries++;
+      requestAnimationFrame(() => setTimeout(restore, 30));
+    };
+    restore();
+    return () => {
+      // Nicht hier speichern: beim Seitenwechsel ist die Position schon vom Browser verfälscht
+      window.removeEventListener("scroll", onScroll);
+      clearTimeout(t);
+    };
+  }, [loc.key, loc.pathname, type]);
+
+  // Zuletzt angetippten Listeneintrag pro Seite merken
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      // Position im Moment des Antippens festhalten, bevor die neue Seite sie verändert
+      const k = (window.history.state as { key?: string } | null)?.key;
+      if (k) {
+        scrollMemo.set(k, window.scrollY);
+        saveScrollMemo();
+      }
+      const el = (e.target as HTMLElement).closest<HTMLElement>("[data-key]");
+      if (el) sessionStorage.setItem(`crate:tap:${location.pathname}`, el.dataset.key!);
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
+}
+
 let busyCheck: () => boolean = () => false;
 const pipelineBusy = () => busyCheck();
 
 /** Nach dem Start: einmalige Bereinigung, dann Sync, wenn der letzte länger als 6 Stunden her ist (egal auf welcher Seite) */
 async function startupSync() {
-  const { migrateAudioMatching, autoPipeline, isPipelineRunning } = await import("./lib/sync");
+  const { migrateAudioMatching, migrateAlbumMatching, autoPipeline, isPipelineRunning } = await import("./lib/sync");
   busyCheck = isPipelineRunning;
   const { getKV } = await import("./lib/db");
   const { toast } = await import("./lib/store");
   await migrateAudioMatching();
+  await migrateAlbumMatching();
   void import("./lib/friends").then((f) => f.refreshMyProfile()).catch(() => undefined);
   const run = async () => {
     if (!navigator.onLine) return;
@@ -53,17 +163,87 @@ async function startupSync() {
   });
 }
 
+/**
+ * Wischen vom linken Rand zurück, wie in iOS-Apps. Nur in der installierten App
+ * (im Safari-Tab übernimmt das Safari selbst).
+ */
+function useBackGesture() {
+  const loc = useLocation();
+  useEffect(() => {
+    const standalone = matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone;
+    if (!standalone || loc.pathname === "/") return;
+    const root = document.querySelector<HTMLElement>(".app");
+    if (!root) return;
+    let x0: number | null = null;
+    let y0 = 0;
+    let dx = 0;
+    let horizontal: boolean | null = null;
+    const start = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (t.clientX > 22) return;
+      x0 = t.clientX;
+      y0 = t.clientY;
+      dx = 0;
+      horizontal = null;
+    };
+    const move = (e: TouchEvent) => {
+      if (x0 == null) return;
+      const t = e.touches[0];
+      dx = Math.max(0, t.clientX - x0);
+      if (horizontal == null && (dx > 8 || Math.abs(t.clientY - y0) > 8)) horizontal = dx > Math.abs(t.clientY - y0);
+      if (!horizontal) return;
+      root.style.transition = "none";
+      root.style.transform = `translateX(${dx}px)`;
+      root.style.boxShadow = "-12px 0 30px rgba(0,0,0,.35)";
+    };
+    const end = () => {
+      if (x0 == null) return;
+      const w = window.innerWidth;
+      if (horizontal && dx > w * 0.33) {
+        root.style.transition = "transform .22s var(--ease)";
+        root.style.transform = `translateX(${w}px)`;
+        document.documentElement.classList.add("vt-none");
+        setTimeout(() => {
+          history.back();
+          setTimeout(() => {
+            root.style.transition = "none";
+            root.style.transform = "";
+            root.style.boxShadow = "";
+            document.documentElement.classList.remove("vt-none");
+          }, 60);
+        }, 200);
+      } else {
+        root.style.transition = "transform .35s var(--spring)";
+        root.style.transform = "";
+        root.style.boxShadow = "";
+      }
+      x0 = null;
+    };
+    window.addEventListener("touchstart", start, { passive: true });
+    window.addEventListener("touchmove", move, { passive: true });
+    window.addEventListener("touchend", end);
+    window.addEventListener("touchcancel", end);
+    return () => {
+      window.removeEventListener("touchstart", start);
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", end);
+      window.removeEventListener("touchcancel", end);
+    };
+  }, [loc.pathname]);
+}
+
 export default function App() {
   const me = useStore((s) => s.me);
   const [loaded, setLoaded] = useState(false);
   const loc = useLocation();
   const [barTitle, setBarTitle] = useState<string | null>(null);
+  useScrollMemory();
+  useBackGesture();
 
   // Kompakte Titelleiste einblenden, sobald der große Titel aus dem Bild scrollt
   useEffect(() => {
     setBarTitle(null);
     document.documentElement.classList.remove("bar-on");
-    window.scrollTo(0, 0);
     let io: IntersectionObserver | undefined;
     let tries = 0;
     const attach = () => {
@@ -76,7 +256,8 @@ export default function App() {
       }
       io = new IntersectionObserver(
         ([e]) => {
-          setBarTitle(e.isIntersecting ? null : h.textContent);
+          // Seiten mit eigener Werkzeugleiste zeigen den kleinen Titel in der Leiste selbst
+          setBarTitle(e.isIntersecting || document.querySelector(".toolbar") ? null : h.textContent);
           // Klebende Werkzeugleisten rücken unter die kompakte Titelleiste
           document.documentElement.classList.toggle("bar-on", !e.isIntersecting);
         },
@@ -123,22 +304,7 @@ export default function App() {
         <div className="topbar-inner">{barTitle}</div>
       </div>
       <Suspense fallback={<div className="page" />}>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/collection" element={<Collection />} />
-        <Route path="/wants" element={<Wantlist />} />
-        <Route path="/search" element={<Search />} />
-        <Route path="/release/:id" element={<ReleasePage />} />
-        <Route path="/scan" element={<Scan />} />
-        <Route path="/shop" element={<Shop />} />
-        <Route path="/sets" element={<Sets />} />
-        <Route path="/sets/:id" element={<SetEditor />} />
-        <Route path="/stickers" element={<Stickers />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="/settings/:section" element={<Settings />} />
-        <Route path="/friends" element={<Friends />} />
-        <Route path="/friends/:username" element={<Friends />} />
-      </Routes>
+      <Outlet />
       </Suspense>
       <Jobs />
       <nav className="nav no-print">

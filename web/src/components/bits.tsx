@@ -74,6 +74,7 @@ export function RecordRow({ r, side, to }: { r: Release; side?: React.ReactNode;
       state={{ preview: { thumb: r.thumb, cover: r.cover, title: r.title, artist: r.artist } satisfies Preview }}
       viewTransition
       className="rec"
+      data-key={`r${r.id}`}
       onClick={(e) => {
         markHero(e.currentTarget);
         haptic();

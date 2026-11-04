@@ -217,7 +217,7 @@ export default function Collection() {
         </div>
       </div>
 
-      <div className="toolbar" ref={toolbar}>
+      <div className="toolbar" ref={toolbar} data-title="Sammlung">
         <div className="search-bar">
           <IconSearch />
           <input className="input" type="search" placeholder="Artist, Titel, Label, Track, Regal …" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />

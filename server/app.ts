@@ -6,7 +6,7 @@ import { seal, unseal, type Session } from "./session";
 import { authorizeUrl, discogsFetch, DiscogsBusy, getAccessToken, getRequestToken } from "./discogs";
 import { oauthHmacHeader } from "./oauthSign";
 import { recognizeRecord, recognizeRecordFree, tagVibes, tagVibesFree, type VibeInput } from "./ai";
-import { fetchPreview, lookupAudio } from "./audio";
+import { fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
 import { lastfmTags } from "./lastfm";
 
 type C = Context<{ Bindings: Env; Variables: { cfg: Config } }>;
@@ -152,6 +152,14 @@ app.get("/api/audio/lookup", async (c) => {
   if (!title) return c.json({ message: "title fehlt" }, 400);
   return c.json(await lookupAudio(c.var.cfg, c.req.query("artist") ?? "", title, Number(c.req.query("duration")) || null));
 });
+
+app.post("/api/audio/release", async (c) => {
+  const { artist, title, tracks } = await c.req.json<{ artist: string; title: string; tracks: ReleaseTrackIn[] }>();
+  if (!title || !Array.isArray(tracks)) return c.json({ message: "title und tracks nötig" }, 400);
+  return c.json(await matchRelease(artist ?? "", title, tracks.slice(0, 40)));
+});
+
+app.get("/api/audio/preview/:id", (c) => fetchPreviewById(Number(c.req.param("id"))));
 
 app.get("/api/audio/preview", (c) => fetchPreview(c.req.query("artist") ?? "", c.req.query("title") ?? "", Number(c.req.query("duration")) || null));
 

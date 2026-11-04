@@ -50,13 +50,13 @@ export default function ReleasePage() {
   }, [id]);
 
   const coverSrc = rel?.cover || rel?.thumb || preview?.cover || preview?.thumb;
-  const back = () => (history.length > 1 ? nav(-1) : nav("/"));
+  const back = () => ((window.history.state as { idx?: number } | null)?.idx ? nav(-1) : nav("/", { replace: true }));
 
   const top = (
     <div className="stage">
       {coverSrc && <div className="stage-bg" style={{ backgroundImage: `url("${coverSrc}")` }} />}
       <div className="stage-top">
-        <button className="icon-btn" onClick={back} aria-label="Zurück">
+        <button className="icon-btn" data-back onClick={back} aria-label="Zurück">
           <IconBack />
         </button>
         <div className="row" style={{ gap: 8 }}>
@@ -112,7 +112,7 @@ export default function ReleasePage() {
       setMedia({ type: "yt", id: youtubeId(video.uri)!, title: video.title });
       setPlaying(true);
     } else if (audio) {
-      audio.src = previewUrl(m.artist, m.title, dur);
+      audio.src = m.deezerId ? `/api/audio/preview/${m.deezerId}` : previewUrl(m.artist, m.title, dur);
       audio.play().catch(() => undefined);
       setMedia({ type: "deezer" });
     }

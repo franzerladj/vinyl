@@ -86,8 +86,8 @@ function analyzeOffThread(samples: Float32Array, sr: number): Promise<AudioAnaly
 export const previewUrl = (artist: string, title: string, duration?: number | null) =>
   `/api/audio/preview?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}${duration ? `&duration=${duration}` : ""}`;
 
-export async function analyzePreview(artist: string, title: string, duration?: number | null): Promise<AudioAnalysis | null> {
-  const res = await fetch(previewUrl(artist, title, duration), { credentials: "include" });
+export async function analyzePreview(artist: string, title: string, duration?: number | null, deezerId?: number | null): Promise<AudioAnalysis | null> {
+  const res = await fetch(deezerId ? `/api/audio/preview/${deezerId}` : previewUrl(artist, title, duration), { credentials: "include" });
   // 404 = keine passende Hörprobe (endgültig); andere Fehler = später nochmal versuchen
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Hörprobe ${res.status}`);
@@ -146,7 +146,7 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
       if (opts.audio && !t.analyzedAt && (t.analyzeTries ?? 0) < 3) {
         let failed = false;
         try {
-          analysis = await analyzePreview(t.artist, t.title, durationOf(t));
+          analysis = await analyzePreview(t.artist, t.title, durationOf(t), t.deezerId);
         } catch (e) {
           failed = true;
           console.warn("Analyse", t.id, e);
@@ -156,11 +156,11 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
         if (analysis) {
           patch.audioEnergy = analysis.energy;
           // Gemessene Werte nur übernehmen, wenn sie sicher genug sind und nichts Besseres da ist
-          if (!t.bpm && analysis.bpm && analysis.bpmConfidence >= 0.45) {
+          if (!t.bpm && analysis.bpm && analysis.bpmConfidence >= 0.35) {
             patch.bpm = Math.round(analysis.bpm);
             patch.bpmSource = "Analyse";
           }
-          if (!t.key && analysis.key && analysis.keyConfidence >= 0.5) {
+          if (!t.key && analysis.key && analysis.keyConfidence >= 0.35) {
             patch.key = analysis.key;
             patch.keySource = "Analyse (Schätzung)";
           }

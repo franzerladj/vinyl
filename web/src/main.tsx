@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
-import App from "./App";
+import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import App, { routes } from "./App";
 import "./styles.css";
 import { applyTheme } from "./lib/theme";
 import { registerSW } from "virtual:pwa-register";
@@ -21,10 +21,32 @@ const updateSW = registerSW({
   },
 });
 
+// Richtung des Seitenwechsels für die Animation: Zurück (Geste, Taste, Browser) gleitet nach rechts
+window.addEventListener(
+  "popstate",
+  () => {
+    document.documentElement.classList.add("vt-back");
+    document.documentElement.classList.remove("vt-tab");
+  },
+  true,
+);
+document.addEventListener(
+  "click",
+  (e) => {
+    const el = e.target as HTMLElement;
+    const a = el.closest("a, button");
+    if (!a) return;
+    const root = document.documentElement.classList;
+    root.toggle("vt-tab", Boolean(a.closest(".nav")));
+    root.toggle("vt-back", Boolean(a.closest(".back-btn, [data-back]")));
+  },
+  true,
+);
+
+const router = createBrowserRouter([{ path: "/", element: <App />, children: routes }]);
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <RouterProvider router={router} />
   </StrictMode>,
 );

@@ -350,13 +350,29 @@ video.scan { width: 100%; border-radius: var(--r-lg); background: #000; aspect-r
 
 /* --------- Seitenwechsel (View Transitions) --------- */
 @view-transition { navigation: auto; }
-::view-transition-old(root) { animation: 0.25s var(--ease) both vt-out; }
-::view-transition-new(root) { animation: 0.4s var(--ease) both vt-in; }
-::view-transition-group(hero-cover) { animation-duration: 0.5s; animation-timing-function: var(--ease); }
+/* Vor: neue Seite schiebt sich von rechts herein, alte weicht leicht nach links (wie iOS) */
+::view-transition-old(root) { animation: 0.36s var(--ease) both vt-push-out; }
+::view-transition-new(root) { animation: 0.42s var(--ease) both vt-push-in; }
+/* Zurück (Taste, Geste, Browser): umgekehrt, die aktuelle Seite gleitet nach rechts weg */
+:root.vt-back::view-transition-old(root) { animation-name: vt-pop-out; z-index: 2; }
+:root.vt-back::view-transition-new(root) { animation-name: vt-pop-in; z-index: 1; }
+/* Tabs wechseln: weiches Überblenden statt Schieben */
+:root.vt-tab::view-transition-old(root) { animation: 0.18s var(--ease) both vt-fade-out; }
+:root.vt-tab::view-transition-new(root) { animation: 0.26s var(--ease) both vt-fade-in; }
+:root.vt-none::view-transition-old(root), :root.vt-none::view-transition-new(root), :root.vt-none::view-transition-group(*) { animation: none !important; }
+::view-transition-group(hero-cover) { animation-duration: 0.45s; animation-timing-function: var(--ease); z-index: 5; }
 ::view-transition-group(nav), ::view-transition-group(topbar) { animation: none; }
 .nav { view-transition-name: nav; }
-@keyframes vt-out { to { opacity: 0; transform: scale(0.985); } }
-@keyframes vt-in { from { opacity: 0; transform: translateY(8px); } }
+@keyframes vt-push-out { to { transform: translateX(-26%); filter: brightness(0.8); } }
+@keyframes vt-push-in { from { transform: translateX(100%); } }
+@keyframes vt-pop-out { to { transform: translateX(100%); } }
+@keyframes vt-pop-in { from { transform: translateX(-26%); filter: brightness(0.8); } }
+@keyframes vt-fade-out { to { opacity: 0; } }
+@keyframes vt-fade-in { from { opacity: 0; transform: translateY(6px); } }
+
+/* Zuletzt angetippter Eintrag nach dem Zurückgehen */
+@keyframes tap-flash { 0%, 35% { background: var(--accent-soft); } 100% { background: transparent; } }
+.last-tapped { animation: tap-flash 1.6s var(--ease) both; border-radius: 12px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
@@ -400,7 +416,11 @@ video.scan { width: 100%; border-radius: var(--r-lg); background: #000; aspect-r
 .text-btn:disabled { opacity: 0.35; }
 
 /* Werkzeugleiste unter dem großen Titel (Suche, Sortieren, Filter) */
-.toolbar { position: sticky; top: 0; z-index: 12; padding: 8px var(--gutter) 10px; margin-top: calc(-1 * env(safe-area-inset-top)); padding-top: calc(env(safe-area-inset-top) + 8px); background: linear-gradient(var(--bg) 82%, transparent); }
+.toolbar { position: sticky; top: 0; z-index: 12; padding: 8px var(--gutter) 10px; margin-top: calc(-1 * env(safe-area-inset-top)); padding-top: calc(env(safe-area-inset-top) + 8px); background: var(--bg); border-bottom: 0.5px solid transparent; transition: background-color 0.25s, border-color 0.25s; }
+/* Klebt die Leiste oben, wird sie zur Glas-Leiste mit kleinem Titel (wie iOS), statt in der Luft zu hängen */
+.bar-on .toolbar { background: var(--material); -webkit-backdrop-filter: saturate(180%) blur(22px); backdrop-filter: saturate(180%) blur(22px); border-bottom-color: var(--hairline); }
+.toolbar::before { content: attr(data-title); display: block; height: 0; overflow: hidden; text-align: center; font-weight: 600; font-size: 17px; line-height: 30px; opacity: 0; transition: height 0.3s var(--ease), opacity 0.2s; }
+.bar-on .toolbar::before { height: 30px; opacity: 1; margin-top: -2px; }
 .toolbar-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; overflow-x: auto; scrollbar-width: none; margin-left: calc(-1 * var(--gutter)); margin-right: calc(-1 * var(--gutter)); padding: 0 var(--gutter); }
 .toolbar-row::-webkit-scrollbar { display: none; }
 .tool-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border-radius: 999px; border: 0; background: var(--surface-2); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; transition: transform 0.35s var(--spring), background-color 0.2s; }
@@ -414,7 +434,7 @@ video.scan { width: 100%; border-radius: var(--r-lg); background: #000; aspect-r
 .result-line { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 13px; font-weight: 500; padding: 4px 0 2px; }
 
 /* Abschnitte mit klebenden Überschriften */
-.section-head { position: sticky; top: var(--sticky-top, 0px); z-index: 5; display: flex; align-items: baseline; gap: 8px; padding: 14px 0 6px; background: var(--bg); font: 700 15px/1.2 var(--font-display); letter-spacing: -0.01em; }
+.section-head { position: sticky; top: var(--sticky-top, 0px); z-index: 5; display: flex; align-items: baseline; gap: 8px; padding: 12px var(--gutter) 6px; margin: 0 calc(-1 * var(--gutter)); background: color-mix(in srgb, var(--bg) 94%, transparent); -webkit-backdrop-filter: saturate(180%) blur(22px); backdrop-filter: saturate(180%) blur(22px); font: 700 15px/1.2 var(--font-display); letter-spacing: -0.01em; }
 .section-head .n { color: var(--text-3); font-size: 13px; font-weight: 600; }
 
 /* A–Z-Leiste am rechten Rand */
@@ -488,12 +508,13 @@ video.scan { width: 100%; border-radius: var(--r-lg); background: #000; aspect-r
 /* Kompakte Titelleiste sichtbar: klebende Elemente darunter einreihen */
 :root { --bar-h: 0px; }
 :root.bar-on { --bar-h: calc(44px + env(safe-area-inset-top)); }
-.toolbar { transition: top 0.3s var(--ease), padding-top 0.3s var(--ease); }
-.bar-on .toolbar { top: var(--bar-h); padding-top: 8px; }
-.section-head { top: calc(var(--sticky-top, 0px) + var(--bar-h)); }
+
 .back-btn span { overflow: hidden; text-overflow: ellipsis; }
 .back-btn svg { flex: none; }
 
 /* Eigenes Herunterziehen auf der Startseite: startet den Sync statt die Seite neu zu laden */
 .ptr { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 8px); z-index: 26; translate: -50% 0; width: 40px; height: 40px; border-radius: 50%; background: var(--material); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: var(--shadow); display: grid; place-items: center; color: var(--accent); pointer-events: none; transition: opacity 0.2s; }
 .ptr svg { width: 20px; height: 20px; }
+
+/* Läuft ein Hintergrund-Job, rückt der runde Knopf über die Fortschrittsanzeige */
+.app:has(.jobs) .fab { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 86px); transition: bottom 0.4s var(--spring); }

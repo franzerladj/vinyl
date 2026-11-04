@@ -77,3 +77,79 @@ export async function fetchPreview(artist: string, title: string, duration?: num
   if (!r.ok || !r.body) return new Response("Hörprobe nicht ladbar", { status: 502 });
   return new Response(r.body, { headers: { "Content-Type": r.headers.get("Content-Type") ?? "audio/mpeg", "Cache-Control": "private, max-age=3600" } });
 }
+
+// ---------------------------------------------------------------------------
+// Ganze Platte auf einmal: Album bei Deezer suchen und Tracks über Titel, Mix und Länge zuordnen.
+// Schneller und genauer als jeder Track einzeln.
+// ---------------------------------------------------------------------------
+export interface ReleaseTrackIn {
+  key: string;
+  title: string;
+  artist?: string;
+  duration?: number | null;
+}
+export interface ReleaseTrackOut {
+  deezerId: number;
+  bpm: number | null;
+  title: string;
+  score: number;
+}
+
+type DzAlbum = { id: number; title: string; artist?: { name: string }; nb_tracks?: number };
+type DzTrack = { id: number; title: string; title_version?: string; duration?: number; artist?: { name: string } };
+
+export async function matchRelease(artist: string, title: string, tracks: ReleaseTrackIn[]): Promise<{ album: string | null; matches: Record<string, ReleaseTrackOut> }> {
+  const get = async <T>(url: string): Promise<T | null> => {
+    const r = await fetch(url);
+    return r.ok ? ((await r.json()) as T) : null;
+  };
+  const q = async (s: string) => (await get<{ data?: DzAlbum[] }>(`https://api.deezer.com/search/album?q=${encodeURIComponent(s)}&limit=6`))?.data ?? [];
+  const cleanTitle = title.replace(/\s*\(.*?\)\s*/g, " ").trim();
+  const seen = new Map<number, DzAlbum>();
+  for (const a of [...(await q(`artist:"${clean(artist)}" album:"${cleanTitle}"`)), ...(await q(`${artist} ${cleanTitle}`))]) seen.set(a.id, a);
+  // Album mit passendem Titel und Artist wählen
+  let best: { a: DzAlbum; s: number } | null = null;
+  for (const a of seen.values()) {
+    const s = matchScore({ title: cleanTitle, artist }, `${a.artist?.name ?? ""} ${a.title}`);
+    if (!best || s > best.s) best = { a, s };
+  }
+  if (!best || best.s < 0.5) return { album: null, matches: {} };
+  const list = (await get<{ data?: DzTrack[] }>(`https://api.deezer.com/album/${best.a.id}/tracks?limit=60`))?.data ?? [];
+  // Jeden Discogs-Track dem besten freien Deezer-Track zuordnen
+  const pairs: { key: string; t: DzTrack; s: number }[] = [];
+  for (const tr of tracks) {
+    for (const d of list) {
+      const s = matchScore({ title: tr.title, artist: tr.artist || artist, duration: tr.duration }, `${d.artist?.name ?? ""} ${d.title} ${d.title_version ?? ""}`, d.duration);
+      if (s >= 0.5) pairs.push({ key: tr.key, t: d, s });
+    }
+  }
+  pairs.sort((x, y) => y.s - x.s);
+  const usedKeys = new Set<string>();
+  const usedIds = new Set<number>();
+  const chosen: { key: string; t: DzTrack; s: number }[] = [];
+  for (const p of pairs) {
+    if (usedKeys.has(p.key) || usedIds.has(p.t.id)) continue;
+    usedKeys.add(p.key);
+    usedIds.add(p.t.id);
+    chosen.push(p);
+  }
+  // BPM steht nur in den Track-Details (Cloudflare erlaubt ~50 Unteranfragen, daher begrenzt)
+  const details = await Promise.all(chosen.slice(0, 40).map((p) => get<{ bpm?: number }>(`https://api.deezer.com/track/${p.t.id}`)));
+  const matches: Record<string, ReleaseTrackOut> = {};
+  chosen.slice(0, 40).forEach((p, i) => {
+    const bpm = details[i]?.bpm;
+    matches[p.key] = { deezerId: p.t.id, bpm: bpm && bpm > 0 ? Math.round(bpm) : null, title: `${p.t.title}${p.t.title_version ? ` ${p.t.title_version}` : ""}`, score: Math.round(p.s * 100) / 100 };
+  });
+  return { album: `${best.a.artist?.name ?? ""} – ${best.a.title}`, matches };
+}
+
+/** Hörprobe zu einer bekannten Deezer-Track-ID (frische, signierte URL von Deezer) */
+export async function fetchPreviewById(id: number): Promise<Response> {
+  const r = await fetch(`https://api.deezer.com/track/${id}`);
+  const t = r.ok ? ((await r.json()) as { preview?: string }) : null;
+  const url = t?.preview;
+  if (!url || !/^https:\/\/[a-z0-9-]+\.dzcdn\.net\//.test(url)) return new Response("Keine Hörprobe", { status: 404 });
+  const a = await fetch(url);
+  if (!a.ok || !a.body) return new Response("Hörprobe nicht ladbar", { status: 502 });
+  return new Response(a.body, { headers: { "Content-Type": a.headers.get("Content-Type") ?? "audio/mpeg", "Cache-Control": "private, max-age=3600" } });
+}

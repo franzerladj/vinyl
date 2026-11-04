@@ -8,6 +8,7 @@ import { Seg, Sheet } from "../components/bits";
 import { IconBack, IconDown, IconUp, IconX } from "../components/icons";
 import { TrackLine } from "./Sets";
 import { buildSetlist, targetEnergy, type Curve } from "../../../shared/setlist";
+import { estimateBpm, estimateVibe } from "../../../shared/vibes";
 import { bpmDelta, keyDistance, parseKey } from "../../../shared/music";
 
 const CURVES: [Curve, string, string][] = [
@@ -23,7 +24,7 @@ export default function SetEditor() {
   const nav = useNavigate();
   const isNew = id === "new";
   const [set, setSet] = useState<DJSet>({ name: "", curve: "journey", trackIds: [], createdAt: Date.now() });
-  const [cfg, setCfg] = useState({ length: 20, startBpm: "", endBpm: "", maxJump: 6, keyWeight: 1, style: "", minStars: 0, onlyWithBpm: true, crate: "" });
+  const [cfg, setCfg] = useState({ length: 20, startBpm: "", endBpm: "", maxJump: 6, keyWeight: 1, style: "", minStars: 0, onlyWithBpm: false, crate: "" });
   const [adding, setAdding] = useState(false);
   const [view, setView] = useState<"set" | "crate">("set");
 
@@ -61,10 +62,25 @@ export default function SetEditor() {
     });
   }, [data, cfg]);
 
+  // Fehlende BPM schätzen (Nachbartracks der Platte oder typisches Tempo des Styles), damit mehr Tracks ins Set passen
+  const estBpm = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!data) return m;
+    const byRel = new Map<number, number[]>();
+    data.tracks.forEach((t) => t.bpm && byRel.set(t.releaseId, [...(byRel.get(t.releaseId) ?? []), t.bpm]));
+    for (const t of data.tracks) {
+      if (t.bpm) continue;
+      const e = estimateBpm(data.rels.get(t.releaseId)?.styles ?? [], byRel.get(t.releaseId) ?? []);
+      if (e) m.set(t.id, e);
+    }
+    return m;
+  }, [data]);
+  const estimatedInSet = set.trackIds.filter((id) => estBpm.has(id)).length;
+
   const generate = () => {
     if (!pool.length) return toast("Keine Tracks im Pool. Filter lockern oder erst BPM ergänzen.");
     const order = buildSetlist(
-      pool.map((t) => ({ id: t.id, bpm: t.bpm ?? null, key: t.key ?? null, energy: t.energy ?? null })),
+      pool.map((t) => ({ id: t.id, bpm: t.bpm ?? estBpm.get(t.id) ?? null, key: t.key ?? null, energy: t.energy ?? estimateVibe({ styles: data?.rels.get(t.releaseId)?.styles ?? [], bpm: t.bpm ?? estBpm.get(t.id) }).energy })),
       {
         length: cfg.length,
         curve: set.curve as Curve,
@@ -219,12 +235,12 @@ export default function SetEditor() {
               </select>
             </div>
             <label className="row sub">
-              <input type="checkbox" checked={cfg.onlyWithBpm} onChange={(e) => setCfg({ ...cfg, onlyWithBpm: e.target.checked })} /> nur Tracks mit BPM
+              <input type="checkbox" checked={cfg.onlyWithBpm} onChange={(e) => setCfg({ ...cfg, onlyWithBpm: e.target.checked })} /> nur Tracks mit gemessenem BPM (sonst wird fehlendes Tempo aus Platte und Style geschätzt)
             </label>
             <button className="btn primary" onClick={generate}>
               Vorschlag erstellen ({pool.length} Tracks im Pool)
             </button>
-            <span className="sub">Energie-Werte kommen aus deinen Track-Daten (manuell oder per KI „Vibes“). Ohne Energie wird mit 5 gerechnet.</span>
+            <span className="sub">Energie und Vibes kommen aus deinen Track-Daten. Fehlt etwas, schätzt die App aus Style und Tempo.{estimatedInSet > 0 ? ` Im aktuellen Set sind ${estimatedInSet} Tempi geschätzt (mit ~ markiert).` : ""}</span>
           </div>
         </details>
 
@@ -264,7 +280,12 @@ export default function SetEditor() {
                   <TrackLine
                     t={t}
                     r={data?.rels.get(t.releaseId)}
-                    extra={<span className="sub">#{i + 1}</span>}
+                    extra={
+                      <span className="sub">
+                        #{i + 1}
+                        {!t.bpm && estBpm.has(t.id) ? ` · ~${estBpm.get(t.id)} BPM geschätzt` : ""}
+                      </span>
+                    }
                     actions={
                       <div className="mini-actions">
                         <button className="icon-btn" onClick={() => move(i, -1)} aria-label="hoch">

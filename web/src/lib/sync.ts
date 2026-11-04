@@ -156,39 +156,84 @@ export async function fetchMissingDetails(scope: "collection" | "wants" = "colle
 
 interface AudioInfo { bpm: number | null; key: string | null; source: string[]; previewUrl: string | null }
 
-/** BPM/Key für Tracks ohne Werte nachschlagen (GetSongBPM / Deezer über den Server) */
+/**
+ * BPM/Key für Tracks ohne Werte nachschlagen.
+ * Schritt 1 pro Platte: ganzes Album bei Deezer zuordnen (eine Anfrage, genaue Zuordnung über Mix und Länge).
+ * Schritt 2 für den Rest: einzeln suchen (Deezer und, falls eingerichtet, GetSongBPM mit Tonart).
+ */
 export async function lookupAudioFor(trackIds?: string[]) {
   const all = trackIds ? ((await db.tracks.bulkGet(trackIds)).filter(Boolean) as TrackMeta[]) : await db.tracks.toArray();
   const collIds = new Set((await db.collection.toArray()).map((c) => c.releaseId));
   const todo = all.filter((t) => (trackIds || collIds.has(t.releaseId)) && !t.lookedUpAt && (!t.bpm || !t.key));
   if (!todo.length) return 0;
+  const rels = new Map((await db.releases.bulkGet([...new Set(todo.map((t) => t.releaseId))])).filter(Boolean).map((r) => [r!.id, r!]));
   const durations = new Map<string, string | undefined>();
-  for (const r of (await db.releases.bulkGet([...new Set(todo.map((t) => t.releaseId))])).filter(Boolean)) {
-    realTracks(r!.tracklist).forEach((x, i) => durations.set(trackId(r!.id, x.position, i), x.duration));
-  }
+  for (const r of rels.values()) realTracks(r.tracklist).forEach((x, i) => durations.set(trackId(r.id, x.position, i), x.duration));
+  const byRelease = new Map<number, TrackMeta[]>();
+  todo.forEach((t) => byRelease.set(t.releaseId, [...(byRelease.get(t.releaseId) ?? []), t]));
+
   const job = "audio";
   jobUpdate(job, { label: "BPM & Key suchen", done: 0, total: todo.length });
   let found = 0;
+  let done = 0;
+  const keyLookup = getState().me?.features.keyLookup;
   try {
-    let done = 0;
-    // Drei Anfragen gleichzeitig: Deezer und GetSongBPM sind nicht das Discogs-Limit
-    await pool(todo, 3, async (t) => {
-      try {
-        const dur = parseDuration(durations.get(t.id));
-        const info = await api<AudioInfo>(`/api/audio/lookup?artist=${encodeURIComponent(t.artist)}&title=${encodeURIComponent(t.title)}${dur ? `&duration=${dur}` : ""}`);
-        const patch: Partial<TrackMeta> = { lookedUpAt: Date.now() };
-        if (!t.bpm && info.bpm) patch.bpm = info.bpm;
-        if (!t.key && info.key) patch.key = info.key;
-        if (patch.bpm || patch.key) {
-          patch.bpmSource = info.source.join(", ");
-          found++;
+    await pool([...byRelease.entries()], 3, async ([rid, tracks]) => {
+      const r = rels.get(rid);
+      const rest: TrackMeta[] = [];
+      // 1. Album-Zuordnung
+      if (r) {
+        try {
+          const res = await api<{ matches: Record<string, { deezerId: number; bpm: number | null }> }>("/api/audio/release", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ artist: r.artist, title: r.title, tracks: tracks.map((t) => ({ key: t.id, title: t.title, artist: t.artist, duration: parseDuration(durations.get(t.id)) })) }),
+          });
+          for (const t of tracks) {
+            const m = res.matches[t.id];
+            if (!m) {
+              rest.push(t);
+              continue;
+            }
+            const patch: Partial<TrackMeta> = { deezerId: m.deezerId };
+            if (!t.bpm && m.bpm) {
+              patch.bpm = m.bpm;
+              patch.bpmSource = "Deezer (Album)";
+              found++;
+            }
+            // Ohne Tonart weiter einzeln suchen, falls GetSongBPM eingerichtet ist
+            if (keyLookup && !t.key) rest.push({ ...t, ...patch });
+            else {
+              patch.lookedUpAt = Date.now();
+              done++;
+            }
+            await db.tracks.update(t.id, patch);
+          }
+        } catch (e) {
+          console.warn("Album", rid, e);
+          rest.push(...tracks);
         }
-        await db.tracks.update(t.id, patch);
-      } catch (e) {
-        // Netzfehler: nicht als erledigt markieren, beim nächsten Durchlauf erneut versuchen
-        console.warn("audio", t.id, e);
+      } else rest.push(...tracks);
+      jobUpdate(job, { done });
+      // 2. Einzeln suchen
+      for (const t of rest) {
+        try {
+          const dur = parseDuration(durations.get(t.id));
+          const info = await api<AudioInfo>(`/api/audio/lookup?artist=${encodeURIComponent(t.artist)}&title=${encodeURIComponent(t.title)}${dur ? `&duration=${dur}` : ""}`);
+          const patch: Partial<TrackMeta> = { lookedUpAt: Date.now() };
+          if (!t.bpm && info.bpm) patch.bpm = info.bpm;
+          if (!t.key && info.key) patch.key = info.key;
+          if (patch.bpm || patch.key) {
+            patch.bpmSource = info.source.join(", ");
+            found++;
+          }
+          await db.tracks.update(t.id, patch);
+        } catch (e) {
+          // Netzfehler: nicht als erledigt markieren, beim nächsten Durchlauf erneut versuchen
+          console.warn("audio", t.id, e);
+        }
+        jobUpdate(job, { done: ++done });
       }
-      jobUpdate(job, { done: ++done });
     });
   } finally {
     jobUpdate(job, null);
@@ -408,4 +453,17 @@ export async function migrateAudioMatching() {
   });
   await setKV("migration-match-v1", true);
   await setKV("lastCollectionSync", 0); // nächster Start analysiert neu
+}
+
+/** Einmalig nach Einführung der Album-Zuordnung: Tracks ohne BPM nochmal suchen lassen */
+export async function migrateAlbumMatching() {
+  if (await getKV("migration-album-v1", false)) return;
+  await db.tracks.toCollection().modify((t) => {
+    if (!t.bpm) {
+      t.lookedUpAt = undefined;
+      t.analyzedAt = undefined;
+      t.analyzeTries = undefined;
+    }
+  });
+  await setKV("migration-album-v1", true);
 }

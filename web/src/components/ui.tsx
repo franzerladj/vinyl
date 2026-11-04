@@ -41,7 +41,15 @@ export function NavBar({ title, backLabel = "Zurück", backTo, right, titleOnScr
   return (
     <div className={`navbar no-print ${scrolled ? "scrolled" : ""}`}>
       <div className="nb-left">
-        <button className="back-btn" onClick={() => (backTo ? nav(backTo, { viewTransition: true }) : history.length > 1 ? nav(-1) : nav("/", { viewTransition: true }))}>
+        <button
+          className="back-btn"
+          onClick={() => {
+            // Gibt es einen Eintrag davor, echt zurückgehen (Scroll-Position bleibt erhalten)
+            const idx = (window.history.state as { idx?: number } | null)?.idx ?? 0;
+            if (idx > 0) nav(-1);
+            else nav(backTo ?? "/", { viewTransition: true, replace: true });
+          }}
+        >
           <IconBack />
           <span>{backLabel}</span>
         </button>
