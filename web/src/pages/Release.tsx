@@ -36,6 +36,7 @@ export default function ReleasePage() {
   const meta = useLiveQuery(() => db.recordMeta.get(id), [id]);
   const stat = useLiveQuery(() => db.marketStats.get(id), [id]);
   const price = useLiveQuery(async () => (await loadPriceInfo([id])).get(id), [id]);
+  const offers = useLiveQuery(async () => (await db.listings.where("releaseId").equals(id).toArray()).sort((a, b) => a.price - b.price), [id], []);
 
   useEffect(() => {
     db.releases.get(id).then((r) => {
@@ -208,6 +209,28 @@ export default function ReleasePage() {
               />
             </label>
           </div>
+        )}
+
+        {offers.length > 0 && !inColl && (
+          <>
+            <h2>Bei deinen Händlern</h2>
+            <div className="group">
+              {offers.slice(0, 5).map((o) => (
+                <a key={o.listingId} className="set-row press" href={`https://www.discogs.com/sell/item/${o.listingId}`} target="_blank" rel="noreferrer">
+                  <span className="label">
+                    {o.seller}
+                    <small>
+                      {o.condition}
+                      {o.sleeveCondition ? ` · Hülle ${o.sleeveCondition}` : ""}
+                      {o.shipsFrom ? ` · aus ${o.shipsFrom}` : ""}
+                    </small>
+                  </span>
+                  <b style={{ fontVariantNumeric: "tabular-nums" }}>{money(o.price)}</b>
+                  <span className="chev" style={{ color: "var(--text-3)" }}>↗</span>
+                </a>
+              ))}
+            </div>
+          </>
         )}
 
         {rel.styles.length > 0 && (

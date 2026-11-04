@@ -21,13 +21,28 @@ interface ShopSettings {
 }
 const DEFAULTS: ShopSettings = { firstItem: 7, perExtraItem: 1.5, maxPrice: "", minRating: "98", minCondition: "VG+", maxSellers: "" };
 
+/** Händlernamen aus Eingabe oder kopierten Shop-Links lesen (discogs.com/seller/NAME/profile) */
+export function parseSellerNames(input: string): string[] {
+  return [
+    ...new Set(
+      input
+        .split(/[\s,;]+/)
+        .map((x) => x.trim())
+        .filter(Boolean)
+        .map((x) => x.match(/discogs\.com\/(?:[a-z]{2}\/)?(?:seller|user|shop)\/([^/?#]+)/i)?.[1] ?? (x.includes("/") ? "" : x))
+        .map((x) => decodeURIComponent(x))
+        .filter((x) => /^[\w.\-]{2,40}$/.test(x)),
+    ),
+  ];
+}
+
 async function importListings(list: Listing[]) {
   const now = Date.now();
   await db.listings.bulkPut(list.map((l) => ({ ...l, importedAt: now })));
 }
 
 export default function Shop() {
-  const [tab, setTab] = useState<"basket" | "budget" | "sellers" | "import">("basket");
+  const [tab, setTab] = useState<"basket" | "budget" | "sellers">("basket");
   const [budget, setBudget] = useState("");
   const [settings, setSettings] = useState<ShopSettings>(DEFAULTS);
   const [paste, setPaste] = useState("");
@@ -138,12 +153,11 @@ export default function Shop() {
             ["basket", "Warenkorb"],
             ["budget", "Budget"],
             ["sellers", "Händler"],
-            ["import", "Angebote"],
           ]}
           onChange={setTab}
         />
 
-        {tab !== "import" && (
+        {tab !== "sellers" && (
           <details className="card">
             <summary style={{ cursor: "pointer", fontWeight: 600 }}>Regeln & Versand</summary>
             <div className="grid2" style={{ marginTop: 10 }}>
@@ -266,7 +280,7 @@ export default function Shop() {
                 {(
                   [
                     ["sellers", "★", "#ff9f0a", "Lieblingshändler anlegen", "Ihr Inventar wird nach jedem Sync automatisch durchsucht"],
-                    ["import", "⌕", "#0a84ff", "Ganzen Marktplatz einlesen", "Per Lesezeichen auf discogs.com, einmal einrichten"],
+                    ["sellers", "↗", "#0a84ff", "Shop-Link einfügen", "Auf Discogs beim Händler „Teilen“ antippen und den Link hier einfügen"],
                     ["budget", "€", "#30d158", "Budget planen", "Was bekomme ich für mein Geld? Geht auch ohne Angebote"],
                   ] as const
                 ).map(([t, i, c, l, d]) => (
@@ -295,7 +309,7 @@ export default function Shop() {
                   </button>
                 )}
               </div>
-              <span className="sub">Die App durchsucht ihr Inventar nach jedem Sync automatisch nach deinen Wants. Dafür braucht es kein Lesezeichen.</span>
+              <span className="sub">Die App durchsucht ihr Inventar über die offizielle Discogs-Schnittstelle nach jedem Sync automatisch nach deinen Wants und rechnet daraus den Warenkorb.</span>
               {favorites.map((f) => (
                 <div key={f.name} className="row">
                   <span style={{ flex: 1, minWidth: 0 }} className="rec-title">
@@ -307,20 +321,23 @@ export default function Shop() {
                   </button>
                 </div>
               ))}
-              <div className="row">
-                <input className="input" placeholder="Händlername hinzufügen" value={sellerName} onChange={(e) => setSellerName(e.target.value)} />
-                <button
-                  className="btn"
-                  onClick={async () => {
-                    const n = sellerName.trim();
-                    if (!n) return;
+              <form
+                className="row"
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  const names = parseSellerNames(sellerName);
+                  if (!names.length) return toast("Kein Händlername oder Shop-Link erkannt");
+                  setSellerName("");
+                  for (const n of names) {
                     if (!favorites.some((f) => f.name === n)) await toggleFavorite(n);
                     await doScan(n);
-                  }}
-                >
-                  + Prüfen
-                </button>
-              </div>
+                  }
+                }}
+              >
+                <input className="input" placeholder="Name oder Shop-Link" value={sellerName} onChange={(e) => setSellerName(e.target.value)} autoCapitalize="off" autoCorrect="off" />
+                <button className="btn">+ Prüfen</button>
+              </form>
+              <span className="tiny">Tipp: Auf discogs.com beim Händler auf „Teilen“ tippen, Link kopieren und hier einfügen. Mehrere gehen auch, mit Komma getrennt.</span>
             </div>
             {ranking.length > 0 && <h3>Wer hat die meisten deiner Wants?</h3>}
             <div className="list">
@@ -348,6 +365,56 @@ export default function Shop() {
                 );
               })}
             </div>
+            <details className="card" style={{ marginTop: 12 }}>
+              <summary style={{ cursor: "pointer", fontWeight: 600 }}>Profi: den ganzen Marktplatz einlesen</summary>
+              <p className="sub">
+                Discogs gibt Marktplatz-Angebote aller Händler nicht über die Schnittstelle heraus und sperrt Server, die die Seiten abrufen. Wer trotzdem den ganzen Markt will, kann am Rechner ein Lesezeichen nutzen, das auf discogs.com in deinem eigenen Browser läuft. In der späteren App aus dem App Store geht das ohne Lesezeichen über einen eingebauten Browser.
+              </p>
+              <div className="stack">
+            <div className="stack" style={{ paddingTop: 8 }}>
+              <b>1. Lesezeichen „Crate holen“ einrichten (einmalig)</b>
+              <span className="sub">
+                Discogs gibt Marktplatz-Angebote nicht über die API heraus. Das Lesezeichen läuft deshalb direkt auf discogs.com in deinem Browser, liest die Seite „Wantlist im Marktplatz“ und schickt die Angebote hierher.
+              </span>
+              <span className="sub">
+                <b>Am Rechner:</b> diesen Link in die Lesezeichenleiste ziehen:{" "}
+                {/* React blockt javascript:-Links im JSX, daher per ref setzen */}
+                <a className="badge accent" ref={(el) => el?.setAttribute("href", code)} onClick={(e) => e.preventDefault()}>
+                  Crate holen
+                </a>
+              </span>
+              <span className="sub">
+                <b>Am Handy:</b> beliebige Seite als Lesezeichen speichern, Lesezeichen bearbeiten, Name „Crate holen“, als Adresse den Code unten einfügen.
+              </span>
+              <div className="code">{code.slice(0, 160)}…</div>
+              <button className="btn small" onClick={() => navigator.clipboard.writeText(code).then(() => toast("Code kopiert"))}>
+                Code kopieren
+              </button>
+            </div>
+            <div className="stack" style={{ paddingTop: 8 }}>
+              <b>2. Auf Discogs ausführen</b>
+              <span className="sub">
+                Öffne <a href="https://www.discogs.com/sell/mywants" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>discogs.com/sell/mywants</a> (eingeloggt, gern mit Filter „Versand nach Deutschland“ und Währung EUR). Dann das Lesezeichen antippen. Am Handy: in die Adressleiste „Crate holen“ tippen und das Lesezeichen auswählen.
+              </span>
+            </div>
+            <details>
+              <summary style={{ cursor: "pointer" }}>Export einfügen (falls Pop-up blockiert war)</summary>
+              <textarea className="input" rows={4} value={paste} onChange={(e) => setPaste(e.target.value)} style={{ marginTop: 8 }} />
+              <button className="btn small" style={{ marginTop: 8 }} onClick={doPaste}>
+                Importieren
+              </button>
+            </details>
+            <button
+              className="btn small ghost"
+              onClick={async () => {
+                await db.listings.clear();
+                toast("Alte Angebote gelöscht");
+              }}
+            >
+              Alle importierten Angebote löschen
+            </button>
+              </div>
+            </details>
           </>
         )}
 
@@ -404,62 +471,6 @@ export default function Shop() {
           </>
         )}
 
-        {tab === "import" && (
-          <>
-            <div className="card stack">
-              <b>1. Lesezeichen „Crate holen“ einrichten (einmalig)</b>
-              <span className="sub">
-                Discogs gibt Marktplatz-Angebote nicht über die API heraus. Das Lesezeichen läuft deshalb direkt auf discogs.com in deinem Browser, liest die Seite „Wantlist im Marktplatz“ und schickt die Angebote hierher.
-              </span>
-              <span className="sub">
-                <b>Am Rechner:</b> diesen Link in die Lesezeichenleiste ziehen:{" "}
-                {/* React blockt javascript:-Links im JSX, daher per ref setzen */}
-                <a className="badge accent" ref={(el) => el?.setAttribute("href", code)} onClick={(e) => e.preventDefault()}>
-                  Crate holen
-                </a>
-              </span>
-              <span className="sub">
-                <b>Am Handy:</b> beliebige Seite als Lesezeichen speichern, Lesezeichen bearbeiten, Name „Crate holen“, als Adresse den Code unten einfügen.
-              </span>
-              <div className="code">{code.slice(0, 160)}…</div>
-              <button className="btn small" onClick={() => navigator.clipboard.writeText(code).then(() => toast("Code kopiert"))}>
-                Code kopieren
-              </button>
-            </div>
-            <div className="card stack">
-              <b>2. Auf Discogs ausführen</b>
-              <span className="sub">
-                Öffne <a href="https://www.discogs.com/sell/mywants" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>discogs.com/sell/mywants</a> (eingeloggt, gern mit Filter „Versand nach Deutschland“ und Währung EUR). Dann das Lesezeichen antippen. Am Handy: in die Adressleiste „Crate holen“ tippen und das Lesezeichen auswählen.
-              </span>
-            </div>
-            <div className="card stack">
-              <b>Alternativ: Inventar eines Händlers prüfen</b>
-              <span className="sub">Über die offizielle API. Findet alle deine Wants im Shop eines bestimmten Händlers (bis 5000 Artikel).</span>
-              <div className="row">
-                <input className="input" placeholder="Händlername" value={sellerName} onChange={(e) => setSellerName(e.target.value)} />
-                <button className="btn" onClick={() => doScan()}>
-                  Prüfen
-                </button>
-              </div>
-            </div>
-            <details className="card">
-              <summary style={{ cursor: "pointer" }}>Export einfügen (falls Pop-up blockiert war)</summary>
-              <textarea className="input" rows={4} value={paste} onChange={(e) => setPaste(e.target.value)} style={{ marginTop: 8 }} />
-              <button className="btn small" style={{ marginTop: 8 }} onClick={doPaste}>
-                Importieren
-              </button>
-            </details>
-            <button
-              className="btn small ghost"
-              onClick={async () => {
-                await db.listings.clear();
-                toast("Alte Angebote gelöscht");
-              }}
-            >
-              Alle importierten Angebote löschen
-            </button>
-          </>
-        )}
       </div>
     </>
   );

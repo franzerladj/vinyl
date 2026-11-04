@@ -617,7 +617,7 @@ function AboutPage() {
 
 const FAQ: [string, string][] = [
   ["Warum fehlen bei manchen Tracks BPM oder Key?", "Für viele Underground-Pressungen gibt es online keine Daten, und eine Hörprobe nutzt die App nur, wenn Titel, Mix und Länge passen. Tippe auf den Track: Während das Video läuft, misst du das Tempo per TAP selbst."],
-  ["Wie spare ich Versand?", "Unter Shoppen findest du die Händler mit den meisten deiner Wants. Lieblingshändler prüft die App nach jedem Sync automatisch. Für den ganzen Markt gibt es das Lesezeichen „Crate holen“."],
+  ["Wie spare ich Versand?", "Unter Shoppen findest du die Händler mit den meisten deiner Wants. Lieblingshändler prüft die App nach jedem Sync automatisch. Neue Händler fügst du dort per Name oder Shop-Link hinzu."],
   ["Was bedeuten die Farben bei den Preisen?", "Grün: unter Marktwert. Gelb: fair. Rot: gerade teuer. Grundlage ist die Discogs-Preisempfehlung oder dein eigener Preisverlauf."],
   ["Wie funktionieren die Camelot-Keys?", "Jede Tonart hat eine Nummer und einen Buchstaben (A = Moll, B = Dur). Harmonisch passen dieselbe Zahl, ±1 und der Wechsel zwischen A und B bei gleicher Zahl."],
   ["Was ist der Unterschied zwischen Einleger, Obi und Sticker?", "Der Einleger kommt vor das Cover in die transparente Außenhülle. Das Obi ist ein schmaler Streifen für die Seite, der Sticker klebt auf der Außenhülle."],
