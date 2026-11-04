@@ -8,12 +8,13 @@ import { getSheetsConfig, pullTracksFromSheets, pushToSheets, type SheetsConfig 
 import { autoPipeline, fetchMissingDetails, getAutoSettings, lookupAudioFor, tagVibes, type AutoSettings } from "../lib/sync";
 import { suggestionsState } from "../lib/prices";
 import { toast, useStore } from "../lib/store";
-import { getTheme, hapticsEnabled, setHaptics, setTheme, type Theme } from "../lib/theme";
+import { getTheme, hapticsEnabled, setHaptics, setTheme, setYtConsent, ytConsent, type Theme } from "../lib/theme";
 import { Avatar, Seg } from "../components/bits";
 import type { MyProfile } from "../lib/friends";
 import { NavBar, Switch } from "../components/ui";
 import {
   IconBolt,
+  IconPlay,
   IconChevron,
   IconCoin,
   IconDatabase,
@@ -117,6 +118,7 @@ function Overview() {
   const me = useStore((s) => s.me);
   const [theme, setT] = useState<Theme>(getTheme());
   const [haptics, setH] = useState(hapticsEnabled());
+  const [yt, setYt] = useState(ytConsent() === "yes");
   const profile = useLiveQuery(() => getKV<MyProfile | null>("myProfile", null));
   const stats = useLiveQuery(async () => ({
     friends: await db.friends.count(),
@@ -192,6 +194,22 @@ function Overview() {
                 onChange={(v) => {
                   setH(v);
                   setHaptics(v);
+                }}
+              />
+            }
+          />
+          <Row
+            icon={<IconPlay />}
+            color="#ff3b30"
+            label="YouTube-Videos direkt laden"
+            sub="Sonst erst nach Antippen. YouTube erfährt dabei deine IP-Adresse."
+            right={
+              <Switch
+                checked={yt}
+                label="YouTube-Videos direkt laden"
+                onChange={(v) => {
+                  setYt(v);
+                  setYtConsent(v ? "yes" : "no");
                 }}
               />
             }

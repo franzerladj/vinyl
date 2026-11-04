@@ -118,7 +118,7 @@ export function Datenschutz() {
 
         <h2>6. Videos von YouTube</h2>
         <p>
-          Videos werden erst geladen, wenn du sie antippst. Dann stellt dein Gerät eine Verbindung zu YouTube (Google Ireland Ltd.) her, im erweiterten Datenschutzmodus (youtube-nocookie.com). Rechtsgrundlage ist deine Einwilligung durch das Antippen (Art. 6 Abs. 1 lit. a DSGVO).
+          Videos werden erst geladen, wenn du sie antippst, oder direkt, wenn du dem beim ersten Start oder in den Einstellungen zugestimmt hast. Die Zustimmung kannst du dort jederzeit widerrufen. Dann stellt dein Gerät eine Verbindung zu YouTube (Google Ireland Ltd.) her, im erweiterten Datenschutzmodus (youtube-nocookie.com). Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO).
         </p>
 
         <h2>7. Platten per Foto erkennen</h2>

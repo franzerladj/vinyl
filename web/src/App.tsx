@@ -2,7 +2,8 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigationType, useRouteError, type RouteObject } from "react-router-dom";
 import { getMe } from "./lib/api";
 import { setState, useStore } from "./lib/store";
-import { haptic, Jobs } from "./components/bits";
+import { haptic, Jobs, Sheet } from "./components/bits";
+import { setYtConsent, ytConsent } from "./lib/theme";
 import { IconHeart, IconHome, IconList, IconRecord, IconSearch } from "./components/icons";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -69,6 +70,38 @@ export function ErrorPage() {
       </a>
       {!stale && err?.message && <code className="tiny" style={{ maxWidth: 420, wordBreak: "break-word" }}>{err.message}</code>}
     </div>
+  );
+}
+
+/** Einmal nach der Anmeldung fragen, ob YouTube-Videos direkt laden dürfen */
+function YouTubeConsent() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    // Kurz warten, damit die Frage nicht mitten im ersten Laden aufpoppt
+    const t = setTimeout(() => setOpen(ytConsent() === null), 1500);
+    return () => clearTimeout(t);
+  }, []);
+  const answer = (v: "yes" | "no") => {
+    haptic(10);
+    setYtConsent(v);
+    setOpen(false);
+  };
+  return (
+    <Sheet open={open} onClose={() => answer("no")}>
+      <div className="stack" style={{ padding: "4px 4px 8px", textAlign: "center" }}>
+        <span style={{ margin: "4px auto 0", width: 56, height: 56, borderRadius: 16, display: "grid", placeItems: "center", background: "#ff3b30", color: "#fff", fontSize: 24 }}>▶</span>
+        <b style={{ fontSize: 20 }}>Videos gleich laden?</b>
+        <span className="sub">
+          Zu vielen Platten gibt es Videos auf YouTube. Wenn du zustimmst, lädt Crate sie direkt, sonst erst, wenn du sie antippst. YouTube erfährt dabei deine IP-Adresse. Du kannst das jederzeit in den Einstellungen ändern.
+        </span>
+        <button className="btn primary block" onClick={() => answer("yes")}>
+          Ja, direkt laden
+        </button>
+        <button className="btn ghost block" onClick={() => answer("no")}>
+          Nein, erst nach Antippen
+        </button>
+      </div>
+    </Sheet>
   );
 }
 
@@ -366,6 +399,7 @@ export default function App() {
       <Outlet />
       </Suspense>
       <Jobs />
+      <YouTubeConsent />
       <nav className="nav no-print">
         <div className="nav-inner">
           <NavLink to="/" end viewTransition onClick={() => haptic(5)}>

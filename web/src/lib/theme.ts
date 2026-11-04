@@ -40,3 +40,21 @@ export const setHaptics = (on: boolean) => {
     /* egal */
   }
 };
+
+/** Einwilligung für YouTube: "yes" = Videos direkt laden, "no" = erst nach Antippen, null = noch nicht gefragt */
+export type YtConsent = "yes" | "no" | null;
+export const ytConsent = (): YtConsent => {
+  try {
+    return (localStorage.getItem("crate:yt") as YtConsent) ?? null;
+  } catch {
+    return null;
+  }
+};
+export const setYtConsent = (v: "yes" | "no") => {
+  try {
+    localStorage.setItem("crate:yt", v);
+  } catch {
+    /* egal */
+  }
+  window.dispatchEvent(new Event("crate:yt"));
+};

@@ -7,6 +7,7 @@ import { addToCollection, addWant } from "../lib/sync";
 import { discogsSellUrl } from "../lib/format";
 import { toast } from "../lib/store";
 import { getKV, setKV } from "../lib/db";
+import { ytConsent } from "../lib/theme";
 import { haptic } from "../components/bits";
 import { IconBack, IconCart, IconHeart, IconPlay, IconPlus, IconShare, IconSparkle, IconX } from "../components/icons";
 import { top, type DigCard } from "../../../shared/dig";
@@ -104,6 +105,12 @@ export default function Dig() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id]);
+
+  // Keine Hörprobe, aber YouTube erlaubt: Video gleich zeigen
+  useEffect(() => {
+    const v = current && detail.get(current.id)?.video;
+    if (audioState === "none" && v && ytConsent() === "yes") setVideo(v);
+  }, [audioState, current, detail]);
 
   // Audio-Ereignisse
   useEffect(() => {

@@ -11,6 +11,7 @@ import { loadPriceInfo, setTargetPrice } from "../lib/prices";
 import { friendsFor, lendRecord, messageUrl } from "../lib/friends";
 import { MenuSheet } from "../components/ui";
 import { previewUrl } from "../lib/free";
+import { ytConsent } from "../lib/theme";
 import { matchVideo, parseDuration, youtubeId } from "../../../shared/match";
 import { IconBack, IconCart, IconExternal, IconShare, IconHeart, IconPlay, IconPlus, IconPrint, IconSparkle } from "../components/icons";
 
@@ -554,10 +555,12 @@ function TrackEdit({
   );
 }
 
-/** YouTube erst nach Antippen laden: vorher keine Verbindung zu Google */
+/** YouTube direkt laden, wenn eingewilligt; sonst erst nach Antippen (vorher keine Verbindung zu Google) */
 function VideoFacade({ id, title }: { id: string; title: string }) {
   const [on, setOn] = useState(false);
-  if (on) return <iframe className="video" src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&playsinline=1&rel=0`} title={title} allow="autoplay; encrypted-media" allowFullScreen />;
+  const allowed = ytConsent() === "yes";
+  if (on || allowed)
+    return <iframe className="video" src={`https://www.youtube-nocookie.com/embed/${id}?playsinline=1&rel=0${on ? "&autoplay=1" : ""}`} title={title} allow="autoplay; encrypted-media" allowFullScreen loading="lazy" />;
   return (
     <button className="video video-facade press" onClick={() => setOn(true)} aria-label={`${title} abspielen`}>
       <span className="video-play">
