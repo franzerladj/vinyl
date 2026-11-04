@@ -58,6 +58,7 @@ export default function App() {
     getMe()
       .then((m) => {
         setState({ me: m });
+        if (m.username) void import("./lib/sync").then((x) => x.migrateAudioMatching());
         try {
           localStorage.setItem("crate_me", JSON.stringify(m.username ? m : null));
         } catch {

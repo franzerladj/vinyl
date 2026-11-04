@@ -2,6 +2,7 @@
 import { api, canClaude, discogs } from "./api";
 import { db, realTracks, setKV, getKV, trackId, type Release, type TrackMeta } from "./db";
 import { artistName } from "./format";
+import { parseDuration } from "../../../shared/match";
 import { getState, jobUpdate, toast, username } from "./store";
 import type { BasicInformation, DRelease, Pagination } from "./types";
 
@@ -160,6 +161,10 @@ export async function lookupAudioFor(trackIds?: string[]) {
   const collIds = new Set((await db.collection.toArray()).map((c) => c.releaseId));
   const todo = all.filter((t) => (trackIds || collIds.has(t.releaseId)) && !t.lookedUpAt && (!t.bpm || !t.key));
   if (!todo.length) return 0;
+  const durations = new Map<string, string | undefined>();
+  for (const r of (await db.releases.bulkGet([...new Set(todo.map((t) => t.releaseId))])).filter(Boolean)) {
+    realTracks(r!.tracklist).forEach((x, i) => durations.set(trackId(r!.id, x.position, i), x.duration));
+  }
   const job = "audio";
   jobUpdate(job, { label: "BPM & Key suchen", done: 0, total: todo.length });
   let found = 0;
@@ -167,7 +172,8 @@ export async function lookupAudioFor(trackIds?: string[]) {
     let done = 0;
     for (const t of todo) {
       try {
-        const info = await api<AudioInfo>(`/api/audio/lookup?artist=${encodeURIComponent(t.artist)}&title=${encodeURIComponent(t.title)}`);
+        const dur = parseDuration(durations.get(t.id));
+        const info = await api<AudioInfo>(`/api/audio/lookup?artist=${encodeURIComponent(t.artist)}&title=${encodeURIComponent(t.title)}${dur ? `&duration=${dur}` : ""}`);
         const patch: Partial<TrackMeta> = { lookedUpAt: Date.now() };
         if (!t.bpm && info.bpm) patch.bpm = info.bpm;
         if (!t.key && info.key) patch.key = info.key;
@@ -319,4 +325,31 @@ export async function autoPipeline(opts: { force?: boolean } = {}) {
   } finally {
     pipelineRunning = false;
   }
+}
+
+/**
+ * Einmalig: automatisch ermittelte BPM/Keys verwerfen, die noch ohne Mix- und Längenprüfung
+ * gefunden wurden. Manuelle Werte bleiben. Beim nächsten Durchlauf wird neu gesucht.
+ */
+export async function migrateAudioMatching() {
+  if (await getKV("migration-match-v1", false)) return;
+  await db.transaction("rw", db.tracks, async () => {
+    await db.tracks.toCollection().modify((t) => {
+      if (t.bpmSource && t.bpmSource !== "manuell") {
+        t.bpm = null;
+        t.bpmSource = undefined;
+      }
+      // Keys kamen nur aus GetSongBPM oder der Audio-Analyse; manuelle Keys bleiben
+      const autoKey = t.keySource ? t.keySource !== "manuell" : Boolean(t.bpmSource?.includes("GetSongBPM"));
+      if (t.key && autoKey) {
+        t.key = null;
+        t.keySource = undefined;
+      }
+      t.lookedUpAt = undefined;
+      t.analyzedAt = undefined;
+      t.audioEnergy = undefined;
+    });
+  });
+  await setKV("migration-match-v1", true);
+  await setKV("lastCollectionSync", 0); // nächster Start analysiert neu
 }

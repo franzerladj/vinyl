@@ -1,11 +1,14 @@
 // BPM- und Tonart-Lookup über GetSongBPM (mit API-Key) und Deezer (BPM, Hörprobe).
 import type { Config } from "./env";
+import { matchScore } from "../shared/match";
 
 export interface AudioInfo {
   bpm: number | null;
   key: string | null;
   source: string[];
   previewUrl: string | null;
+  /** Welcher Deezer-Track für BPM und Hörprobe gewählt wurde */
+  matched?: string | null;
 }
 
 const clean = (s: string) => s.replace(/\(.*?\)|\[.*?\]/g, "").replace(/\s+/g, " ").trim();
@@ -22,26 +25,35 @@ async function getSongBpm(config: Config, artist: string, title: string): Promis
   return { bpm: hit.tempo ? Math.round(Number(hit.tempo)) : null, key: hit.key_of || null };
 }
 
-export async function deezer(artist: string, title: string): Promise<Partial<AudioInfo> | null> {
-  type Hit = { id: number; title: string; preview?: string; artist?: { name: string } };
+export async function deezer(artist: string, title: string, duration?: number | null): Promise<(Partial<AudioInfo> & { matchedTitle?: string; score?: number }) | null> {
+  type Hit = { id: number; title: string; title_version?: string; duration?: number; preview?: string; artist?: { name: string } };
   const search = async (q: string) => {
-    const res = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=5`);
+    const res = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=10`);
     return res.ok ? (((await res.json()) as { data?: Hit[] }).data ?? []) : [];
   };
-  const norm = (s: string) => clean(s).toLowerCase().replace(/[^a-z0-9]/g, "");
-  // Erst exakt nach Artist + Track, sonst freie Suche, aber nur bei passendem Titel und Artist
-  const hit =
-    (await search(`artist:"${clean(artist)}" track:"${clean(title)}"`))[0] ??
-    (await search(`${clean(artist)} ${clean(title)}`)).find(
-      (h) => norm(h.title).includes(norm(title)) && (!artist || norm(h.artist?.name ?? "").includes(norm(artist).slice(0, 6))),
-    );
-  if (!hit) return null;
+  // Treffer aus exakter und freier Suche sammeln, dann den Mix wählen, der wirklich passt
+  // (Titel inkl. Mix-Name in Klammern, Artist und Länge laut Discogs)
+  const seen = new Map<number, Hit>();
+  for (const h of [...(await search(`artist:"${clean(artist)}" track:"${clean(title)}"`)), ...(await search(`${artist} ${title}`))]) seen.set(h.id, h);
+  let best: { h: Hit; s: number } | null = null;
+  for (const h of seen.values()) {
+    const candTitle = `${h.artist?.name ?? ""} ${h.title} ${h.title_version ?? ""}`;
+    const s = matchScore({ title, artist, duration }, candTitle, h.duration);
+    if (!best || s > best.s) best = { h, s };
+  }
+  if (!best || best.s < 0.55) return null;
+  const hit = best.h;
   const track = (await (await fetch(`https://api.deezer.com/track/${hit.id}`)).json()) as { bpm?: number; preview?: string };
-  return { bpm: track.bpm && track.bpm > 0 ? Math.round(track.bpm) : null, previewUrl: track.preview || hit.preview || null };
+  return {
+    bpm: track.bpm && track.bpm > 0 ? Math.round(track.bpm) : null,
+    previewUrl: track.preview || hit.preview || null,
+    matchedTitle: `${hit.artist?.name ?? ""} – ${hit.title}${hit.title_version ? ` ${hit.title_version}` : ""}`,
+    score: Math.round(best.s * 100) / 100,
+  };
 }
 
-export async function lookupAudio(config: Config, artist: string, title: string): Promise<AudioInfo> {
-  const [g, d] = await Promise.allSettled([getSongBpm(config, artist, title), deezer(artist, title)]);
+export async function lookupAudio(config: Config, artist: string, title: string, duration?: number | null): Promise<AudioInfo> {
+  const [g, d] = await Promise.allSettled([getSongBpm(config, artist, title), deezer(artist, title, duration)]);
   const gs = g.status === "fulfilled" ? g.value : null;
   const ds = d.status === "fulfilled" ? d.value : null;
   const source: string[] = [];
@@ -52,12 +64,13 @@ export async function lookupAudio(config: Config, artist: string, title: string)
     key: gs?.key ?? null,
     source,
     previewUrl: ds?.previewUrl ?? null,
+    matched: ds?.matchedTitle ?? null,
   };
 }
 
 /** Hörprobe von Deezer durchreichen (für die Analyse im Browser, dort fehlen CORS-Header) */
-export async function fetchPreview(artist: string, title: string): Promise<Response> {
-  const d = await deezer(artist, title);
+export async function fetchPreview(artist: string, title: string, duration?: number | null): Promise<Response> {
+  const d = await deezer(artist, title, duration);
   const url = d?.previewUrl;
   if (!url || !/^https:\/\/[a-z0-9-]+\.dzcdn\.net\//.test(url)) return new Response("Keine Hörprobe", { status: 404 });
   const r = await fetch(url);

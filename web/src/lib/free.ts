@@ -6,6 +6,7 @@ import { getState, jobUpdate } from "./store";
 import { analyzeSamples, type AudioAnalysis } from "../../../shared/audioAnalysis";
 import { estimateVibe } from "../../../shared/vibes";
 import { validBarcode } from "../../../shared/barcode";
+import { parseDuration } from "../../../shared/match";
 
 // ---------------------------------------------------------------------------
 // Texterkennung (Tesseract, läuft im Browser)
@@ -50,8 +51,11 @@ export async function ocrImage(dataUrl: string, onProgress?: (p: number) => void
 // ---------------------------------------------------------------------------
 // Hörprobe analysieren
 // ---------------------------------------------------------------------------
-export async function analyzePreview(artist: string, title: string): Promise<AudioAnalysis | null> {
-  const res = await fetch(`/api/audio/preview?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}`, { credentials: "include" });
+export const previewUrl = (artist: string, title: string, duration?: number | null) =>
+  `/api/audio/preview?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}${duration ? `&duration=${duration}` : ""}`;
+
+export async function analyzePreview(artist: string, title: string, duration?: number | null): Promise<AudioAnalysis | null> {
+  const res = await fetch(previewUrl(artist, title, duration), { credentials: "include" });
   if (!res.ok) return null;
   const buf = await res.arrayBuffer();
   const sr = 22050;
@@ -89,6 +93,7 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
   if (!todo.length) return 0;
   const rels = new Map((await db.releases.bulkGet([...new Set(todo.map((t) => t.releaseId))])).filter(Boolean).map((r) => [r!.id, r!]));
   const lastfm = getState().me?.features.lastfm;
+  const durationOf = (t: TrackMeta) => parseDuration(rels.get(t.releaseId)?.tracklist?.find((x) => x.position === t.position)?.duration);
   const job = "free-vibes";
   jobUpdate(job, { label: opts.audio ? "Vibes, Energie & Audio-Analyse" : "Vibes & Energie", done: 0, total: todo.length });
   let changed = 0;
@@ -107,7 +112,7 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
       let analysis: AudioAnalysis | null = null;
       if (opts.audio && !t.analyzedAt) {
         try {
-          analysis = await analyzePreview(t.artist, t.title);
+          analysis = await analyzePreview(t.artist, t.title, durationOf(t));
         } catch (e) {
           console.warn("Analyse", t.id, e);
         }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { api } from "../lib/api";
@@ -8,6 +8,8 @@ import { discogsReleaseUrl, discogsSellUrl, formatLine, money, sideOf } from "..
 import { toast, useStore } from "../lib/store";
 import { Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, Sparkline, TapTempo, type Preview } from "../components/bits";
 import { loadPriceInfo, setTargetPrice } from "../lib/prices";
+import { previewUrl } from "../lib/free";
+import { matchVideo, parseDuration, youtubeId } from "../../../shared/match";
 import { IconBack, IconCart, IconExternal, IconHeart, IconPlay, IconPlus, IconPrint, IconSparkle } from "../components/icons";
 
 export default function ReleasePage() {
@@ -19,6 +21,8 @@ export default function ReleasePage() {
   const [loading, setLoading] = useState(false);
   const [edit, setEdit] = useState<TrackMeta | null>(null);
   const [playing, setPlaying] = useState(false);
+  const [media, setMedia] = useState<Media | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   const rel = useLiveQuery(() => db.releases.get(id), [id]);
   const tracks = useLiveQuery(() => db.tracks.where("releaseId").equals(id).toArray(), [id], []);
@@ -78,6 +82,30 @@ export default function ReleasePage() {
 
   const setMeta = (patch: Record<string, unknown>) => db.recordMeta.put({ ...meta, releaseId: id, ...patch });
   const saveTrack = (t: TrackMeta, patch: Partial<TrackMeta>) => db.tracks.update(t.id, patch);
+  /** Track antippen: passendes YouTube-Video starten, sonst die Deezer-Hörprobe (direkt in der Tipp-Geste, damit Browser das Abspielen erlauben) */
+  const openTrack = (m: TrackMeta, t: { title: string; duration?: string }) => {
+    haptic(5);
+    const audio = audioRef.current;
+    const dur = parseDuration(t.duration);
+    const video = matchVideo({ title: t.title, artist: m.artist, duration: dur }, rel.videos, tl.length);
+    if (video) {
+      audio?.pause();
+      setMedia({ type: "yt", id: youtubeId(video.uri)!, title: video.title });
+      setPlaying(true);
+    } else if (audio) {
+      audio.src = previewUrl(m.artist, m.title, dur);
+      audio.play().catch(() => undefined);
+      setMedia({ type: "deezer" });
+    }
+    setEdit(m);
+  };
+  const closeTrack = () => {
+    audioRef.current?.pause();
+    setMedia(null);
+    setPlaying(false);
+    setEdit(null);
+  };
+
   const toggleWant = () => {
     haptic();
     (isWant ? removeWant(id).then(() => toast("Aus der Wantlist entfernt")) : addWant(id).then(() => toast("Auf der Wantlist"))).catch((e) => toast(e.message));
@@ -208,8 +236,8 @@ export default function ReleasePage() {
               }
               lastSide = side;
               rows.push(
-                <tr key={t.position + i} onClick={() => m && (haptic(5), setEdit(m))} style={{ cursor: "pointer" }}>
-                  <td className="pos">{t.position}</td>
+                <tr key={t.position + i} onClick={() => m && openTrack(m, t)} style={{ cursor: "pointer", background: edit?.id === m?.id ? "var(--accent-soft)" : undefined }}>
+                  <td className="pos" style={{ color: edit?.id === m?.id ? "var(--accent)" : undefined }}>{edit?.id === m?.id && playing ? "♪" : t.position}</td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{t.title}</div>
                     <div className="sub" style={{ fontSize: 13 }}>
@@ -280,21 +308,60 @@ export default function ReleasePage() {
         ) : null}
       </div>
 
-      <Sheet open={!!edit} onClose={() => (setEdit(null), setPlaying(false))}>
-        {edit && <TrackEdit t={edit} onPlaying={setPlaying} onSave={(p) => saveTrack(edit, p).then(() => (setEdit(null), setPlaying(false), toast("Gespeichert")))} />}
+      <audio ref={audioRef} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onError={() => media?.type === "deezer" && setMedia({ type: "none" })} hidden />
+      <Sheet open={!!edit} onClose={closeTrack}>
+        {edit && (
+          <TrackEdit
+            t={edit}
+            media={media}
+            playing={playing}
+            videos={rel.videos ?? []}
+            onMedia={(m) => {
+              audioRef.current?.pause();
+              setMedia(m);
+              setPlaying(m.type === "yt");
+            }}
+            onToggleAudio={() => {
+              const a = audioRef.current;
+              if (!a) return;
+              if (a.paused) a.play().catch(() => undefined);
+              else a.pause();
+            }}
+            onSave={(p) => saveTrack(edit, p).then(() => (closeTrack(), toast("Gespeichert")))}
+          />
+        )}
       </Sheet>
     </>
   );
 }
 
-function TrackEdit({ t, onSave, onPlaying }: { t: TrackMeta; onSave: (p: Partial<TrackMeta>) => void; onPlaying: (p: boolean) => void }) {
+type Media = { type: "yt"; id: string; title: string } | { type: "deezer" } | { type: "none" };
+
+function TrackEdit({
+  t,
+  media,
+  playing,
+  videos,
+  onMedia,
+  onToggleAudio,
+  onSave,
+}: {
+  t: TrackMeta;
+  media: Media | null;
+  playing: boolean;
+  videos: { uri: string; title: string }[];
+  onMedia: (m: Media) => void;
+  onToggleAudio: () => void;
+  onSave: (p: Partial<TrackMeta>) => void;
+}) {
   const [bpm, setBpm] = useState(String(t.bpm ?? ""));
   const [key, setKey] = useState(t.key ?? "");
   const [energy, setEnergy] = useState(t.energy ?? 5);
   const [moods, setMoods] = useState((t.moods ?? []).join(", "));
   const [stars, setStars] = useState(t.stars ?? 0);
   const [notes, setNotes] = useState(t.notes ?? "");
-  const [preview, setPreview] = useState<string | null>(null);
+  const [pickVideo, setPickVideo] = useState(false);
+  const yt = videos.filter((v) => youtubeId(v.uri));
   return (
     <div className="stack">
       <div>
@@ -303,20 +370,49 @@ function TrackEdit({ t, onSave, onPlaying }: { t: TrackMeta; onSave: (p: Partial
         </div>
         <b style={{ fontSize: 18 }}>{t.title}</b>
       </div>
-      {preview ? (
-        <audio controls autoPlay src={preview} style={{ width: "100%" }} onPlay={() => onPlaying(true)} onPause={() => onPlaying(false)} onEnded={() => onPlaying(false)} />
-      ) : (
-        <button
-          className="btn small ghost"
-          onClick={() =>
-            api<{ previewUrl: string | null }>(`/api/audio/lookup?artist=${encodeURIComponent(t.artist)}&title=${encodeURIComponent(t.title)}`).then(
-              (r) => (r.previewUrl ? setPreview(r.previewUrl) : toast("Keine Hörprobe gefunden")),
-              (e) => toast(e.message),
-            )
-          }
-        >
-          <IconPlay /> 30-Sekunden-Hörprobe (Deezer)
+      {media?.type === "yt" && (
+        <iframe
+          key={media.id}
+          className="video"
+          src={`https://www.youtube-nocookie.com/embed/${media.id}?autoplay=1&playsinline=1&rel=0&modestbranding=1`}
+          title={media.title}
+          allow="autoplay; encrypted-media; picture-in-picture"
+          allowFullScreen
+        />
+      )}
+      {media?.type === "deezer" && (
+        <div className="card row" style={{ background: "var(--surface-2)" }}>
+          <button className="btn primary" style={{ width: 48, height: 48, padding: 0, borderRadius: "50%", flex: "none" }} onClick={onToggleAudio} aria-label={playing ? "Pause" : "Abspielen"}>
+            {playing ? "❚❚" : <IconPlay />}
+          </button>
+          <div>
+            <b>30-Sekunden-Hörprobe</b>
+            <div className="tiny">Deezer, passender Mix nach Titel und Länge</div>
+          </div>
+        </div>
+      )}
+      {media?.type === "none" && <div className="sub">Keine passende Hörprobe gefunden.</div>}
+      {yt.length > 0 && (
+        <button className="btn small ghost" style={{ alignSelf: "flex-start", paddingLeft: 0 }} onClick={() => setPickVideo(!pickVideo)}>
+          {media?.type === "yt" ? "Falsches Video? Anderes wählen" : "Video von der Discogs-Seite wählen"}
         </button>
+      )}
+      {pickVideo && (
+        <div className="group">
+          {yt.map((v) => (
+            <button
+              key={v.uri}
+              className="group-row"
+              onClick={() => {
+                onMedia({ type: "yt", id: youtubeId(v.uri)!, title: v.title });
+                setPickVideo(false);
+              }}
+            >
+              <IconPlay />
+              <span style={{ fontSize: 14 }}>{v.title}</span>
+            </button>
+          ))}
+        </div>
       )}
       <div className="grid2">
         <label className="field">

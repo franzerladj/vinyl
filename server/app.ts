@@ -150,10 +150,10 @@ app.post("/api/ai/vibes", async (c) => {
 app.get("/api/audio/lookup", async (c) => {
   const title = c.req.query("title") ?? "";
   if (!title) return c.json({ message: "title fehlt" }, 400);
-  return c.json(await lookupAudio(c.var.cfg, c.req.query("artist") ?? "", title));
+  return c.json(await lookupAudio(c.var.cfg, c.req.query("artist") ?? "", title, Number(c.req.query("duration")) || null));
 });
 
-app.get("/api/audio/preview", (c) => fetchPreview(c.req.query("artist") ?? "", c.req.query("title") ?? ""));
+app.get("/api/audio/preview", (c) => fetchPreview(c.req.query("artist") ?? "", c.req.query("title") ?? "", Number(c.req.query("duration")) || null));
 
 app.get("/api/lastfm/tags", async (c) => {
   if (!c.var.cfg.lastfmKey) return c.json({ message: "LASTFM_API_KEY fehlt" }, 501);
