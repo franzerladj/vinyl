@@ -38,11 +38,11 @@ Empfohlen ist **Cloudflare Pages**: kostenlos, schläft nie ein, HTTPS und eigen
    - Framework preset: *None*
    - Build command: `npm run build`
    - Build output directory: `web/dist`
-4. **Settings → Variables and Secrets** (für *Production*):
+4. **Settings → Variables and Secrets → Add** (für *Production*), jeweils als Typ **Secret**:
    - `DISCOGS_CONSUMER_KEY`, `DISCOGS_CONSUMER_SECRET`
    - `SESSION_SECRET` (zufällig, mind. 32 Zeichen)
    - optional `LASTFM_API_KEY`, `GETSONGBPM_API_KEY`, `ANTHROPIC_API_KEY`, `AI_ALLOWLIST`
-5. **Settings → Bindings → Add → Workers AI**, Name `AI`. Damit funktioniert die kostenlose Foto-Erkennung. (Steht schon in `wrangler.toml`, je nach Cloudflare-Oberfläche muss man es zusätzlich im Dashboard setzen.)
+5. Das Workers-AI-Binding für die kostenlose Foto-Erkennung steht schon in `wrangler.toml` und wird automatisch übernommen. Diese Datei ist für Bindings und normale Variablen maßgeblich, im Dashboard sind sie dann nur lesbar. Secrets lassen sich weiter im Dashboard pflegen.
 6. Neu deployen. Jeder Push auf den Branch baut die App automatisch neu.
 7. Optional unter **Custom domains** eine eigene Adresse wie `crate.deinedomain.de` verbinden und die Callback-URL bei Discogs anpassen.
 
