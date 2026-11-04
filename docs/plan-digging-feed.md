@@ -45,7 +45,15 @@ Bereits in Sammlung oder Wantlist, oder schon weggewischt: wird ausgeblendet.
 - Komponenten: `pages/Dig.tsx` (Feed), `lib/dig.ts` (Quellen, Mischung, Gewichte), Einstieg in `pages/Search.tsx`, wenn das Suchfeld leer ist
 - Tests: Mischung und Gewichtung (`shared/dig.ts`), Scroll-Snap und Autoplay im Browser-Test
 
-## Offene Fragen an Franz
+## Stand
 
-- Soll der Feed auch auf der Startseite einen Einstieg bekommen („Jetzt diggen“)?
-- Ton beim Start: sofort mit Ton (nach dem ersten Tippen) oder erst stumm mit Untertitel „Tippen für Ton“?
+Version 1 ist umgesetzt (`web/src/pages/Dig.tsx`, `web/src/lib/dig.ts`, `shared/dig.ts`, Tests in `tests/dig.test.ts`):
+
+- Einstieg „Jetzt diggen“ auf der Startseite und „Diggen statt suchen“ in der leeren Suche
+- Ton nach dem ersten Tippen (iPhone-Regel), danach spielt jede Karte automatisch über denselben Audio-Player
+- Tippen: Ton an/aus. Doppeltippen: Wantlist mit Herz. Knöpfe: Want, Hab ich, Kaufen, Mehr davon, Teilen, Weg
+- Quellen: Labels und Artists aus der Sammlung, Neuerscheinungen, gesuchte Raritäten, Zufallsfunde, Freunde
+- Lernen nur auf dem Gerät, Style-Filter als Chips
+- Ohne Deezer-Hörprobe: Knopf „Video ansehen“ (YouTube erst nach Antippen)
+
+Noch offen: Wischen nach links als Geste, Filter für Preis, Jahrzehnt und Format, Feed-Position nach dem Schließen merken.

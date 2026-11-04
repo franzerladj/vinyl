@@ -6,7 +6,7 @@ import { friendMatches, type MyProfile } from "../lib/friends";
 import { autoPipeline, isPipelineRunning } from "../lib/sync";
 import { toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, markHero, Ring } from "../components/bits";
-import { IconCamera, IconCart, IconList, IconSync, IconTag } from "../components/icons";
+import { IconCamera, IconCart, IconList, IconPlay, IconSync, IconTag } from "../components/icons";
 
 const greeting = () => {
   const h = new Date().getHours();
@@ -144,6 +144,20 @@ export default function Home() {
           </Empty>
         ) : (
           <>
+            <Link to="/dig" viewTransition className="dig-entry press rise" onClick={() => haptic(10)}>
+              <span className="covers">
+                {(stats?.recent ?? []).filter(Boolean).slice(0, 4).map((r) => r && (
+                  <img key={r.id} src={r.cover || r.thumb} alt="" />
+                ))}
+              </span>
+              <span>
+                <b>Jetzt diggen</b>
+                <small>Neue Platten passend zu deiner Kiste, mit Hörprobe</small>
+              </span>
+              <span className="go">
+                <IconPlay />
+              </span>
+            </Link>
             {stats?.recent.length ? (
               <>
                 <h2 style={{ marginTop: 12 }}>Neu in der Kiste</h2>

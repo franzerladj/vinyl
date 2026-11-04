@@ -18,6 +18,7 @@ const SetEditor = lazy(() => import("./pages/SetEditor"));
 const Stickers = lazy(() => import("./pages/Stickers"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Friends = lazy(() => import("./pages/Friends"));
+const Dig = lazy(() => import("./pages/Dig"));
 const Impressum = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Impressum })));
 const Datenschutz = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Datenschutz })));
 
@@ -30,6 +31,7 @@ export const routes: RouteObject[] = [
   { path: "collection", element: <Collection /> },
   { path: "wants", element: <Wantlist /> },
   { path: "search", element: <Search /> },
+  { path: "dig", element: <Dig /> },
   { path: "release/:id", element: <ReleasePage /> },
   { path: "scan", element: <Scan /> },
   { path: "shop", element: <Shop /> },

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { discogs } from "../lib/api";
 import { db } from "../lib/db";
@@ -7,7 +7,7 @@ import { addWant } from "../lib/sync";
 import { toast } from "../lib/store";
 import type { Pagination, SearchResult } from "../lib/types";
 import { Cover, Empty, haptic, markHero, SkeletonRows } from "../components/bits";
-import { IconBarcode, IconHeart, IconSearch } from "../components/icons";
+import { IconBarcode, IconHeart, IconPlay, IconSearch } from "../components/icons";
 
 const GENRES = ["Electronic", "Hip Hop", "Funk / Soul", "Jazz", "Rock", "Reggae", "Latin", "Pop", "Disco"];
 
@@ -185,6 +185,18 @@ export default function Search() {
         </div>
         {loading && page === 1 && <SkeletonRows />}
         {!loading && hasQuery && results.length === 0 && <Empty title="Nichts gefunden">Anders schreiben oder Filter entfernen.</Empty>}
+        {!hasQuery && (
+          <Link to="/dig" viewTransition className="dig-entry press" style={{ marginTop: 8 }}>
+            <span className="covers" style={{ background: "linear-gradient(120deg, #ff6a00, #bf5af2 60%, #0a84ff)" }} />
+            <span>
+              <b>Diggen statt suchen</b>
+              <small>Wischen, reinhören, merken. Wie im Plattenladen.</small>
+            </span>
+            <span className="go">
+              <IconPlay />
+            </span>
+          </Link>
+        )}
         {!hasQuery && <Empty title="Die ganze Discogs-Datenbank">Nach Artist, Titel oder Katalognummer suchen. Filter für Genre, Style, Label, Jahr und Land sind oben.</Empty>}
         {pagination && pagination.page < pagination.pages && !loading && (
           <button className="btn block" onClick={() => update({ page: String(page + 1) })}>

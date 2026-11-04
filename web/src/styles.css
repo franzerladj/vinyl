@@ -535,3 +535,61 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .legal h1 { margin-bottom: 4px; }
 .legal h2 { font-size: 17px; margin: 22px 0 4px; }
 .legal p { margin: 0 0 8px; color: var(--text-2); }
+
+/* ---------- Digging-Feed ---------- */
+.app:has(.dig) .nav, .app:has(.dig) .topbar, .app:has(.dig) .jobs, .app:has(.dig) .offline-bar { display: none; }
+.dig { position: fixed; inset: 0; z-index: 30; background: #000; color: #fff; }
+.dig-feed { position: absolute; inset: 0; overflow-y: auto; scroll-snap-type: y mandatory; overscroll-behavior: contain; scrollbar-width: none; }
+.dig-feed::-webkit-scrollbar { display: none; }
+.dig-card { position: relative; height: 100dvh; scroll-snap-align: start; scroll-snap-stop: always; overflow: hidden; }
+.dig-bg { position: absolute; inset: -15%; width: 130%; height: 130%; object-fit: cover; filter: blur(40px) saturate(1.6) brightness(0.7); transform: translateZ(0); }
+.dig-shade { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.45) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 45%, rgba(0,0,0,.85) 100%); }
+.dig-stage { position: absolute; left: 0; right: 0; top: calc(env(safe-area-inset-top) + 64px); bottom: 42%; display: grid; place-items: center; padding: 0 24px; }
+.dig-cover { width: min(72vw, 46dvh, 420px); aspect-ratio: 1; object-fit: cover; border-radius: 10px; box-shadow: 0 30px 80px rgba(0,0,0,.6); transition: transform .6s var(--spring); }
+.dig-cover.playing { transform: scale(1.03); }
+.dig-video { width: min(92vw, 560px); aspect-ratio: 16/9; border: 0; border-radius: 12px; background: #000; }
+.dig-burst { position: absolute; font-size: 120px; color: #ff375f; text-shadow: 0 10px 40px rgba(0,0,0,.4); animation: digburst .9s var(--spring) both; pointer-events: none; }
+@keyframes digburst { 0% { transform: scale(.2); opacity: 0; } 30% { transform: scale(1.15); opacity: 1; } 70% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.3) translateY(-30px); opacity: 0; } }
+.dig-top { position: absolute; z-index: 2; top: 0; left: 0; right: 0; padding: calc(env(safe-area-inset-top) + 8px) 12px 8px; display: flex; gap: 8px; align-items: center; pointer-events: none; }
+.dig-top > * { pointer-events: auto; }
+.dig-icon { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; display: grid; place-items: center; color: #fff; background: rgba(0,0,0,.35); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.dig-icon svg { width: 22px; height: 22px; }
+.dig-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.dig-chips::-webkit-scrollbar { display: none; }
+.dig-chip { flex: none; border: 0; border-radius: 999px; padding: 8px 14px; font: inherit; font-size: 14px; font-weight: 600; color: rgba(255,255,255,.85); background: rgba(0,0,0,.3); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.dig-chip.on { background: #fff; color: #000; }
+.dig-info { position: absolute; left: 16px; right: 84px; bottom: calc(env(safe-area-inset-bottom) + 22px); display: flex; flex-direction: column; gap: 6px; }
+.dig-reason { align-self: flex-start; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: rgba(255,255,255,.75); }
+.dig-title { all: unset; cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+.dig-title b { font-size: 26px; line-height: 1.1; font-weight: 800; letter-spacing: -0.02em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.dig-title span { font-size: 18px; font-weight: 600; color: rgba(255,255,255,.85); }
+.dig-meta { font-size: 13px; color: rgba(255,255,255,.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dig-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.dig-tags span { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.16); }
+.dig-sound { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
+.dig-sound button, .dig-sound span { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; padding: 8px 14px; border-radius: 999px; background: rgba(255,255,255,.18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.dig-sound svg { width: 16px; height: 16px; }
+.dig-sound small { font-weight: 500; opacity: .8; overflow: hidden; text-overflow: ellipsis; }
+.dig-sound .dig-link { background: none; padding: 8px 0; text-decoration: underline; text-underline-offset: 3px; backdrop-filter: none; flex: none; }
+.dig-rail { position: absolute; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 22px); display: flex; flex-direction: column; gap: 14px; align-items: center; }
+.dig-rail > * { all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; color: #fff; -webkit-tap-highlight-color: transparent; }
+.dig-rail svg { width: 26px; height: 26px; padding: 12px; box-sizing: content-box; border-radius: 50%; background: rgba(0,0,0,.3); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: transform .3s var(--spring), background .2s; }
+.dig-rail > *:active svg { transform: scale(.88); }
+.dig-rail .on svg { background: #ff375f; }
+.dig-rail small { font-size: 11px; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.dig-loading { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; font-weight: 600; color: rgba(255,255,255,.8); }
+.dig-loading .spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid rgba(255,255,255,.2); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+.dig-sheet-bg { position: absolute; inset: 0; z-index: 5; background: rgba(0,0,0,.4); display: flex; align-items: flex-end; animation: fade .2s both; }
+.dig-sheet { width: 100%; max-height: 70dvh; overflow: auto; background: var(--surface); color: var(--text); border-radius: 18px 18px 0 0; padding: 4px 16px calc(env(safe-area-inset-bottom) + 16px); animation: sheetup .4s var(--spring) both; }
+@keyframes sheetup { from { transform: translateY(100%); } }
+.dig-track { all: unset; cursor: pointer; display: grid; grid-template-columns: 40px 1fr auto; gap: 8px; padding: 12px 0; border-bottom: 0.5px solid var(--hairline); font-size: 15px; }
+
+/* Einstieg auf der Startseite */
+.dig-entry { position: relative; display: flex; align-items: center; gap: 14px; padding: 16px; border-radius: var(--r-lg); overflow: hidden; color: #fff; text-decoration: none; background: #111; min-height: 96px; }
+.dig-entry .covers { position: absolute; inset: 0; display: flex; filter: blur(18px) saturate(1.6) brightness(.75); transform: scale(1.3); }
+.dig-entry .covers img { flex: 1; min-width: 0; object-fit: cover; }
+.dig-entry > :not(.covers) { position: relative; }
+.dig-entry b { font-size: 20px; letter-spacing: -0.02em; }
+.dig-entry small { display: block; font-size: 14px; opacity: .85; margin-top: 2px; }
+.dig-entry .go { margin-left: auto; width: 44px; height: 44px; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; flex: none; }
+.dig-entry .go svg { width: 20px; height: 20px; }
