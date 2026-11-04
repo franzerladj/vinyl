@@ -1,8 +1,9 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV } from "../lib/db";
 import { friendMatches, type MyProfile } from "../lib/friends";
-import { autoPipeline } from "../lib/sync";
+import { autoPipeline, isPipelineRunning } from "../lib/sync";
 import { toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, markHero, Ring } from "../components/bits";
 import { IconCamera, IconCart, IconList, IconSync, IconTag } from "../components/icons";
@@ -42,7 +43,40 @@ export default function Home() {
   });
 
 
+  // Herunterziehen am Seitenanfang startet den Sync (die Seite selbst wird nicht neu geladen)
+  const [pull, setPull] = useState(0);
+  useEffect(() => {
+    let startY: number | null = null;
+    let dy = 0;
+    const down = (e: TouchEvent) => {
+      startY = window.scrollY <= 0 ? e.touches[0].clientY : null;
+      dy = 0;
+    };
+    const move = (e: TouchEvent) => {
+      if (startY == null) return;
+      dy = Math.max(0, e.touches[0].clientY - startY);
+      setPull(Math.min(1.2, dy / 110));
+    };
+    const up = () => {
+      if (startY != null && dy > 110) void sync();
+      startY = null;
+      setPull(0);
+    };
+    window.addEventListener("touchstart", down, { passive: true });
+    window.addEventListener("touchmove", move, { passive: true });
+    window.addEventListener("touchend", up);
+    window.addEventListener("touchcancel", up);
+    return () => {
+      window.removeEventListener("touchstart", down);
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", up);
+      window.removeEventListener("touchcancel", up);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const sync = async () => {
+    if (isPipelineRunning()) return toast("Sync läuft schon");
     haptic();
     try {
       await autoPipeline({ force: true });
@@ -56,6 +90,11 @@ export default function Home() {
 
   return (
     <>
+      {pull > 0.05 && (
+        <div className="ptr" style={{ opacity: Math.min(1, pull), transform: `translateY(${pull * 40}px) rotate(${pull * 300}deg)` }} aria-hidden="true">
+          <IconSync />
+        </div>
+      )}
       <div className="page-head">
         <div>
           <div className="eyebrow">{today}</div>

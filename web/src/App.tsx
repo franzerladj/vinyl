@@ -19,9 +19,13 @@ const Stickers = lazy(() => import("./pages/Stickers"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Friends = lazy(() => import("./pages/Friends"));
 
+let busyCheck: () => boolean = () => false;
+const pipelineBusy = () => busyCheck();
+
 /** Nach dem Start: einmalige Bereinigung, dann Sync, wenn der letzte länger als 6 Stunden her ist (egal auf welcher Seite) */
 async function startupSync() {
-  const { migrateAudioMatching, autoPipeline } = await import("./lib/sync");
+  const { migrateAudioMatching, autoPipeline, isPipelineRunning } = await import("./lib/sync");
+  busyCheck = isPipelineRunning;
   const { getKV } = await import("./lib/db");
   const { toast } = await import("./lib/store");
   await migrateAudioMatching();
@@ -40,6 +44,13 @@ async function startupSync() {
     else if (Date.now() - hiddenAt > 20_000) void run();
   });
   window.addEventListener("online", () => void run());
+  // Versehentliches Neuladen während eines Syncs: Browser fragt nach
+  window.addEventListener("beforeunload", (e) => {
+    if (pipelineBusy()) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
 }
 
 export default function App() {

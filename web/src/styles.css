@@ -104,7 +104,8 @@
 }
 
 * { box-sizing: border-box; }
-html { -webkit-text-size-adjust: 100%; }
+/* Kein Neuladen durch Herunterziehen (Chrome) und kein Gummiband-Effekt der ganzen Seite */
+html { -webkit-text-size-adjust: 100%; overscroll-behavior-y: none; }
 html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.4 var(--font); letter-spacing: -0.011em; -webkit-font-smoothing: antialiased; -webkit-tap-highlight-color: transparent; }
 body { overscroll-behavior-y: none; }
 a { color: inherit; text-decoration: none; }
@@ -492,3 +493,7 @@ video.scan { width: 100%; border-radius: var(--r-lg); background: #000; aspect-r
 .section-head { top: calc(var(--sticky-top, 0px) + var(--bar-h)); }
 .back-btn span { overflow: hidden; text-overflow: ellipsis; }
 .back-btn svg { flex: none; }
+
+/* Eigenes Herunterziehen auf der Startseite: startet den Sync statt die Seite neu zu laden */
+.ptr { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 8px); z-index: 26; translate: -50% 0; width: 40px; height: 40px; border-radius: 50%; background: var(--material); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); box-shadow: var(--shadow); display: grid; place-items: center; color: var(--accent); pointer-events: none; transition: opacity 0.2s; }
+.ptr svg { width: 20px; height: 20px; }
