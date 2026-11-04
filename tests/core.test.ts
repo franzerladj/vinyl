@@ -116,3 +116,25 @@ describe("deals", () => {
     expect(r.total).toBe(80);
   });
 });
+
+describe("Versand nach Herkunft", () => {
+  it("unterscheidet Inland, EU und Welt", async () => {
+    const { regionOf, estimateShipping, DEFAULT_SHIP } = await import("../shared/shipping");
+    expect(regionOf("Germany", "Germany")).toBe("home");
+    expect(regionOf("Netherlands", "Germany")).toBe("eu");
+    expect(regionOf("UK", "Germany")).toBe("world");
+    expect(regionOf("Germany", "Switzerland")).toBe("world");
+    expect(estimateShipping(DEFAULT_SHIP, "Germany", 3)).toBe(7.5);
+  });
+  it("rechnet den Warenkorb mit dem Versand aus dem Land des Händlers", async () => {
+    const { DEFAULT_SHIP } = await import("../shared/shipping");
+    const l = (id: string, rid: number, seller: string, from: string, price = 10): Listing => ({ listingId: id, releaseId: rid, seller, price, condition: "NM", shipsFrom: from });
+    const r = optimizeBasket([l("1", 1, "berlin", "Germany"), l("2", 2, "berlin", "Germany"), l("3", 1, "tokyo", "Japan", 8)], {
+      shipping: { firstItem: 13, perExtraItem: 2, regions: DEFAULT_SHIP },
+    });
+    // Beim Händler in Deutschland: 20 € + 5,50 + 1 statt Japan mit 24 € Versand
+    expect(r.baskets).toHaveLength(1);
+    expect(r.baskets[0].seller).toBe("berlin");
+    expect(r.baskets[0].shipping).toBe(6.5);
+  });
+});

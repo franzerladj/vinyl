@@ -1,3 +1,4 @@
+import { regionOf, type ShipConfig } from "./shipping";
 // Warenkorb-Optimierer: möglichst viele Wants bei möglichst wenigen Händlern, Versand mitgerechnet.
 
 export interface Listing {
@@ -18,6 +19,8 @@ export interface ShippingModel {
   firstItem: number;
   /** Aufschlag je weiterer Platte beim selben Händler */
   perExtraItem: number;
+  /** Genauer: Preise nach Herkunft des Händlers (Inland, EU, Welt) */
+  regions?: ShipConfig;
 }
 
 export interface OptimizeOptions {
@@ -64,8 +67,15 @@ export interface OptimizeResult {
 
 export function sellerShipping(items: Listing[], model: ShippingModel): number {
   if (items.length === 0) return 0;
-  const base = Math.max(...items.map((i) => i.shipping ?? model.firstItem));
-  return base + (items.length - 1) * model.perExtraItem;
+  let first = model.firstItem;
+  let extra = model.perExtraItem;
+  if (model.regions) {
+    const r = model.regions.rates[regionOf(items[0].shipsFrom, model.regions.home) ?? "eu"];
+    first = r.first;
+    extra = r.extra;
+  }
+  const base = Math.max(...items.map((i) => i.shipping ?? first));
+  return base + (items.length - 1) * extra;
 }
 
 function filterListings(listings: Listing[], opts: OptimizeOptions): Listing[] {
@@ -218,7 +228,7 @@ export function optimizeBasket(listings: Listing[], opts: OptimizeOptions): Opti
   // Vergleichswert: jede Platte einzeln beim günstigsten Angebot inkl. Versand
   let naiveTotal = 0;
   for (const rid of available) {
-    const cheapest = Math.min(...pool.filter((l) => l.releaseId === rid).map((l) => l.price + (l.shipping ?? model.firstItem)));
+    const cheapest = Math.min(...pool.filter((l) => l.releaseId === rid).map((l) => l.price + sellerShipping([l], model)));
     naiveTotal += cheapest;
   }
 

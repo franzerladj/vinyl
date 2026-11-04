@@ -12,6 +12,8 @@ import { getTheme, hapticsEnabled, setHaptics, setTheme, setYtConsent, ytConsent
 import { Avatar, Seg } from "../components/bits";
 import type { MyProfile } from "../lib/friends";
 import { NavBar, Switch } from "../components/ui";
+import { ShippingEditor } from "../components/ShippingEditor";
+import { DEFAULT_SHIP, type ShipConfig } from "../../../shared/shipping";
 import {
   IconBolt,
   IconPlay,
@@ -365,7 +367,7 @@ function SyncPage() {
   );
 }
 
-const SHOP_DEFAULTS = { firstItem: 7, perExtraItem: 1.5, maxPrice: "", minRating: "98", minCondition: "VG+", maxSellers: "" };
+const SHOP_DEFAULTS = { firstItem: 7, perExtraItem: 1.5, maxPrice: "", minRating: "98", minCondition: "VG+", maxSellers: "", ship: DEFAULT_SHIP as ShipConfig };
 
 function PricesPage() {
   const [currency, setCurrency] = useState("EUR");
@@ -415,16 +417,9 @@ function PricesPage() {
           {sugg !== "ok" && <Row label="Verkäufer-Einstellungen öffnen" sub="Kostenlos, du musst nichts verkaufen" value="↗" right={<span />} onClick={() => window.open("https://www.discogs.com/settings/seller", "_blank")} />}
         </Group>
 
-        <Group title="Versand-Schätzung" foot="Wird genutzt, wenn ein Angebot keinen Versand nennt. Die echten Kosten zeigt Discogs im Warenkorb.">
-          <div className="set-row" style={{ cursor: "default" }}>
-            <span className="label">Erste Platte</span>
-            <input className="input" style={{ width: 90, textAlign: "right" }} inputMode="decimal" value={shop.firstItem} onChange={(e) => saveShop({ firstItem: Number(e.target.value.replace(",", ".")) || 0 })} />
-            <span className="sub">€</span>
-          </div>
-          <div className="set-row" style={{ cursor: "default" }}>
-            <span className="label">Jede weitere</span>
-            <input className="input" style={{ width: 90, textAlign: "right" }} inputMode="decimal" value={shop.perExtraItem} onChange={(e) => saveShop({ perExtraItem: Number(e.target.value.replace(",", ".")) || 0 })} />
-            <span className="sub">€</span>
+        <Group title="Versand-Schätzung">
+          <div style={{ padding: "12px 14px" }}>
+            <ShippingEditor value={shop.ship} onChange={(ship) => saveShop({ ship })} />
           </div>
         </Group>
 

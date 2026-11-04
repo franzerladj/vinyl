@@ -161,7 +161,7 @@ export default function Home() {
             </Link>
             {stats?.recent.length ? (
               <>
-                <h2 style={{ marginTop: 12 }}>Neu in der Kiste</h2>
+                <h2 style={{ marginTop: 12 }}>Zuletzt hinzugefügt</h2>
                 <div className="carousel rise">
                   {stats.recent.map((r) => (
                     <Link

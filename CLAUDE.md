@@ -40,6 +40,7 @@ python3 tools/e2e/ean.py 5021392033112 tools/e2e/ean.jpg && node tools/e2e/scan.
 node tools/e2e/print.cjs    # Einleger als PDF
 node tools/e2e/yt.cjs       # YouTube-Einwilligung
 node tools/e2e/djo.cjs      # DJ-Übersicht auf Start
+node tools/e2e/ship.cjs     # Versand-Schätzung
 ```
 
 `tools/e2e/mock.cjs` mockt `/api/**`: 45 Platten Sammlung (IDs 1–45), 25 Wants (46–70), Feed-Funde (71–100), Freunde kumpel/privat/niemand. Release 5 ist eine Doppel-LP mit 20 Tracks.

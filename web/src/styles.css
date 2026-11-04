@@ -631,3 +631,18 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .djo-energy i { height: 10px; border-radius: 5px; }
 .djo-energy b { font-size: 17px; font-variant-numeric: tabular-nums; }
 .djo-energy span { font-size: 12px; color: var(--text-2); }
+
+/* ---------- Versand-Schätzung ---------- */
+.ship { display: flex; flex-direction: column; gap: 12px; }
+.ship-home { display: flex; align-items: center; gap: 10px; font-weight: 600; }
+.ship-home select { flex: 1; }
+.ship-row { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: end; padding-top: 10px; border-top: 0.5px solid var(--hairline); }
+.ship-label { display: flex; flex-direction: column; min-width: 0; padding-bottom: 8px; }
+.ship-label b { font-size: 15px; }
+.ship-label small { font-size: 12px; color: var(--text-2); }
+.ship-field { display: flex; flex-direction: column; gap: 3px; }
+.ship-field small { font-size: 11px; color: var(--text-2); text-align: right; }
+.ship-field span { display: flex; align-items: center; gap: 3px; color: var(--text-2); font-weight: 600; }
+.ship-field input { width: 62px; text-align: right; padding-left: 6px; padding-right: 8px; font-variant-numeric: tabular-nums; }
+.ship-example { font-size: 13px; line-height: 1.45; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); }
+@media (max-width: 360px) { .ship-row { grid-template-columns: 1fr auto; } .ship-label { grid-column: 1 / -1; padding-bottom: 0; } }

@@ -10,6 +10,8 @@ import { toast } from "../lib/store";
 import { Cover, DealDot, RecordRow, Seg } from "../components/bits";
 import { IconExternal, IconX } from "../components/icons";
 import { optimizeBasket, rankSellers, type Grade, type Listing, type OptimizeOptions } from "../../../shared/optimizer";
+import { DEFAULT_SHIP, estimateShipping, type ShipConfig } from "../../../shared/shipping";
+import { ShippingEditor } from "../components/ShippingEditor";
 
 interface ShopSettings {
   firstItem: number;
@@ -18,8 +20,9 @@ interface ShopSettings {
   minRating: string;
   minCondition: Grade | "";
   maxSellers: string;
+  ship: ShipConfig;
 }
-const DEFAULTS: ShopSettings = { firstItem: 7, perExtraItem: 1.5, maxPrice: "", minRating: "98", minCondition: "VG+", maxSellers: "" };
+const DEFAULTS: ShopSettings = { firstItem: 7, perExtraItem: 1.5, maxPrice: "", minRating: "98", minCondition: "VG+", maxSellers: "", ship: DEFAULT_SHIP };
 
 /** Händlernamen aus Eingabe oder kopierten Shop-Links lesen (discogs.com/seller/NAME/profile) */
 export function parseSellerNames(input: string): string[] {
@@ -82,7 +85,7 @@ export default function Shop() {
 
   const opts: OptimizeOptions = useMemo(
     () => ({
-      shipping: { firstItem: Number(settings.firstItem) || 0, perExtraItem: Number(settings.perExtraItem) || 0 },
+      shipping: { firstItem: settings.ship.rates.eu.first, perExtraItem: settings.ship.rates.eu.extra, regions: settings.ship },
       maxPricePerItem: settings.maxPrice ? Number(settings.maxPrice.replace(",", ".")) : undefined,
       minSellerRating: settings.minRating ? Number(settings.minRating) : undefined,
       minCondition: settings.minCondition || undefined,
@@ -102,8 +105,8 @@ export default function Shop() {
   }, [], []);
   const plan = useMemo(() => {
     const b = Number(budget.replace(",", "."));
-    return b > 0 ? planBudget(budgetItems.map((x) => ({ ...x, score: x.deal.score })), b, Number(settings.firstItem) || 0) : null;
-  }, [budget, budgetItems, settings.firstItem]);
+    return b > 0 ? planBudget(budgetItems.map((x) => ({ ...x, score: x.deal.score })), b, settings.ship.rates.eu.first) : null;
+  }, [budget, budgetItems, settings.ship]);
   const result = useMemo(() => (data?.listings.length ? optimizeBasket(data.listings, opts) : null), [data, opts]);
   const ranking = useMemo(() => (data?.listings.length ? rankSellers(data.listings, opts).slice(0, 50) : []), [data, opts]);
 
@@ -159,16 +162,12 @@ export default function Shop() {
 
         {tab !== "sellers" && (
           <details className="card">
-            <summary style={{ cursor: "pointer", fontWeight: 600 }}>Regeln & Versand</summary>
-            <div className="grid2" style={{ marginTop: 10 }}>
-              <label className="field">
-                Versand 1. Platte (€)
-                <input className="input" inputMode="decimal" value={settings.firstItem} onChange={(e) => upd({ firstItem: Number(e.target.value.replace(",", ".")) })} />
-              </label>
-              <label className="field">
-                je weitere Platte (€)
-                <input className="input" inputMode="decimal" value={settings.perExtraItem} onChange={(e) => upd({ perExtraItem: Number(e.target.value.replace(",", ".")) })} />
-              </label>
+            <summary style={{ cursor: "pointer", fontWeight: 600 }}>Versand & Regeln</summary>
+            <div style={{ marginTop: 12 }}>
+              <ShippingEditor value={settings.ship} onChange={(ship) => upd({ ship })} />
+            </div>
+            <b style={{ display: "block", marginTop: 16 }}>Regeln</b>
+            <div className="grid2" style={{ marginTop: 8 }}>
               <label className="field">
                 max. Preis pro Platte
                 <input className="input" inputMode="decimal" value={settings.maxPrice} onChange={(e) => upd({ maxPrice: e.target.value })} placeholder="egal" />
@@ -191,7 +190,7 @@ export default function Shop() {
                 <input className="input" inputMode="numeric" value={settings.maxSellers} onChange={(e) => upd({ maxSellers: e.target.value })} placeholder="egal" />
               </label>
             </div>
-            <p className="sub">Nennt ein Angebot seinen Versand, wird dieser genommen. Sonst gilt dein Wert oben. Preise in der Währung, die du bei Discogs eingestellt hast.</p>
+            <p className="sub">Preise in der Währung, die du bei Discogs eingestellt hast.</p>
           </details>
         )}
 
@@ -422,7 +421,7 @@ export default function Shop() {
           <>
             <div className="card stack">
               <b>Was bekomme ich für mein Budget?</b>
-              <span className="sub">Die App wählt die lohnendsten Wants: gute Preise laut Ampel, unter Wunschpreis, selten und gefragt, deine Bewertung. Pro Platte rechnet sie mit {money(Number(settings.firstItem) || 0)} Versand, weil die günstigsten Angebote meist bei verschiedenen Händlern liegen.</span>
+              <span className="sub">Die App wählt die lohnendsten Wants: gute Preise laut Ampel, unter Wunschpreis, selten und gefragt, deine Bewertung. Pro Platte rechnet sie mit etwa {money(estimateShipping(settings.ship, null, 1))} Versand (EU-Schätzung), weil die günstigsten Angebote meist bei verschiedenen Händlern liegen.</span>
               <div className="row">
                 <input className="input" inputMode="decimal" placeholder="Budget in €, z.B. 150" value={budget} onChange={(e) => setBudget(e.target.value)} />
               </div>
