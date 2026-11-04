@@ -3,6 +3,7 @@ import { api, canClaude, discogs } from "./api";
 import { db, realTracks, setKV, getKV, trackId, type Release, type TrackMeta } from "./db";
 import { artistName } from "./format";
 import { parseDuration } from "../../../shared/match";
+import { logError, pool } from "./pool";
 import { getState, jobUpdate, toast, username } from "./store";
 import type { BasicInformation, DRelease, Pagination } from "./types";
 
@@ -170,7 +171,8 @@ export async function lookupAudioFor(trackIds?: string[]) {
   let found = 0;
   try {
     let done = 0;
-    for (const t of todo) {
+    // Drei Anfragen gleichzeitig: Deezer und GetSongBPM sind nicht das Discogs-Limit
+    await pool(todo, 3, async (t) => {
       try {
         const dur = parseDuration(durations.get(t.id));
         const info = await api<AudioInfo>(`/api/audio/lookup?artist=${encodeURIComponent(t.artist)}&title=${encodeURIComponent(t.title)}${dur ? `&duration=${dur}` : ""}`);
@@ -183,11 +185,11 @@ export async function lookupAudioFor(trackIds?: string[]) {
         }
         await db.tracks.update(t.id, patch);
       } catch (e) {
+        // Netzfehler: nicht als erledigt markieren, beim nächsten Durchlauf erneut versuchen
         console.warn("audio", t.id, e);
       }
       jobUpdate(job, { done: ++done });
-      await new Promise((r) => setTimeout(r, 150));
-    }
+    });
   } finally {
     jobUpdate(job, null);
   }
@@ -290,8 +292,13 @@ export async function rateRelease(releaseId: number, rating: number) {
 }
 
 export async function fullSync() {
-  await Promise.all([syncCollection(), syncWants()]);
+  await syncLists();
   await fetchMissingDetails("collection");
+}
+
+/** Nur Sammlung und Wantlist abgleichen (schnell, wenige Anfragen) */
+export async function syncLists() {
+  await Promise.all([syncCollection(), syncWants()]);
 }
 
 export interface AutoSettings {
@@ -303,28 +310,75 @@ export interface AutoSettings {
 export const getAutoSettings = () => getKV<AutoSettings>("auto", { analyze: true, audio: true });
 
 let pipelineRunning = false;
+export const isPipelineRunning = () => pipelineRunning;
+
+/** Bildschirm wach halten, solange der Durchlauf läuft (sonst friert das Handy die App ein) */
+async function keepAwake(): Promise<() => void> {
+  try {
+    const nav = navigator as Navigator & { wakeLock?: { request(t: "screen"): Promise<{ release(): Promise<void> }> } };
+    const lock = await nav.wakeLock?.request("screen");
+    return () => void lock?.release().catch(() => undefined);
+  } catch {
+    return () => undefined;
+  }
+}
+
+async function step(name: string, fn: () => Promise<unknown>) {
+  try {
+    await fn();
+  } catch (e) {
+    console.warn(name, e);
+    await logError(name, e);
+  }
+}
+
 /**
- * Kompletter Durchlauf: Sync, Tracklists, BPM/Key, Vibes (gratis oder Claude),
- * Details der Wants, Preise mit Bewertung, Lieblingshändler. Alles im Hintergrund,
- * Nutzeraktionen haben in der Warteschlange immer Vorrang.
+ * Kompletter Durchlauf in zwei parallelen Spuren:
+ * - Discogs-Spur: Tracklists, Preise der Wants, Details der Wants, Lieblingshändler, Freunde
+ *   (alles über die Discogs-Warteschlange mit ihrem Limit)
+ * - Audio-Spur: BPM/Key-Suche, Vibes und Hörproben-Analyse (andere Dienste, läuft gleichzeitig)
+ * Jeder Schritt arbeitet nur ab, was noch fehlt. Bricht etwas ab, macht der nächste Start dort weiter.
  */
-export async function autoPipeline(opts: { force?: boolean } = {}) {
+export async function autoPipeline(opts: { force?: boolean; resume?: boolean } = {}) {
   if (pipelineRunning) return;
   pipelineRunning = true;
+  const release = await keepAwake();
   try {
-    await fullSync();
+    if (!opts.resume) await step("Sync", syncLists);
     const auto = await getAutoSettings();
-    if (!auto.analyze && !opts.force) return;
-    await lookupAudioFor();
-    await tagVibes(undefined, { audio: auto.audio });
-    await fetchMissingDetails("wants");
-    const { refreshPrices, scanFavorites } = await import("./prices");
-    await refreshPrices(await db.wants.toCollection().primaryKeys(), { maxAgeHours: 24 });
-    await scanFavorites(24);
-    const { syncFriends } = await import("./friends");
-    await syncFriends(24);
+    if (!auto.analyze && !opts.force) {
+      await step("Tracklists", () => fetchMissingDetails("collection"));
+      return;
+    }
+    let discogsDone = false;
+    const discogsLane = async () => {
+      const { refreshPrices, scanFavorites } = await import("./prices");
+      const wantIds = await db.wants.toCollection().primaryKeys();
+      // Tracklists und Preise wechseln sich in der Warteschlange ab, so kommt beides zügig
+      await Promise.all([step("Tracklists", () => fetchMissingDetails("collection")), step("Preise", () => refreshPrices(wantIds, { maxAgeHours: 24 }))]);
+      discogsDone = true;
+      await step("Details der Wants", () => fetchMissingDetails("wants"));
+      await step("Lieblingshändler", () => scanFavorites(24));
+      const { syncFriends } = await import("./friends");
+      await step("Freunde", () => syncFriends(24));
+    };
+    const audioLane = async () => {
+      // Läuft in Runden, bis keine neuen Tracklists mehr dazukommen
+      for (let round = 0; round < 40; round++) {
+        await step("BPM & Key", () => lookupAudioFor());
+        await step("Vibes", () => tagVibes(undefined, { audio: auto.audio }));
+        if (discogsDone) {
+          await step("BPM & Key", () => lookupAudioFor());
+          await step("Vibes", () => tagVibes(undefined, { audio: auto.audio }));
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 8000));
+      }
+    };
+    await Promise.all([discogsLane(), audioLane()]);
     await setKV("lastAutoRun", Date.now());
   } finally {
+    release();
     pipelineRunning = false;
   }
 }

@@ -235,13 +235,28 @@ function SyncPage() {
   const jobs = useStore((s) => s.jobs);
   const me = useStore((s) => s.me);
   const [auto, setAuto] = useState<AutoSettings>({ analyze: true, audio: true });
-  const info = useLiveQuery(async () => ({
-    lastSync: await getKV<number>("lastCollectionSync", 0),
-    lastAuto: await getKV<number>("lastAutoRun", 0),
-    tracks: await db.tracks.count(),
-    withBpm: await db.tracks.where("bpm").above(0).count(),
-    noDetail: (await db.releases.toArray()).filter((r) => !r.detailFetchedAt).length,
-  }));
+  const info = useLiveQuery(async () => {
+    const [coll, wants, tracks, rels, stats] = await Promise.all([db.collection.toArray(), db.wants.toCollection().primaryKeys(), db.tracks.toArray(), db.releases.toArray(), db.marketStats.toArray()]);
+    const mine = new Set(coll.map((c) => c.releaseId));
+    const myTracks = tracks.filter((t) => mine.has(t.releaseId));
+    const relMap = new Map(rels.map((r) => [r.id, r]));
+    const statIds = new Set(stats.map((x) => x.releaseId));
+    return {
+      lastSync: await getKV<number>("lastCollectionSync", 0),
+      lastAuto: await getKV<number>("lastAutoRun", 0),
+      log: await getKV<{ at: number; step: string; message: string }[]>("syncLog", []),
+      records: mine.size,
+      withDetail: [...mine].filter((id) => relMap.get(id)?.detailFetchedAt).length,
+      tracks: myTracks.length,
+      lookedUp: myTracks.filter((t) => t.lookedUpAt).length,
+      analyzed: myTracks.filter((t) => t.analyzedAt).length,
+      vibes: myTracks.filter((t) => t.energy != null).length,
+      withBpm: myTracks.filter((t) => t.bpm).length,
+      withKey: myTracks.filter((t) => t.key).length,
+      wants: wants.length,
+      priced: wants.filter((id) => statIds.has(id)).length,
+    };
+  });
   useEffect(() => {
     getAutoSettings().then(setAuto);
   }, []);
@@ -269,11 +284,53 @@ function SyncPage() {
           <Row label="Hörproben analysieren" sub="Energie, fehlende BPM und Keys · ca. 0,5 MB pro Track" right={<Switch checked={auto.audio} label="Hörproben analysieren" onChange={(v) => save({ ...auto, audio: v })} />} />
         </Group>
 
-        <Group title="Stand">
-          <Row label="Tracks mit BPM" value={info ? `${info.withBpm} von ${info.tracks}` : "–"} />
-          <Row label="Platten ohne Details" value={info?.noDetail ?? "–"} />
-          <Row label="Letzte komplette Analyse" value={info?.lastAuto ? new Date(info.lastAuto).toLocaleDateString("de-DE") : "noch nie"} />
+        <Group title="Fortschritt" foot="Jeder Schritt arbeitet nur ab, was noch fehlt. Wird die App unterbrochen, geht es beim nächsten Öffnen automatisch weiter.">
+          {info &&
+            (
+              [
+                ["Tracklists", info.withDetail, info.records],
+                ["BPM & Key gesucht", info.lookedUp, info.tracks],
+                ["Hörproben analysiert", info.analyzed, info.tracks],
+                ["Vibes & Energie", info.vibes, info.tracks],
+                ["Preise der Wants", info.priced, info.wants],
+              ] as [string, number, number][]
+            ).map(([l, a, b]) => (
+              <div key={l} className="set-row" style={{ cursor: "default", flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                <div className="row">
+                  <span className="label">{l}</span>
+                  <span className="value">
+                    {a} / {b}
+                  </span>
+                </div>
+                <div className="progress" style={{ height: 4 }}>
+                  <div style={{ width: `${b ? (100 * a) / b : 0}%`, background: a >= b ? "var(--ok)" : undefined }} />
+                </div>
+              </div>
+            ))}
         </Group>
+
+        <Group title="Ergebnis">
+          <Row label="Tracks mit BPM" value={info ? `${info.withBpm} von ${info.tracks}` : "–"} />
+          <Row label="Tracks mit Key" value={info ? `${info.withKey} von ${info.tracks}` : "–"} />
+          <Row label="Letzter kompletter Durchlauf" value={info?.lastAuto ? new Date(info.lastAuto).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" }) : "noch nie"} />
+        </Group>
+
+        {info && info.log.length > 0 && (
+          <Group title="Letzte Probleme" foot="Hilft bei der Fehlersuche. Einzelne Fehler sind normal, z.B. wenn das Netz kurz weg war.">
+            {info.log.slice(0, 8).map((e, i) => (
+              <div key={i} className="set-row" style={{ cursor: "default" }}>
+                <span className="label">
+                  {e.step}
+                  <small>{e.message}</small>
+                </span>
+                <span className="value" style={{ fontSize: 12 }}>
+                  {new Date(e.at).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                </span>
+              </div>
+            ))}
+            <Row label="Protokoll leeren" danger onClick={() => setKV("syncLog", [])} />
+          </Group>
+        )}
 
         <Group title="Einzelne Schritte">
           <Row icon={<IconDownload />} color="#0a84ff" label="Fehlende Tracklists laden" onClick={run("Tracklists", () => fetchMissingDetails("collection"))} />

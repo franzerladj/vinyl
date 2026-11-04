@@ -14,9 +14,11 @@ interface State {
   me: Me | null;
   jobs: Record<string, JobState>;
   toast: string | null;
+  /** Gesetzt, wenn eine neue App-Version bereitsteht */
+  updateReady: (() => void) | null;
 }
 
-let state: State = { me: null, jobs: {}, toast: null };
+let state: State = { me: null, jobs: {}, toast: null, updateReady: null };
 const listeners = new Set<() => void>();
 
 export const getState = () => state;

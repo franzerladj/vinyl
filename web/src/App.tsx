@@ -26,10 +26,20 @@ async function startupSync() {
   const { toast } = await import("./lib/store");
   await migrateAudioMatching();
   void import("./lib/friends").then((f) => f.refreshMyProfile()).catch(() => undefined);
-  const last = await getKV<number>("lastCollectionSync", 0);
-  if (Date.now() - last > 6 * 3600_000 && navigator.onLine) {
-    autoPipeline().catch((e) => toast(`Sync fehlgeschlagen: ${e.message}`));
-  }
+  const run = async () => {
+    if (!navigator.onLine) return;
+    const last = await getKV<number>("lastCollectionSync", 0);
+    // Länger als 6 Stunden her: komplett abgleichen. Sonst nur fortsetzen, was noch fehlt (kostet fast nichts).
+    autoPipeline({ resume: Date.now() - last < 6 * 3600_000 }).catch((e) => toast(`Sync fehlgeschlagen: ${e.message}`));
+  };
+  await run();
+  // Kommt die App aus dem Hintergrund zurück, geht es dort weiter, wo sie unterbrochen wurde
+  let hiddenAt = 0;
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) hiddenAt = Date.now();
+    else if (Date.now() - hiddenAt > 20_000) void run();
+  });
+  window.addEventListener("online", () => void run());
 }
 
 export default function App() {

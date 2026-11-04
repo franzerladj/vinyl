@@ -98,9 +98,15 @@ export function Jobs() {
   const jobs = useStore((s) => s.jobs);
   const loc = useLocation();
   const toastMsg = useStore((s) => s.toast);
+  const update = useStore((s) => s.updateReady);
   const list = Object.values(jobs);
   return (
     <>
+      {update && list.length === 0 && (
+        <button className="toast" style={{ border: 0, cursor: "pointer", animation: "island .55s var(--spring) both" }} onClick={() => update()}>
+          Neue Version da · Tippen zum Aktualisieren
+        </button>
+      )}
       {toastMsg && (
         <div className="toast" role="status" key={toastMsg}>
           {toastMsg}

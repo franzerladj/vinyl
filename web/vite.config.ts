@@ -23,7 +23,8 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
+      injectRegister: false,
       includeAssets: ["icon.svg"],
       manifest: {
         name: "Crate – Vinyl DJ",

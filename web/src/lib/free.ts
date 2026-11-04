@@ -7,6 +7,7 @@ import { analyzeSamples, type AudioAnalysis } from "../../../shared/audioAnalysi
 import { estimateVibe } from "../../../shared/vibes";
 import { validBarcode } from "../../../shared/barcode";
 import { parseDuration } from "../../../shared/match";
+import { pool } from "./pool";
 
 // ---------------------------------------------------------------------------
 // Texterkennung (Tesseract, läuft im Browser)
@@ -51,12 +52,45 @@ export async function ocrImage(dataUrl: string, onProgress?: (p: number) => void
 // ---------------------------------------------------------------------------
 // Hörprobe analysieren
 // ---------------------------------------------------------------------------
+let worker: Worker | null = null;
+let workerBroken = false;
+let seq = 0;
+const pending = new Map<number, (r: AudioAnalysis | null) => void>();
+
+/** Rechnet die Analyse in einem Web Worker; ohne Worker-Unterstützung auf dem Hauptthread */
+function analyzeOffThread(samples: Float32Array, sr: number): Promise<AudioAnalysis | null> {
+  if (!workerBroken && !worker) {
+    try {
+      worker = new Worker(new URL("./analysis.worker.ts", import.meta.url), { type: "module" });
+      worker.onmessage = (e: MessageEvent<{ id: number; result?: AudioAnalysis; error?: string }>) => {
+        pending.get(e.data.id)?.(e.data.result ?? null);
+        pending.delete(e.data.id);
+      };
+      worker.onerror = () => {
+        workerBroken = true;
+        pending.forEach((res) => res(null));
+        pending.clear();
+      };
+    } catch {
+      workerBroken = true;
+    }
+  }
+  if (!worker || workerBroken) return Promise.resolve(analyzeSamples(samples, sr));
+  const id = ++seq;
+  return new Promise((res) => {
+    pending.set(id, res);
+    worker!.postMessage({ id, samples, sr }, [samples.buffer]);
+  });
+}
+
 export const previewUrl = (artist: string, title: string, duration?: number | null) =>
   `/api/audio/preview?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}${duration ? `&duration=${duration}` : ""}`;
 
 export async function analyzePreview(artist: string, title: string, duration?: number | null): Promise<AudioAnalysis | null> {
   const res = await fetch(previewUrl(artist, title, duration), { credentials: "include" });
-  if (!res.ok) return null;
+  // 404 = keine passende Hörprobe (endgültig); andere Fehler = später nochmal versuchen
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Hörprobe ${res.status}`);
   const buf = await res.arrayBuffer();
   const sr = 22050;
   // OfflineAudioContext dekodiert direkt in der gewünschten Abtastrate
@@ -67,9 +101,7 @@ export async function analyzePreview(artist: string, title: string, duration?: n
     const ch = audio.getChannelData(c);
     for (let i = 0; i < ch.length; i++) mono[i] += ch[i] / audio.numberOfChannels;
   }
-  // Rechenarbeit kurz in den nächsten Frame schieben, damit die Oberfläche flüssig bleibt
-  await new Promise((r) => setTimeout(r, 0));
-  return analyzeSamples(mono, sr);
+  return analyzeOffThread(mono, sr);
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +121,7 @@ export interface FreeOptions {
 export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptions) {
   const all = trackIds ? ((await db.tracks.bulkGet(trackIds)).filter(Boolean) as TrackMeta[]) : await db.tracks.toArray();
   const collIds = new Set((await db.collection.toArray()).map((c) => c.releaseId));
-  const todo = all.filter((t) => (trackIds || collIds.has(t.releaseId)) && (opts.refresh || t.energy == null || (opts.audio && !t.analyzedAt)));
+  const todo = all.filter((t) => (trackIds || collIds.has(t.releaseId)) && (opts.refresh || t.energy == null || (opts.audio && !t.analyzedAt && (t.analyzeTries ?? 0) < 3)));
   if (!todo.length) return 0;
   const rels = new Map((await db.releases.bulkGet([...new Set(todo.map((t) => t.releaseId))])).filter(Boolean).map((r) => [r!.id, r!]));
   const lastfm = getState().me?.features.lastfm;
@@ -99,7 +131,8 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
   let changed = 0;
   try {
     let done = 0;
-    for (const t of todo) {
+    // Zwei Tracks gleichzeitig: Download und Analyse überlappen sich
+    await pool(todo, 2, async (t) => {
       const patch: Partial<TrackMeta> = {};
       let tags: TagsResp["tags"] = [];
       if (lastfm) {
@@ -110,13 +143,16 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
         }
       }
       let analysis: AudioAnalysis | null = null;
-      if (opts.audio && !t.analyzedAt) {
+      if (opts.audio && !t.analyzedAt && (t.analyzeTries ?? 0) < 3) {
+        let failed = false;
         try {
           analysis = await analyzePreview(t.artist, t.title, durationOf(t));
         } catch (e) {
+          failed = true;
           console.warn("Analyse", t.id, e);
         }
-        patch.analyzedAt = Date.now();
+        if (!failed) patch.analyzedAt = Date.now();
+        else patch.analyzeTries = (t.analyzeTries ?? 0) + 1;
         if (analysis) {
           patch.audioEnergy = analysis.energy;
           // Gemessene Werte nur übernehmen, wenn sie sicher genug sind und nichts Besseres da ist
@@ -145,7 +181,7 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
       await db.tracks.update(t.id, patch);
       changed++;
       jobUpdate(job, { done: ++done });
-    }
+    });
   } finally {
     jobUpdate(job, null);
   }
