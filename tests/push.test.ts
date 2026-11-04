@@ -51,3 +51,17 @@ describe("Web Push", () => {
     expect(bundle([{ title: "A", body: "1" }, { title: "B", body: "2" }])?.title).toBe("2 Neuigkeiten auf deiner Wantlist");
   });
 });
+
+describe("Auswahl der Wants pro Runde", () => {
+  it("prüft wichtige Wants öfter und kommt reihum bei allen vorbei", async () => {
+    const { pickWants } = await import("../server/push");
+    const wants = Array.from({ length: 60 }, (_, i) => ({ id: i, t: "", a: "", n: i < 10 ? 0 : 5, low: 10, target: i === 59 ? 8 : null }));
+    const seen = new Map<number, number>();
+    for (let slot = 0; slot < 10; slot++) for (const i of pickWants(wants, slot, 20, 10)) seen.set(i, (seen.get(i) ?? 0) + 1);
+    // 11 wichtige (10 ohne Angebot + 1 mit Wunschpreis) in jeder Runde
+    expect(seen.get(0)).toBe(10);
+    expect(seen.get(59)).toBe(10);
+    // Alle anderen kommen in 10 Runden mindestens einmal dran
+    for (let i = 10; i < 59; i++) expect(seen.get(i) ?? 0).toBeGreaterThanOrEqual(1);
+  });
+});

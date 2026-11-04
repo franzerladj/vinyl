@@ -10,4 +10,4 @@ workers_dev = false
 APP_URL = "https://crate-8vf.pages.dev"
 
 [triggers]
-crons = ["23 * * * *"]
+crons = ["*/10 * * * *"]

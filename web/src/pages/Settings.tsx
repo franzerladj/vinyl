@@ -750,7 +750,7 @@ function NotificationsPage() {
           </Group>
         ) : (
           <>
-            <Group foot={available ? "Für Wantlist und Erinnerungen prüft Crate stündlich bei Discogs. Dafür liegen deine Wants, Wunschpreise und Termine verschlüsselt auf dem Server, nur solange Mitteilungen an sind." : "Mitteilungen sind auf dem Server noch nicht eingerichtet."}>
+            <Group foot={available ? "Für Wantlist und Erinnerungen prüft Crate alle 10 Minuten bei Discogs. Dafür liegen deine Wants, Wunschpreise und Termine verschlüsselt auf dem Server, nur solange Mitteilungen an sind." : "Mitteilungen sind auf dem Server noch nicht eingerichtet."}>
               <Row
                 icon={<IconBell />}
                 color="#ff3b30"

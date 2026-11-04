@@ -4,7 +4,7 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { readConfig, type Config, type Env } from "./env";
 import { seal, unseal, type Session } from "./session";
 import { authHeaders, authorizeUrl, discogsFetch, DiscogsBusy, getAccessToken, getRequestToken } from "./discogs";
-import { bundle, dueReminders, loadUser, notifyUser, saveUser, sendPush, userKey, wantChange, type Message, type PushSub, type Stat, type UserRec, type WatchedWant } from "./push";
+import { bundle, currentSlot, dueReminders, loadUser, pickWants, notifyUser, saveUser, sendPush, userKey, wantChange, type Message, type PushSub, type Stat, type UserRec, type WatchedWant } from "./push";
 import { oauthHmacHeader, oauthHmacParams } from "./oauthSign";
 import { recognizeRecord, recognizeRecordFree, tagVibes, tagVibesFree, type VibeInput } from "./ai";
 import { fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
@@ -365,66 +365,79 @@ app.post("/api/push/test", async (c) => {
   return c.json({ sent: ok, devices: rec.subs.length });
 });
 
+/** Für den Zeitplan-Worker: alle Nutzer mit Mitteilungen (er ruft dann für jeden /api/push/run?u= auf) */
+app.post("/api/push/users", async (c) => {
+  const cfg = c.var.cfg;
+  if (!cfg.cronSecret || c.req.header("X-Cron-Secret") !== cfg.cronSecret) return c.json({ message: "nein" }, 403);
+  const users: string[] = [];
+  let cursor: string | undefined;
+  do {
+    const page = await cfg.kv.list({ prefix: "u:", cursor });
+    users.push(...page.keys.map((k) => k.name.slice(2)));
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return c.json({ users });
+});
+
+/** Einen Nutzer prüfen: fällige Erinnerungen und eine Runde Wants (wichtige zuerst) */
+async function runUser(cfg: Config, u: string, budget: number) {
+  const rec = await loadUser(cfg.kv, u);
+  if (!rec?.subs.length) return { u, skipped: true };
+  let changed = false;
+  for (const d of dueReminders(rec)) {
+    budget -= rec.subs.length;
+    await notifyUser(cfg.kv, cfg.push, u, rec, d.kind, d.msg);
+    rec.sent[d.key] = Date.now();
+    changed = true;
+  }
+  const msgs: Message[] = [];
+  let checked = 0;
+  if (rec.prefs.wants && rec.wants.length) {
+    const sess = await unseal<Session>(cfg.sessionSecret, rec.sess);
+    const picks = pickWants(rec.wants, currentSlot()).slice(0, Math.max(0, budget - rec.subs.length - 1));
+    for (const idx of picks) {
+      const w = rec.wants[idx];
+      const r = await fetch(`https://api.discogs.com/marketplace/stats/${w.id}?curr_abbr=${rec.currency ?? "EUR"}`, { headers: authHeaders(cfg, sess) }).catch(() => null);
+      checked++;
+      if (!r || r.status === 429) break; // Discogs gerade gedrosselt: nächste Runde weiter
+      if (!r.ok) continue;
+      const st = (await r.json()) as Stat;
+      const m = wantChange(w, st, rec.currency ?? "EUR");
+      if (m) msgs.push(m);
+      const n = st.num_for_sale ?? 0;
+      const low = st.lowest_price?.value ?? null;
+      // Nur speichern, wenn sich etwas geändert hat (schont das Schreib-Kontingent)
+      if (w.n !== n || w.low !== low) {
+        rec.wants[idx] = { ...w, n, low };
+        changed = true;
+      }
+    }
+  }
+  const b = bundle(msgs);
+  if (b) await notifyUser(cfg.kv, cfg.push, u, rec, "wants", b);
+  for (const [k, t] of Object.entries(rec.sent))
+    if (Date.now() - t > 120 * 86_400_000) {
+      delete rec.sent[k];
+      changed = true;
+    }
+  if (changed) await saveUser(cfg.kv, u, rec);
+  return { u, checked, sent: msgs.length };
+}
+
 /**
- * Zeitplan (stündlich vom Worker crate-cron): fällige Erinnerungen und eine Runde Want-Prüfung.
- * Cloudflare erlaubt ~50 Unteranfragen pro Aufruf, deshalb mit Budget und rotierendem Zeiger.
+ * Zeitplan (alle 10 Minuten vom Worker crate-cron). Mit ?u= nur dieser Nutzer:
+ * jeder Aufruf hat sein eigenes Budget an Unteranfragen (~50 bei Cloudflare).
  */
 app.post("/api/push/run", async (c) => {
   const cfg = c.var.cfg;
   if (!cfg.cronSecret || c.req.header("X-Cron-Secret") !== cfg.cronSecret) return c.json({ message: "nein" }, 403);
-  let budget = 42;
-  const report: Record<string, unknown>[] = [];
-  const startKey = (await cfg.kv.get("cron:next")) ?? "";
-  const keys = (await cfg.kv.list({ prefix: "u:" })).keys.map((k) => k.name).sort();
-  // Reihum beginnen, damit bei vielen Nutzern alle drankommen
-  const order = [...keys.filter((k) => k > startKey), ...keys.filter((k) => k <= startKey)];
-  let last = startKey;
-  for (const key of order) {
-    if (budget < 4) break;
-    last = key;
-    const u = key.slice(2);
-    const rec = await loadUser(cfg.kv, u);
-    if (!rec?.subs.length) continue;
-    let changed = false;
-    // 1. Erinnerungen
-    for (const d of dueReminders(rec)) {
-      budget -= rec.subs.length;
-      await notifyUser(cfg.kv, cfg.push, u, rec, d.kind, d.msg);
-      rec.sent[d.key] = Date.now();
-      changed = true;
-    }
-    // 2. Wants reihum prüfen
-    const msgs: Message[] = [];
-    if (rec.prefs.wants && rec.wants.length) {
-      const sess = await unseal<Session>(cfg.sessionSecret, rec.sess);
-      const n = Math.min(rec.wants.length, Math.max(0, budget - rec.subs.length - 2), 10);
-      for (let i = 0; i < n; i++) {
-        const idx = (rec.cursor + i) % rec.wants.length;
-        const w = rec.wants[idx];
-        budget--;
-        const r = await fetch(`https://api.discogs.com/marketplace/stats/${w.id}?curr_abbr=${rec.currency ?? "EUR"}`, { headers: authHeaders(cfg, sess) }).catch(() => null);
-        if (!r || r.status === 429) break; // Discogs gerade gedrosselt: nächste Runde weiter
-        if (!r.ok) continue;
-        const st = (await r.json()) as Stat;
-        const m = wantChange(w, st, rec.currency ?? "EUR");
-        if (m) msgs.push(m);
-        rec.wants[idx] = { ...w, n: st.num_for_sale ?? 0, low: st.lowest_price?.value ?? null };
-        rec.cursor = (idx + 1) % rec.wants.length;
-        changed = true;
-      }
-    }
-    const b = bundle(msgs);
-    if (b) {
-      budget -= rec.subs.length;
-      await notifyUser(cfg.kv, cfg.push, u, rec, "wants", b);
-    }
-    // Alte Erinnerungs-Merker aufräumen (älter als 120 Tage)
-    for (const [k, t] of Object.entries(rec.sent)) if (Date.now() - t > 120 * 86_400_000) delete rec.sent[k];
-    if (changed) await saveUser(cfg.kv, u, rec);
-    report.push({ u, wants: msgs.length });
-  }
-  await cfg.kv.put("cron:next", last);
-  return c.json({ users: keys.length, done: report, budgetLeft: budget });
+  const u = c.req.query("u");
+  if (u) return c.json(await runUser(cfg, u, 45));
+  // Ohne Nutzer: alle nacheinander mit geteiltem Budget (Rückfall für alte Worker)
+  const keys = (await cfg.kv.list({ prefix: "u:" })).keys.map((k) => k.name.slice(2));
+  const done = [];
+  for (const name of keys.slice(0, 3)) done.push(await runUser(cfg, name, 14));
+  return c.json({ users: keys.length, done });
 });
 
 // ---------- Freunde finden: freiwilliges Crate-Verzeichnis ----------

@@ -216,3 +216,23 @@ export function bundle(msgs: Message[]): Message | null {
   if (msgs.length === 1) return msgs[0];
   return { title: `${msgs.length} Neuigkeiten auf deiner Wantlist`, body: msgs.map((m) => `${m.title}: ${m.body}`).join("\n").slice(0, 300), url: "/wants", tag: "wants" };
 }
+
+/**
+ * Welche Wants in dieser Runde prüfen? Wichtige (ohne Angebot, mit Wunschpreis, noch nie geprüft)
+ * kommen viel öfter dran als der Rest. Die Runde ergibt sich aus der Uhrzeit, so muss kein Zeiger
+ * gespeichert werden.
+ */
+export function pickWants(wants: WatchedWant[], slot: number, hotN = 20, normalN = 10): number[] {
+  const hot: number[] = [];
+  const normal: number[] = [];
+  wants.forEach((w, i) => ((w.n == null || w.n === 0 || w.target) ? hot : normal).push(i));
+  const take = (list: number[], n: number) => {
+    if (list.length <= n) return list;
+    const start = (slot * n) % list.length;
+    return Array.from({ length: n }, (_, k) => list[(start + k) % list.length]);
+  };
+  return [...take(hot, hotN), ...take(normal, normalN)];
+}
+
+export const SLOT_MINUTES = 10;
+export const currentSlot = (now = Date.now()) => Math.floor(now / (SLOT_MINUTES * 60_000));

@@ -137,7 +137,7 @@ export function Datenschutz() {
 
         <h2>10. Mitteilungen (optional)</h2>
         <p>
-          Wenn du Mitteilungen einschaltest, speichert der Server bei Cloudflare (KV-Speicher): die Push-Adresse deines Geräts, deinen Discogs-Zugangsschlüssel (verschlüsselt), deine Wants mit Wunschpreisen, verliehene Platten und Set-Termine. Damit prüft er stündlich bei Discogs Preise und Verfügbarkeit und erinnert dich an Termine. Fügt dich jemand als Freund hinzu, merkt sich der Server das bis zu 60 Tage, um dir Bescheid zu geben. Zugestellt werden Mitteilungen über den Push-Dienst deines Browsers (Apple, Google oder Mozilla). Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO). Schaltest du Mitteilungen aus, werden diese Daten gelöscht.
+          Wenn du Mitteilungen einschaltest, speichert der Server bei Cloudflare (KV-Speicher): die Push-Adresse deines Geräts, deinen Discogs-Zugangsschlüssel (verschlüsselt), deine Wants mit Wunschpreisen, verliehene Platten und Set-Termine. Damit prüft er alle 10 Minuten bei Discogs Preise und Verfügbarkeit und erinnert dich an Termine. Fügt dich jemand als Freund hinzu, merkt sich der Server das bis zu 60 Tage, um dir Bescheid zu geben. Zugestellt werden Mitteilungen über den Push-Dienst deines Browsers (Apple, Google oder Mozilla). Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO). Schaltest du Mitteilungen aus, werden diese Daten gelöscht.
         </p>
 
         <h2>11. Schriften</h2>
