@@ -1,7 +1,7 @@
 // Freunde: öffentliche Discogs-Sammlungen und Wantlists anderer Nutzer.
 // Alles läuft über die offizielle API, gespeichert wird lokal auf dem Gerät.
 import { ApiError, discogs } from "./api";
-import { db, type Friend, type FriendItem } from "./db";
+import { db, getKV, setKV, type Friend, type FriendItem } from "./db";
 import { upsertBasics } from "./sync";
 import { jobUpdate, username } from "./store";
 import type { BasicInformation, Pagination } from "./types";
@@ -144,3 +144,75 @@ export const inviteLink = () => `${location.origin}/friends?add=${encodeURICompo
 export const messageUrl = (u: string) => `https://www.discogs.com/messages/compose?to=${encodeURIComponent(u)}`;
 export const profileUrl = (u: string) => `https://www.discogs.com/user/${encodeURIComponent(u)}`;
 export const collectionUrl = (u: string) => `https://www.discogs.com/user/${encodeURIComponent(u)}/collection`;
+
+// ---------------------------------------------------------------------------
+// Eigenes Profil (Profilbild, Name) für Startseite und Einstellungen
+// ---------------------------------------------------------------------------
+export interface MyProfile {
+  avatar?: string;
+  name?: string;
+  location?: string;
+  fetchedAt: number;
+}
+
+export async function refreshMyProfile(maxAgeHours = 24): Promise<MyProfile | null> {
+  const old = await getKV<MyProfile | null>("myProfile", null);
+  if (old && Date.now() - old.fetchedAt < maxAgeHours * 3600_000) return old;
+  const me = username();
+  if (!me) return old;
+  const p = await discogs<Profile>(`/users/${encodeURIComponent(me)}`, { background: true });
+  const prof: MyProfile = { avatar: p.avatar_url || undefined, name: p.name || undefined, location: p.location || undefined, fetchedAt: Date.now() };
+  await setKV("myProfile", prof);
+  return prof;
+}
+
+// ---------------------------------------------------------------------------
+// Geschmack: Übereinstimmung der Styles (Kosinus-Ähnlichkeit der Style-Häufigkeiten)
+// ---------------------------------------------------------------------------
+export async function tasteMatch(u: string): Promise<{ score: number | null; topShared: string[] }> {
+  const [items, myColl] = await Promise.all([db.friendItems.where("username").equals(u).toArray(), db.collection.toArray()]);
+  const theirIds = items.filter((i) => i.kind === "coll").map((i) => i.releaseId);
+  const myIds = [...new Set(myColl.map((c) => c.releaseId))];
+  if (theirIds.length < 5 || myIds.length < 5) return { score: null, topShared: [] };
+  const [theirs, mine] = await Promise.all([db.releases.bulkGet(theirIds), db.releases.bulkGet(myIds)]);
+  const vec = (rels: (import("./db").Release | undefined)[]) => {
+    const m = new Map<string, number>();
+    rels.forEach((r) => r?.styles.forEach((s) => m.set(s, (m.get(s) ?? 0) + 1)));
+    return m;
+  };
+  const a = vec(theirs);
+  const b = vec(mine);
+  let dot = 0;
+  for (const [k, v] of a) dot += v * (b.get(k) ?? 0);
+  const norm = (m: Map<string, number>) => Math.sqrt([...m.values()].reduce((s, v) => s + v * v, 0));
+  const score = dot / (norm(a) * norm(b) || 1);
+  const topShared = [...a.keys()].filter((k) => b.has(k)).sort((x, y) => (a.get(y)! + b.get(y)!) - (a.get(x)! + b.get(x)!)).slice(0, 3);
+  return { score: Math.round(score * 100), topShared };
+}
+
+/** Wer von deinen Freunden hat oder sucht diese Platte? */
+export async function friendsFor(releaseId: number) {
+  const items = await db.friendItems.where("releaseId").equals(releaseId).toArray();
+  const friends = new Map((await db.friends.bulkGet([...new Set(items.map((i) => i.username))])).filter(Boolean).map((f) => [f!.username, f!]));
+  return items.filter((i) => friends.has(i.username)).map((i) => ({ friend: friends.get(i.username)!, kind: i.kind }));
+}
+
+/** Neu in den Sammlungen deiner Freunde (nach Discogs-Datum) */
+export async function friendFeed(limit = 20) {
+  const items = (await db.friendItems.toArray()).filter((i) => i.kind === "coll").sort((x, y) => y.dateAdded.localeCompare(x.dateAdded)).slice(0, limit);
+  const [rels, friends] = await Promise.all([db.releases.bulkGet(items.map((i) => i.releaseId)), db.friends.toArray()]);
+  const fm = new Map(friends.map((f) => [f.username, f]));
+  return items.map((it, i) => ({ item: it, r: rels[i], friend: fm.get(it.username) })).filter((x) => x.r && x.friend);
+}
+
+// ---------------------------------------------------------------------------
+// Verleihen
+// ---------------------------------------------------------------------------
+export async function lendRecord(releaseId: number, to: string | null) {
+  const m = await db.recordMeta.get(releaseId);
+  await db.recordMeta.put({ ...m, releaseId, lentTo: to, lentAt: to ? Date.now() : null });
+}
+
+export async function lentRecords() {
+  return (await db.recordMeta.toArray()).filter((m) => m.lentTo);
+}

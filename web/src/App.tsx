@@ -25,6 +25,7 @@ async function startupSync() {
   const { getKV } = await import("./lib/db");
   const { toast } = await import("./lib/store");
   await migrateAudioMatching();
+  void import("./lib/friends").then((f) => f.refreshMyProfile()).catch(() => undefined);
   const last = await getKV<number>("lastCollectionSync", 0);
   if (Date.now() - last > 6 * 3600_000 && navigator.onLine) {
     autoPipeline().catch((e) => toast(`Sync fehlgeschlagen: ${e.message}`));

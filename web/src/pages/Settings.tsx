@@ -9,7 +9,8 @@ import { autoPipeline, fetchMissingDetails, getAutoSettings, lookupAudioFor, tag
 import { suggestionsState } from "../lib/prices";
 import { toast, useStore } from "../lib/store";
 import { getTheme, hapticsEnabled, setHaptics, setTheme, type Theme } from "../lib/theme";
-import { Seg } from "../components/bits";
+import { Avatar, Seg } from "../components/bits";
+import type { MyProfile } from "../lib/friends";
 import { NavBar, Switch } from "../components/ui";
 import {
   IconBolt,
@@ -24,6 +25,8 @@ import {
   IconSun,
   IconSync,
   IconWave,
+  IconUser,
+  IconShare,
 } from "../components/icons";
 
 const TABLES = ["releases", "collection", "wants", "tracks", "recordMeta", "sets", "marketStats", "listings", "kv", "priceHistory", "priceSuggestions", "wantMeta", "sellers", "friends", "friendItems"] as const;
@@ -114,7 +117,10 @@ function Overview() {
   const me = useStore((s) => s.me);
   const [theme, setT] = useState<Theme>(getTheme());
   const [haptics, setH] = useState(hapticsEnabled());
+  const profile = useLiveQuery(() => getKV<MyProfile | null>("myProfile", null));
   const stats = useLiveQuery(async () => ({
+    friends: await db.friends.count(),
+    lent: (await db.recordMeta.toArray()).filter((m) => m.lentTo).length,
     records: await db.collection.count(),
     wants: await db.wants.count(),
     lastSync: await getKV<number>("lastCollectionSync", 0),
@@ -130,9 +136,10 @@ function Overview() {
       <div className="page settings-list">
         <div className="group">
           <div className="profile-card">
-            <span className="avatar">{(me?.username ?? "?").charAt(0).toUpperCase()}</span>
+            <Avatar src={profile?.avatar} name={me?.username ?? "?"} size={58} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <b style={{ fontSize: 19 }}>{me?.username}</b>
+              <b style={{ fontSize: 19 }}>{profile?.name || me?.username}</b>
+              {profile?.name && <div className="sub">{me?.username}{profile.location ? ` · ${profile.location}` : ""}</div>}
               <div className="sub">
                 Discogs verbunden · {stats?.records ?? "–"} Platten · {stats?.wants ?? "–"} Wants
               </div>
@@ -145,6 +152,11 @@ function Overview() {
           <Row icon={<IconSync />} color="#30d158" label="Synchronisation & Analyse" value={stats?.lastSync ? new Date(stats.lastSync).toLocaleDateString("de-DE") : "nie"} to="/settings/sync" />
           <Row icon={<IconCoin />} color="#ff9f0a" label="Preise & Shopping" value={stats?.currency} to="/settings/prices" />
           <Row icon={<IconWave />} color="#5e5ce6" label="Datenquellen & KI" value={`${sources} aktiv`} to="/settings/sources" />
+        </Group>
+
+        <Group title="Freunde">
+          <Row icon={<IconUser />} color="#bf5af2" label="Freunde" value={stats?.friends ?? 0} to="/friends" />
+          <Row icon={<IconShare />} color="#ff9f0a" label="Verliehene Platten" value={stats?.lent ?? 0} to="/friends?tab=lent" />
         </Group>
 
         <Group title="Darstellung" foot="„System“ folgt der Einstellung deines Handys.">

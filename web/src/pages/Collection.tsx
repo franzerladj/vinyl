@@ -266,6 +266,7 @@ export default function Collection() {
                     </div>
                     {sort.id === "rating" && rating > 0 && <span className="tiny" style={{ color: "var(--accent)" }}>{"★".repeat(rating)}</span>}
                     {meta?.shelf && sort.id !== "shelf" && <span className="tiny">{meta.shelf}</span>}
+                    {meta?.lentTo && <span className="badge accent">bei {meta.lentTo}</span>}
                   </div>
                 }
               />

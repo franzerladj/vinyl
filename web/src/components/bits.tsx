@@ -346,3 +346,16 @@ export function Sparkline({ values, width = 120, height = 32 }: { values: number
     </svg>
   );
 }
+
+/** Profilbild mit Buchstaben als Ersatz */
+export function Avatar({ src, name, size = 52 }: { src?: string; name: string; size?: number }) {
+  const [ok, setOk] = useState(true);
+  return src && ok ? (
+    <img src={src} alt="" onError={() => setOk(false)} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flex: "none", background: "var(--surface-2)" }} />
+  ) : (
+    <span className="avatar" style={{ width: size, height: size, fontSize: size * 0.42 }}>
+      {name.charAt(0).toUpperCase()}
+    </span>
+  );
+}
+

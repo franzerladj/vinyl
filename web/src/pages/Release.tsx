@@ -6,8 +6,10 @@ import { db, realTracks, trackId, type TrackMeta } from "../lib/db";
 import { addToCollection, addWant, fetchMarketStats, fetchRelease, lookupAudioFor, removeWant, tagVibes } from "../lib/sync";
 import { discogsReleaseUrl, discogsSellUrl, formatLine, money, sideOf } from "../lib/format";
 import { toast, useStore } from "../lib/store";
-import { Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, Sparkline, TapTempo, type Preview } from "../components/bits";
+import { Avatar, Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, Sparkline, TapTempo, type Preview } from "../components/bits";
 import { loadPriceInfo, setTargetPrice } from "../lib/prices";
+import { friendsFor, lendRecord, messageUrl } from "../lib/friends";
+import { MenuSheet } from "../components/ui";
 import { previewUrl } from "../lib/free";
 import { matchVideo, parseDuration, youtubeId } from "../../../shared/match";
 import { IconBack, IconCart, IconExternal, IconShare, IconHeart, IconPlay, IconPlus, IconPrint, IconSparkle } from "../components/icons";
@@ -22,6 +24,9 @@ export default function ReleasePage() {
   const [edit, setEdit] = useState<TrackMeta | null>(null);
   const [playing, setPlaying] = useState(false);
   const [media, setMedia] = useState<Media | null>(null);
+  const [lendSheet, setLendSheet] = useState(false);
+  const buddies = useLiveQuery(() => friendsFor(id), [id]);
+  const friendNames = useLiveQuery(async () => (await db.friends.toArray()).map((f) => f.username), [], [] as string[]);
   const audioRef = useRef<HTMLAudioElement>(null);
 
   const rel = useLiveQuery(() => db.releases.get(id), [id]);
@@ -215,6 +220,28 @@ export default function ReleasePage() {
           </div>
         )}
 
+        {buddies && buddies.length > 0 && (
+          <>
+            <h2>Bei deinen Freunden</h2>
+            <div className="group">
+              {buddies.map(({ friend, kind }) => (
+                <Link key={friend.username + kind} to={`/friends/${encodeURIComponent(friend.username)}`} viewTransition className="group-row">
+                  <Avatar src={friend.avatar} name={friend.username} size={34} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <b style={{ fontWeight: 600 }}>{friend.name || friend.username}</b>
+                    <span className="sub" style={{ display: "block", fontSize: 13 }}>{kind === "coll" ? "hat diese Platte" : "sucht diese Platte auch"}</span>
+                  </span>
+                  {kind === "coll" && isWant && (
+                    <a className="btn small tinted" href={messageUrl(friend.username)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
+                      Fragen
+                    </a>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
+
         <div className="row" style={{ marginTop: 22 }}>
           <h2 style={{ margin: 0 }}>Tracks</h2>
           <span className="spacer" />
@@ -305,6 +332,13 @@ export default function ReleasePage() {
                 <span style={{ width: 92 }} className="sub">Beschriftung</span>
                 <span>{meta?.stickerPrintedAt ? `gedruckt am ${new Date(meta.stickerPrintedAt).toLocaleDateString("de-DE")}` : "noch offen"}</span>
               </div>
+              <button className="group-row" onClick={() => setLendSheet(true)}>
+                <span style={{ width: 92 }} className="sub">Verliehen</span>
+                <span style={{ color: meta?.lentTo ? "var(--accent)" : undefined }}>
+                  {meta?.lentTo ? `an ${meta.lentTo}${meta.lentAt ? ` seit ${new Date(meta.lentAt).toLocaleDateString("de-DE")}` : ""}` : "nein"}
+                </span>
+                <span className="chev">›</span>
+              </button>
             </div>
           </>
         )}
@@ -322,6 +356,22 @@ export default function ReleasePage() {
         ) : null}
       </div>
 
+      <MenuSheet
+        open={lendSheet}
+        onClose={() => setLendSheet(false)}
+        title={meta?.lentTo ? `Verliehen an ${meta.lentTo}` : "Verleihen an …"}
+        items={[
+          ...(meta?.lentTo ? [{ label: "Zurückbekommen", onClick: () => lendRecord(id, null).then(() => toast("Wieder in der Kiste")) }] : []),
+          ...friendNames.filter((n) => n !== meta?.lentTo).map((n) => ({ label: n, onClick: () => lendRecord(id, n).then(() => toast(`An ${n} verliehen`)) })),
+          {
+            label: "Jemand anderes …",
+            onClick: () => {
+              const n = prompt("An wen verleihst du die Platte?");
+              if (n?.trim()) void lendRecord(id, n.trim()).then(() => toast(`An ${n.trim()} verliehen`));
+            },
+          },
+        ]}
+      />
       <audio ref={audioRef} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onError={() => media?.type === "deezer" && setMedia({ type: "none" })} hidden />
       <Sheet open={!!edit} onClose={closeTrack}>
         {edit && (

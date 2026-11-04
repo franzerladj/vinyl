@@ -26,11 +26,12 @@ interface Filters {
   deal: string[]; // green | target | cheaper | hot
   available: boolean;
   hideOwned: boolean;
+  atFriends: boolean;
   maxPrice: string;
   styles: string[];
   decades: string[];
 }
-const NO_FILTERS: Filters = { deal: [], available: false, hideOwned: false, maxPrice: "", styles: [], decades: [] };
+const NO_FILTERS: Filters = { deal: [], available: false, hideOwned: false, atFriends: false, maxPrice: "", styles: [], decades: [] };
 const DEAL_LABEL: Record<string, string> = { green: "Unter Marktwert", target: "Unter Wunschpreis", cheaper: "Günstiger geworden", hot: "Selten & gefragt" };
 const decadeOf = (y: number) => (y ? `${Math.floor(y / 10) * 10}er` : "Ohne Jahr");
 
@@ -58,7 +59,10 @@ export default function Wantlist() {
     const [rels, stats, owned] = await Promise.all([db.releases.bulkGet(ids), db.marketStats.bulkGet(ids), db.collection.where("releaseId").anyOf(ids).toArray()]);
     const ownedSet = new Set(owned.map((o) => o.releaseId));
     const info = await loadPriceInfo(ids);
-    return wants.map((w, i) => ({ w, r: rels[i]!, s: stats[i], p: info.get(w.releaseId)!, owned: ownedSet.has(w.releaseId) })).filter((x) => x.r);
+    const fi = (await db.friendItems.where("releaseId").anyOf(ids).toArray()).filter((x) => x.kind === "coll");
+    const atFriends = new Map<number, string[]>();
+    fi.forEach((x) => atFriends.set(x.releaseId, [...(atFriends.get(x.releaseId) ?? []), x.username]));
+    return wants.map((w, i) => ({ w, r: rels[i]!, s: stats[i], p: info.get(w.releaseId)!, owned: ownedSet.has(w.releaseId), friends: atFriends.get(w.releaseId) ?? [] })).filter((x) => x.r);
   });
 
   const facets = useMemo(() => {
@@ -82,7 +86,7 @@ export default function Wantlist() {
   const list = useMemo(() => {
     if (!data) return [];
     const mp = Number(f.maxPrice.replace(",", ".")) || Infinity;
-    const out = data.filter(({ r, s, w, p, owned }) => {
+    const out = data.filter(({ r, s, w, p, owned, friends }) => {
       if (dq) {
         const hay = `${r.artist} ${r.title} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")} ${r.styles.join(" ")} ${w.notes ?? ""} ${r.year}`.toLowerCase();
         if (!dq.split(/\s+/).every((x) => hay.includes(x))) return false;
@@ -91,6 +95,7 @@ export default function Wantlist() {
       if (f.decades.length && !f.decades.includes(decadeOf(r.year))) return false;
       if (f.available && !(s && s.numForSale > 0)) return false;
       if (f.hideOwned && owned) return false;
+      if (f.atFriends && !friends.length) return false;
       if (f.maxPrice && !(s?.lowest != null && s.numForSale > 0 && s.lowest <= mp)) return false;
       if (f.deal.length) {
         const ok = f.deal.some((d) => (d === "green" ? p.deal.ampel === "green" : d === "target" ? p.deal.underTarget : d === "cheaper" ? (p.deal.change ?? 0) < -0.5 : p.deal.urgency === "hot"));
@@ -162,7 +167,7 @@ export default function Wantlist() {
     ...f.styles.map((s) => ({ key: `s${s}`, label: s, remove: () => setF((p) => ({ ...p, styles: p.styles.filter((x) => x !== s) })) })),
     ...f.decades.map((s) => ({ key: `d${s}`, label: s, remove: () => setF((p) => ({ ...p, decades: p.decades.filter((x) => x !== s) })) })),
   ];
-  const filterCount = chips.length + (f.available ? 1 : 0);
+  const filterCount = chips.length + (f.available ? 1 : 0) + (f.atFriends ? 1 : 0);
   const available = data?.filter((d) => d.s && d.s.numForSale > 0) ?? [];
   const total = available.reduce((sum, d) => sum + (d.s?.lowest ?? 0), 0);
   const priced = data?.filter((d) => d.s).length ?? 0;
@@ -222,6 +227,11 @@ export default function Wantlist() {
           <button className={`tool-btn ${f.available ? "on" : ""}`} onClick={() => setF((p) => ({ ...p, available: !p.available }))}>
             Verfügbar
           </button>
+          {data?.some((d) => d.friends.length) && (
+            <button className={`tool-btn ${f.atFriends ? "on" : ""}`} onClick={() => setF((p) => ({ ...p, atFriends: !p.atFriends }))}>
+              Bei Freunden
+            </button>
+          )}
           <ActiveChips items={chips} onClear={() => setF(NO_FILTERS)} />
         </div>
         {data && (dq || filterCount > 0) && (
@@ -250,7 +260,7 @@ export default function Wantlist() {
         <SectionList
           sections={sections}
           stickyTop={toolbarH}
-          render={({ r, s, p, owned }: Item) => (
+          render={({ r, s, p, owned, friends }: Item) => (
             <RecordRow
               key={r.id}
               r={r}
@@ -273,6 +283,7 @@ export default function Wantlist() {
                   {p.deal.urgency === "hot" && <span className="badge bad">selten</span>}
                   {(p.deal.change ?? 0) < -0.5 && <span className="badge accent">↓ {money(-(p.deal.change ?? 0))}</span>}
                   {owned && <span className="badge ok">schon da</span>}
+                  {friends.length > 0 && <span className="badge" style={{ background: "rgba(191,90,242,.16)", color: "#bf5af2" }}>bei {friends[0]}{friends.length > 1 ? ` +${friends.length - 1}` : ""}</span>}
                 </div>
               }
             />

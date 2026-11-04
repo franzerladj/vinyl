@@ -2,22 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
-import { addFriend, collectionUrl, friendMatches, inviteLink, messageUrl, profileUrl, removeFriend, syncFriend, type FriendMatch } from "../lib/friends";
+import { addFriend, collectionUrl, friendFeed, friendMatches, inviteLink, lentRecords, messageUrl, profileUrl, removeFriend, syncFriend, tasteMatch, type FriendMatch } from "../lib/friends";
 import { toast, useStore } from "../lib/store";
-import { Empty, haptic, RecordRow, Seg, SkeletonRows, useDebounced } from "../components/bits";
+import { Avatar, Cover, Empty, haptic, RecordRow, Seg, SkeletonRows, useDebounced } from "../components/bits";
 import { IconMore, IconPlus, IconSearch, IconShare, IconSync, IconTrash, IconUser } from "../components/icons";
 import { MenuSheet, NavBar } from "../components/ui";
-
-function Avatar({ src, name, size = 52 }: { src?: string; name: string; size?: number }) {
-  const [ok, setOk] = useState(true);
-  return src && ok ? (
-    <img src={src} alt="" onError={() => setOk(false)} style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flex: "none", background: "var(--surface-2)" }} />
-  ) : (
-    <span className="avatar" style={{ width: size, height: size, fontSize: size * 0.42 }}>
-      {name.charAt(0).toUpperCase()}
-    </span>
-  );
-}
 
 export default function Friends() {
   const { username } = useParams();
@@ -33,8 +22,14 @@ function FriendList() {
 
   const friends = useLiveQuery(async () => {
     const list = await db.friends.orderBy("addedAt").reverse().toArray();
-    const matches = await Promise.all(list.map((f) => friendMatches(f.username)));
-    return list.map((f, i) => ({ f, m: matches[i] }));
+    const [matches, tastes] = await Promise.all([Promise.all(list.map((f) => friendMatches(f.username))), Promise.all(list.map((f) => tasteMatch(f.username)))]);
+    return list.map((f, i) => ({ f, m: matches[i], taste: tastes[i] }));
+  });
+  const feed = useLiveQuery(() => friendFeed(16));
+  const lent = useLiveQuery(async () => {
+    const metas = await lentRecords();
+    const rels = await db.releases.bulkGet(metas.map((m) => m.releaseId));
+    return metas.map((m, i) => ({ m, r: rels[i] })).filter((x) => x.r);
   });
 
   const add = async (u: string) => {
@@ -101,7 +96,7 @@ function FriendList() {
 
         {friends?.length ? (
           <div className="list rise">
-            {friends.map(({ f, m }) => (
+            {friends.map(({ f, m, taste }) => (
               <Link key={f.username} to={`/friends/${encodeURIComponent(f.username)}`} viewTransition className="rec">
                 <Avatar src={f.avatar} name={f.username} />
                 <div className="rec-main">
@@ -118,6 +113,7 @@ function FriendList() {
                 <div className="rec-side stack" style={{ gap: 4, alignItems: "flex-end" }}>
                   {m.hasYourWants.length > 0 && <span className="badge ok">hat {m.hasYourWants.length} deiner Wants</span>}
                   {m.wantsYours.length > 0 && <span className="badge accent">sucht {m.wantsYours.length} von dir</span>}
+                  {taste.score != null && <span className="tiny">Geschmack {taste.score} %</span>}
                 </div>
               </Link>
             ))}
@@ -134,6 +130,46 @@ function FriendList() {
           <button className="btn block tinted" onClick={share}>
             <IconShare /> Kumpels einladen
           </button>
+        )}
+
+        {lent && lent.length > 0 && (
+          <>
+            <h2 style={{ marginBottom: 0 }}>Verliehen</h2>
+            <div className="list">
+              {lent.map(({ m, r }) => (
+                <RecordRow
+                  key={m.releaseId}
+                  r={r!}
+                  side={
+                    <div className="stack" style={{ gap: 3, alignItems: "flex-end" }}>
+                      <span className="badge accent">an {m.lentTo}</span>
+                      {m.lentAt && <span className="tiny">seit {Math.max(1, Math.round((Date.now() - m.lentAt) / 86400000))} Tagen</span>}
+                    </div>
+                  }
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {feed && feed.length > 0 && (
+          <>
+            <h2 style={{ marginBottom: 0 }}>Neu bei deinen Freunden</h2>
+            <div className="carousel">
+              {feed.map(({ item, r, friend }) => (
+                <Link key={item.key} to={`/release/${r!.id}`} viewTransition className="press" style={{ position: "relative" }}>
+                  <Cover src={r!.cover || r!.thumb} />
+                  <span style={{ position: "absolute", top: 8, left: 8, boxShadow: "0 0 0 2px var(--bg)", borderRadius: "50%", display: "grid" }}>
+                    <Avatar src={friend!.avatar} name={friend!.username} size={28} />
+                  </span>
+                  <div className="t">{r!.title}</div>
+                  <div className="a">
+                    {r!.artist} · {friend!.username}
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </>
         )}
 
         <div className="card stack" style={{ gap: 6 }}>
@@ -164,7 +200,10 @@ function FriendDetail({ u }: { u: string }) {
     const [m, items] = await Promise.all([friendMatches(u), db.friendItems.where("username").equals(u).toArray()]);
     const ids = [...new Set(items.map((i) => i.releaseId))];
     const rels = new Map((await db.releases.bulkGet(ids)).filter(Boolean).map((r) => [r!.id, r!]));
-    return { m, items, rels };
+    const taste = await tasteMatch(u);
+    const lentHere = (await lentRecords()).filter((x) => x.lentTo === u);
+    const lentRels = await db.releases.bulkGet(lentHere.map((x) => x.releaseId));
+    return { m, items, rels, taste, lent: lentRels.filter(Boolean) };
   }, [u]);
   const syncing = Boolean(jobs[`friend-${u}`]);
 
@@ -221,6 +260,11 @@ function FriendDetail({ u }: { u: string }) {
         <div>
           <h1 style={{ margin: 0, font: "800 26px/1.15 var(--font-display)", letterSpacing: "-0.03em" }}>{f.name || f.username}</h1>
           <div className="sub">{[f.name ? f.username : null, f.location].filter(Boolean).join(" · ")}</div>
+          {data?.taste.score != null && (
+            <div className="sub" style={{ marginTop: 6 }}>
+              <b style={{ color: "var(--accent)" }}>{data.taste.score} %</b> Geschmacks-Übereinstimmung{data.taste.topShared.length ? ` · ihr mögt beide ${data.taste.topShared.join(", ")}` : ""}
+            </div>
+          )}
         </div>
         <div className="row" style={{ gap: 8 }}>
           <a className="btn small primary" href={messageUrl(u)} target="_blank" rel="noreferrer">
@@ -243,6 +287,16 @@ function FriendDetail({ u }: { u: string }) {
             <span>sucht deine Platten</span>
           </button>
         </div>
+        {data && data.lent.length > 0 && (
+          <div className="card stack" style={{ gap: 8, background: "var(--accent-soft)" }}>
+            <b>Hat von dir geliehen</b>
+            <div className="list">
+              {data.lent.map((r) => (
+                <RecordRow key={r!.id} r={r!} />
+              ))}
+            </div>
+          </div>
+        )}
         <Seg
           value={tab}
           options={[

@@ -1,11 +1,11 @@
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV } from "../lib/db";
-import { friendMatches } from "../lib/friends";
+import { friendMatches, type MyProfile } from "../lib/friends";
 import { autoPipeline } from "../lib/sync";
 import { toast, useStore } from "../lib/store";
-import { Cover, Empty, haptic, markHero, Ring } from "../components/bits";
-import { IconCamera, IconCart, IconGear, IconList, IconSync, IconTag } from "../components/icons";
+import { Avatar, Cover, Empty, haptic, markHero, Ring } from "../components/bits";
+import { IconCamera, IconCart, IconList, IconSync, IconTag } from "../components/icons";
 
 const greeting = () => {
   const h = new Date().getHours();
@@ -17,6 +17,7 @@ export default function Home() {
   const jobs = useStore((s) => s.jobs);
   const busy = Object.keys(jobs).length > 0;
 
+  const profile = useLiveQuery(() => getKV<MyProfile | null>("myProfile", null));
   const stats = useLiveQuery(async () => {
     const coll = await db.collection.toArray();
     const ids = [...new Set(coll.map((c) => c.releaseId))];
@@ -59,7 +60,7 @@ export default function Home() {
         <div>
           <div className="eyebrow">{today}</div>
           <h1>
-            {greeting()}, {me?.username}
+            {greeting()}, {profile?.name?.split(" ")[0] || me?.username}
           </h1>
         </div>
         <div className="row" style={{ gap: 4 }}>
@@ -68,8 +69,8 @@ export default function Home() {
               <IconSync />
             </span>
           </button>
-          <Link to="/settings" viewTransition className="icon-btn round" aria-label="Einstellungen">
-            <IconGear />
+          <Link to="/settings" viewTransition className="press" aria-label="Profil und Einstellungen" style={{ display: "grid", borderRadius: "50%", boxShadow: "0 0 0 2px var(--surface-2)" }}>
+            <Avatar src={profile?.avatar} name={me?.username ?? "?"} size={38} />
           </Link>
         </div>
       </div>
@@ -185,7 +186,9 @@ export default function Home() {
             <div className="carousel" style={{ paddingBottom: 6 }}>
               {(stats?.friends ?? []).map(({ f, m }) => (
                 <Link key={f.username} to={`/friends/${encodeURIComponent(f.username)}`} viewTransition className="press" style={{ width: 84, textAlign: "center", position: "relative" }}>
-                  {f.avatar ? <img src={f.avatar} alt="" style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", margin: "0 auto" }} /> : <span className="avatar" style={{ width: 72, height: 72, margin: "0 auto" }}>{f.username.charAt(0).toUpperCase()}</span>}
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <Avatar src={f.avatar} name={f.username} size={72} />
+                  </div>
                   {m.hasYourWants.length > 0 && (
                     <span className="badge" style={{ position: "absolute", top: 0, right: 2, background: "var(--ok)", color: "#fff" }}>
                       {m.hasYourWants.length}

@@ -66,7 +66,9 @@ export interface RecordMeta {
   shelf?: string; // Regalplatz, z.B. "Kallax 3 · Fach B"
   stickerPrintedAt?: number | null;
   tags?: string[];
-  lentTo?: string;
+  /** Verliehen an (Discogs-Name eines Freundes oder freier Name) */
+  lentTo?: string | null;
+  lentAt?: number | null;
   crates?: string[]; // Gig-Taschen
 }
 
