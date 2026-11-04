@@ -593,3 +593,41 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .dig-entry small { display: block; font-size: 14px; opacity: .85; margin-top: 2px; }
 .dig-entry .go { margin-left: auto; width: 44px; height: 44px; border-radius: 50%; background: #fff; color: #000; display: grid; place-items: center; flex: none; }
 .dig-entry .go svg { width: 20px; height: 20px; }
+
+/* ---------- Deine Kiste als DJ ---------- */
+.djo { display: flex; flex-direction: column; gap: 12px; }
+.djo h2 { margin-bottom: 0; }
+.djo-card { display: flex; flex-direction: column; gap: 10px; }
+.djo-big { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.djo-big b { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.djo-big span { color: var(--text-2); font-size: 15px; }
+.djo-bar { display: flex; height: 10px; border-radius: 5px; overflow: hidden; gap: 2px; background: var(--surface-2); }
+.djo-bar i { min-width: 0; transition: flex 0.6s var(--spring); }
+.djo-legend { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-2); }
+.djo-legend span { display: flex; align-items: center; gap: 8px; }
+.djo-legend i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.djo-note { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-2); }
+.djo-action { all: unset; cursor: pointer; display: flex; align-items: center; gap: 10px; margin-top: 2px; padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); color: var(--text); }
+.djo-action b { display: block; color: var(--accent); font-size: 15px; }
+.djo-action small { display: block; font-size: 12px; color: var(--text-2); margin-top: 1px; }
+.djo-action .chev { margin-left: auto; color: var(--accent); font-size: 22px; }
+.djo-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.djo-head b { font-size: 17px; }
+.djo-hist { display: flex; align-items: flex-end; gap: 3px; height: 96px; }
+.djo-hist button { all: unset; flex: 1; height: 100%; display: flex; align-items: flex-end; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.djo-hist button:disabled { cursor: default; }
+.djo-hist i { display: block; width: 100%; border-radius: 4px 4px 2px 2px; background: color-mix(in srgb, var(--accent) 40%, var(--surface-3)); transition: height 0.6s var(--spring), transform 0.2s; transform-origin: bottom; }
+.djo-hist button.top i { background: var(--accent); }
+.djo-hist button:active:not(:disabled) i { transform: scaleY(0.94); }
+.djo-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; margin-top: -4px; }
+.djo-axis span:nth-child(2) { margin-left: 12%; }
+.djo-axis span:nth-child(3) { margin-right: 18%; }
+.djo-wheel-wrap { display: flex; align-items: center; gap: 14px; }
+.djo-wheel { flex: none; width: 168px; height: 168px; }
+.djo-wheel g:active path { opacity: 1; }
+@media (max-width: 360px) { .djo-wheel-wrap { flex-direction: column; } }
+.djo-energy { display: flex; gap: 4px; }
+.djo-energy > div { min-width: 64px; display: flex; flex-direction: column; gap: 4px; transition: flex 0.6s var(--spring); }
+.djo-energy i { height: 10px; border-radius: 5px; }
+.djo-energy b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.djo-energy span { font-size: 12px; color: var(--text-2); }

@@ -34,7 +34,27 @@ export interface MatchTrack {
  * Wie gut passt ein Kandidat (Video- oder Deezer-Titel) zu einem Track?
  * 0..1. Mix-Namen und Länge zählen stark, damit A1 und A2 nicht verwechselt werden.
  */
-export function matchScore(track: MatchTrack, candTitle: string, candDuration?: number | null): number {
+/** Ähnlichkeit zweier Artist-Namen 0..1 ("Roy Ayers Ubiquity" ~ "Roy Ayers", "Ogawa & Tokoro" ~ "Ogawa and Tokoro") */
+export function artistSimilarity(a: string, b: string): number {
+  const x = normTokens(a);
+  const y = new Set(normTokens(b));
+  if (!x.length || !y.size) return 0;
+  const hit = x.filter((w) => y.has(w)).length;
+  return Math.max(hit / x.length, hit / y.size);
+}
+
+/** Discogs nutzt "Various" für Compilations: dann den Artist nicht prüfen */
+export const isVarious = (a?: string) => !a || /^(various|various artists|unknown artist|no artist)$/i.test(a.trim());
+
+/** Suchtitel für Deezer: ohne Klammern, ohne Schriftzeichen anderer Alphabete, ohne Format-Wörter */
+export function searchTitles(t: string): string[] {
+  const noBrackets = t.replace(/\(.*?\)|\[.*?\]/g, " ");
+  const latin = noBrackets.replace(/[^\p{Script=Latin}\p{N}\s'&.-]/gu, " ");
+  const noFormat = latin.replace(/\b(ep|lp|remixes|remix(ed)?|the remixes|vol\.?\s*\d+|part\s*\d+)\b/gi, " ");
+  return [...new Set([noBrackets, latin, noFormat].map((x) => x.replace(/\s+/g, " ").trim()).filter((x) => x.length > 1))];
+}
+
+export function matchScore(track: MatchTrack, candTitle: string, candDuration?: number | null, candArtist?: string): number {
   const cand = new Set(normTokens(candTitle));
   const base = normTokens(track.title.replace(/[([][^)\]]*[)\]]/g, " "));
   const mix = normTokens(mixPart(track.title));
@@ -52,7 +72,11 @@ export function matchScore(track: MatchTrack, candTitle: string, candDuration?: 
     score += candMix.some((w) => /remix|rmx|dub|edit|mix|version/.test(w)) ? 0 : 0.2;
     if (candMix.some((w) => /remix|rmx/.test(w))) score -= 0.15;
   }
-  if (track.artist) {
+  if (candArtist != null && track.artist && !isVarious(track.artist)) {
+    // Artist getrennt prüfen: fremder Artist mit gleichem Titel ist der häufigste Fehltreffer
+    const sim = artistSimilarity(track.artist, candArtist);
+    score += sim >= 0.5 ? sim * 0.1 : -0.4;
+  } else if (track.artist) {
     const a = normTokens(track.artist);
     if (a.length) score += (a.filter((w) => cand.has(w)).length / a.length) * 0.1;
   }

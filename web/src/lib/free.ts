@@ -3,8 +3,8 @@
 import { db, type TrackMeta } from "./db";
 import { api } from "./api";
 import { getState, jobUpdate } from "./store";
-import { analyzeSamples, type AudioAnalysis } from "../../../shared/audioAnalysis";
-import { estimateVibe } from "../../../shared/vibes";
+import { analyzeSamples, type AnalysisHints, type AudioAnalysis } from "../../../shared/audioAnalysis";
+import { estimateBpm, estimateVibe } from "../../../shared/vibes";
 import { validBarcode } from "../../../shared/barcode";
 import { parseDuration } from "../../../shared/match";
 import { pool } from "./pool";
@@ -58,7 +58,7 @@ let seq = 0;
 const pending = new Map<number, (r: AudioAnalysis | null) => void>();
 
 /** Rechnet die Analyse in einem Web Worker; ohne Worker-Unterstützung auf dem Hauptthread */
-function analyzeOffThread(samples: Float32Array, sr: number): Promise<AudioAnalysis | null> {
+function analyzeOffThread(samples: Float32Array, sr: number, hints: AnalysisHints = {}): Promise<AudioAnalysis | null> {
   if (!workerBroken && !worker) {
     try {
       worker = new Worker(new URL("./analysis.worker.ts", import.meta.url), { type: "module" });
@@ -75,18 +75,18 @@ function analyzeOffThread(samples: Float32Array, sr: number): Promise<AudioAnaly
       workerBroken = true;
     }
   }
-  if (!worker || workerBroken) return Promise.resolve(analyzeSamples(samples, sr));
+  if (!worker || workerBroken) return Promise.resolve(analyzeSamples(samples, sr, hints));
   const id = ++seq;
   return new Promise((res) => {
     pending.set(id, res);
-    worker!.postMessage({ id, samples, sr }, [samples.buffer]);
+    worker!.postMessage({ id, samples, sr, hints }, [samples.buffer]);
   });
 }
 
 export const previewUrl = (artist: string, title: string, duration?: number | null) =>
   `/api/audio/preview?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}${duration ? `&duration=${duration}` : ""}`;
 
-export async function analyzePreview(artist: string, title: string, duration?: number | null, deezerId?: number | null): Promise<AudioAnalysis | null> {
+export async function analyzePreview(artist: string, title: string, duration?: number | null, deezerId?: number | null, hints: AnalysisHints = {}): Promise<AudioAnalysis | null> {
   const res = await fetch(deezerId ? `/api/audio/preview/${deezerId}` : previewUrl(artist, title, duration), { credentials: "include" });
   // 404 = keine passende Hörprobe (endgültig); andere Fehler = später nochmal versuchen
   if (res.status === 404) return null;
@@ -101,7 +101,7 @@ export async function analyzePreview(artist: string, title: string, duration?: n
     const ch = audio.getChannelData(c);
     for (let i = 0; i < ch.length; i++) mono[i] += ch[i] / audio.numberOfChannels;
   }
-  return analyzeOffThread(mono, sr);
+  return analyzeOffThread(mono, sr, hints);
 }
 
 // ---------------------------------------------------------------------------
@@ -146,7 +146,10 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
       if (opts.audio && !t.analyzedAt && (t.analyzeTries ?? 0) < 3) {
         let failed = false;
         try {
-          analysis = await analyzePreview(t.artist, t.title, durationOf(t), t.deezerId);
+          // Erwartetes Tempo aus den anderen Tracks der Platte oder den Styles: verhindert Halb-/Doppel-Fehler
+          const siblings = all.filter((x) => x.releaseId === t.releaseId && x.id !== t.id && x.bpm).map((x) => x.bpm!);
+          const expectedBpm = estimateBpm(rels.get(t.releaseId)?.styles ?? [], siblings);
+          analysis = await analyzePreview(t.artist, t.title, durationOf(t), t.deezerId, { expectedBpm });
         } catch (e) {
           failed = true;
           console.warn("Analyse", t.id, e);
@@ -160,7 +163,7 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
             patch.bpm = Math.round(analysis.bpm);
             patch.bpmSource = "Analyse";
           }
-          if (!t.key && analysis.key && analysis.keyConfidence >= 0.35) {
+          if (!t.key && analysis.key && analysis.keyConfidence >= 0.3) {
             patch.key = analysis.key;
             patch.keySource = "Analyse (Schätzung)";
           }

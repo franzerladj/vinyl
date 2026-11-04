@@ -215,12 +215,13 @@ const pipelineBusy = () => busyCheck();
 
 /** Nach dem Start: einmalige Bereinigung, dann Sync, wenn der letzte länger als 6 Stunden her ist (egal auf welcher Seite) */
 async function startupSync() {
-  const { migrateAudioMatching, migrateAlbumMatching, autoPipeline, isPipelineRunning } = await import("./lib/sync");
+  const { migrateAudioMatching, migrateAlbumMatching, migrateTempoV2, autoPipeline, isPipelineRunning } = await import("./lib/sync");
   busyCheck = isPipelineRunning;
   const { getKV } = await import("./lib/db");
   const { toast } = await import("./lib/store");
   await migrateAudioMatching();
   await migrateAlbumMatching();
+  await migrateTempoV2();
   void import("./lib/friends").then((f) => f.refreshMyProfile()).catch(() => undefined);
   const run = async () => {
     if (!navigator.onLine) return;

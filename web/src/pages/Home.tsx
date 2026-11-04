@@ -5,7 +5,8 @@ import { db, getKV } from "../lib/db";
 import { friendMatches, type MyProfile } from "../lib/friends";
 import { autoPipeline, isPipelineRunning } from "../lib/sync";
 import { toast, useStore } from "../lib/store";
-import { Avatar, Cover, Empty, haptic, markHero, Ring } from "../components/bits";
+import { Avatar, Cover, Empty, haptic, markHero } from "../components/bits";
+import { DjOverview } from "../components/DjOverview";
 import { IconCamera, IconCart, IconList, IconPlay, IconSync, IconTag } from "../components/icons";
 
 const greeting = () => {
@@ -261,30 +262,7 @@ export default function Home() {
               </p>
             )}
 
-            {stats && stats.tracks > 0 && (
-              <>
-                <h2>DJ-Daten</h2>
-                <Link to="/settings" viewTransition className="card row press" style={{ justifyContent: "space-around", padding: "18px 12px" }}>
-                  {[
-                    ["BPM", stats.withBpm, "var(--accent)"],
-                    ["Key", stats.withKey, "#a99cf9"],
-                    ["Vibe", stats.withEnergy, "#30d158"],
-                  ].map(([l, v, c]) => (
-                    <div key={l as string} className="stack" style={{ alignItems: "center", gap: 8 }}>
-                      <Ring value={v as number} max={stats.tracks} color={c as string}>
-                        {Math.round((100 * (v as number)) / stats.tracks)}%
-                      </Ring>
-                      <span className="sub" style={{ fontSize: 13 }}>
-                        {l}
-                      </span>
-                    </div>
-                  ))}
-                </Link>
-                <p className="tiny" style={{ textAlign: "center" }}>
-                  {stats.tracks} Tracks · Tippen zum Ergänzen
-                </p>
-              </>
-            )}
+            <DjOverview />
           </>
         )}
         {stats?.lastSync ? <p className="tiny" style={{ textAlign: "center", marginTop: 24 }}>Zuletzt synchronisiert {new Date(stats.lastSync).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}</p> : null}

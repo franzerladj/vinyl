@@ -1,6 +1,6 @@
 // BPM- und Tonart-Lookup über GetSongBPM (mit API-Key) und Deezer (BPM, Hörprobe).
 import type { Config } from "./env";
-import { matchScore } from "../shared/match";
+import { matchScore, searchTitles } from "../shared/match";
 
 export interface AudioInfo {
   bpm: number | null;
@@ -34,11 +34,13 @@ export async function deezer(artist: string, title: string, duration?: number | 
   // Treffer aus exakter und freier Suche sammeln, dann den Mix wählen, der wirklich passt
   // (Titel inkl. Mix-Name in Klammern, Artist und Länge laut Discogs)
   const seen = new Map<number, Hit>();
-  for (const h of [...(await search(`artist:"${clean(artist)}" track:"${clean(title)}"`)), ...(await search(`${artist} ${title}`))]) seen.set(h.id, h);
+  const titles = searchTitles(title);
+  const queries = [`artist:"${clean(artist)}" track:"${clean(title)}"`, `${artist} ${title}`, `${clean(artist)} ${titles.at(-1) ?? title}`];
+  for (const q of [...new Set(queries)]) for (const h of await search(q)) seen.set(h.id, h);
   let best: { h: Hit; s: number } | null = null;
   for (const h of seen.values()) {
-    const candTitle = `${h.artist?.name ?? ""} ${h.title} ${h.title_version ?? ""}`;
-    const s = matchScore({ title, artist, duration }, candTitle, h.duration);
+    const candTitle = `${h.title} ${h.title_version ?? ""}`;
+    const s = matchScore({ title, artist, duration }, candTitle, h.duration, h.artist?.name ?? "");
     if (!best || s > best.s) best = { h, s };
   }
   if (!best || best.s < 0.55) return null;
@@ -104,25 +106,38 @@ export async function matchRelease(artist: string, title: string, tracks: Releas
     return r.ok ? ((await r.json()) as T) : null;
   };
   const q = async (s: string) => (await get<{ data?: DzAlbum[] }>(`https://api.deezer.com/search/album?q=${encodeURIComponent(s)}&limit=6`))?.data ?? [];
-  const cleanTitle = title.replace(/\s*\(.*?\)\s*/g, " ").trim();
+  const titles = searchTitles(title);
+  const cleanTitle = titles[0] ?? title;
+  const short = titles.at(-1) ?? cleanTitle;
   const seen = new Map<number, DzAlbum>();
-  for (const a of [...(await q(`artist:"${clean(artist)}" album:"${cleanTitle}"`)), ...(await q(`${artist} ${cleanTitle}`))]) seen.set(a.id, a);
-  // Album mit passendem Titel und Artist wählen
-  let best: { a: DzAlbum; s: number } | null = null;
-  for (const a of seen.values()) {
-    const s = matchScore({ title: cleanTitle, artist }, `${a.artist?.name ?? ""} ${a.title}`);
-    if (!best || s > best.s) best = { a, s };
-  }
-  if (!best || best.s < 0.5) return { album: null, matches: {} };
-  const list = (await get<{ data?: DzTrack[] }>(`https://api.deezer.com/album/${best.a.id}/tracks?limit=60`))?.data ?? [];
-  // Jeden Discogs-Track dem besten freien Deezer-Track zuordnen
-  const pairs: { key: string; t: DzTrack; s: number }[] = [];
-  for (const tr of tracks) {
-    for (const d of list) {
-      const s = matchScore({ title: tr.title, artist: tr.artist || artist, duration: tr.duration }, `${d.artist?.name ?? ""} ${d.title} ${d.title_version ?? ""}`, d.duration);
-      if (s >= 0.5) pairs.push({ key: tr.key, t: d, s });
+  const queries = [`artist:"${clean(artist)}" album:"${cleanTitle}"`, `${clean(artist)} ${short}`];
+  for (const qq of [...new Set(queries)]) for (const a of await q(qq)) seen.set(a.id, a);
+  // Alben nach Passung sortieren (Artist getrennt geprüft, "Various" ausgenommen).
+  // Passt kein einziger Track, war es das falsche Album: das nächste probieren.
+  const ranked = [...seen.values()]
+    .map((a) => ({ a, s: Math.max(...titles.map((t) => matchScore({ title: t, artist }, a.title, null, a.artist?.name ?? ""))) }))
+    .filter((x) => x.s >= 0.5)
+    .sort((x, y) => y.s - x.s)
+    .slice(0, 3);
+  let best: (typeof ranked)[number] | null = null;
+  let pairs: { key: string; t: DzTrack; s: number }[] = [];
+  for (const cand of ranked) {
+    const list = (await get<{ data?: DzTrack[] }>(`https://api.deezer.com/album/${cand.a.id}/tracks?limit=60`))?.data ?? [];
+    // Jeden Discogs-Track dem besten freien Deezer-Track zuordnen
+    const found: typeof pairs = [];
+    for (const tr of tracks) {
+      for (const d of list) {
+        const sc = matchScore({ title: tr.title, artist: tr.artist || artist, duration: tr.duration }, `${d.title} ${d.title_version ?? ""}`, d.duration, d.artist?.name ?? "");
+        if (sc >= 0.5) found.push({ key: tr.key, t: d, s: sc });
+      }
+    }
+    if (found.length) {
+      best = cand;
+      pairs = found;
+      break;
     }
   }
+  if (!best) return { album: null, matches: {} };
   pairs.sort((x, y) => y.s - x.s);
   const usedKeys = new Set<string>();
   const usedIds = new Set<number>();

@@ -1,5 +1,5 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type Release, type TrackMeta } from "../lib/db";
 import { autoPipeline, fetchMissingDetails } from "../lib/sync";
@@ -65,6 +65,17 @@ export default function Collection() {
   const [view, setView] = usePersisted<{ v: "list" | "grid" }>("coll-view", { v: "list" });
   const [f, setF] = usePersisted<Filters>("coll-filter", NO_FILTERS);
   const [sheet, setSheet] = useState<"sort" | "filter" | "more" | null>(null);
+  // Sprung aus der DJ-Übersicht: Filter aus der Adresse übernehmen (ersetzt den alten Filter)
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    const bpm = params.get("bpm")?.match(/^(\d+)-(\d+)$/);
+    const key = params.get("key");
+    const noBpm = params.get("nobpm") === "1";
+    if (!bpm && !key && !noBpm) return;
+    setF({ ...NO_FILTERS, ...(bpm ? { bpmMin: bpm[1], bpmMax: bpm[2] } : {}), ...(key ? { keys: [key] } : {}), noBpm });
+    setParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
   const toolbar = useRef<HTMLDivElement>(null);
   const [toolbarH, setToolbarH] = useState(0);
 

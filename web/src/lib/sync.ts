@@ -467,3 +467,27 @@ export async function migrateAlbumMatching() {
   });
   await setKV("migration-album-v1", true);
 }
+
+/**
+ * Neue Tempo-Erkennung und genauere Deezer-Zuordnung (Artist getrennt geprüft):
+ * gemessene Werte neu berechnen und erfolglose Suchen wiederholen. Eigene Eingaben bleiben.
+ */
+export async function migrateTempoV2() {
+  if (await getKV("migration-tempo-v2", false)) return;
+  await db.tracks.toCollection().modify((t) => {
+    if (t.bpmSource === "Analyse") {
+      t.bpm = undefined;
+      t.bpmSource = undefined;
+    }
+    if (t.keySource?.startsWith("Analyse")) {
+      t.key = undefined;
+      t.keySource = undefined;
+    }
+    if (!t.deezerId) t.lookedUpAt = undefined;
+    if (!t.bpm || !t.key) {
+      t.analyzedAt = undefined;
+      t.analyzeTries = undefined;
+    }
+  });
+  await setKV("migration-tempo-v2", true);
+}

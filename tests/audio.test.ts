@@ -32,3 +32,30 @@ describe("audio analysis", () => {
     expect(r.energy).toBeLessThanOrEqual(10);
   });
 });
+
+describe("Tempo mit Bassdrum und Hi-Hats", () => {
+  // Synthetischer House-Beat: Kick auf jedem Schlag, offene Hi-Hat auf den Offbeats, 16tel-Hats leise
+  const beat = (bpm: number, sr = 22050, secs = 30) => {
+    const s = new Float32Array(sr * secs);
+    const beatLen = (60 / bpm) * sr;
+    for (let b = 0; b * beatLen < s.length; b++) {
+      const k = Math.round(b * beatLen);
+      for (let i = 0; i < 2500 && k + i < s.length; i++) s[k + i] += Math.sin((2 * Math.PI * 55 * i) / sr) * Math.exp(-i / 600) * 0.9;
+      for (const [off, amp] of [[0.5, 0.5], [0.25, 0.15], [0.75, 0.15]] as const) {
+        const h = Math.round((b + off) * beatLen);
+        for (let i = 0; i < 400 && h + i < s.length; i++) s[h + i] += (Math.random() * 2 - 1) * Math.exp(-i / 80) * amp;
+      }
+    }
+    return s;
+  };
+  for (const bpm of [96, 120, 124, 135]) {
+    it(`erkennt ${bpm} BPM`, () => {
+      const r = analyzeSamples(beat(bpm), 22050);
+      expect(Math.abs(r.bpm! - bpm)).toBeLessThan(1.5);
+    });
+  }
+  it("nutzt den Style-Hinweis für schnelle Tempi", () => {
+    const r = analyzeSamples(beat(172), 22050, { expectedBpm: 170 });
+    expect(Math.abs(r.bpm! - 172)).toBeLessThan(2);
+  });
+});
