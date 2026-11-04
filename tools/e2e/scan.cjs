@@ -1,0 +1,24 @@
+const { chromium, devices } = require("playwright");
+const install = require("./mock.cjs");
+(async () => {
+  const b = await chromium.launch();
+  const ctx = await b.newContext({ ...devices["iPhone 13"], colorScheme: "dark" });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const searches = [];
+  page.on("request", (r) => r.url().includes("database/search") && searches.push(decodeURIComponent(r.url().split("?")[1])));
+  await install(page);
+  await page.goto("http://localhost:8787/scan");
+  await page.waitForTimeout(1500);
+  await page.screenshot({ path: __dirname + "/scan1.png" });
+  await page.click("text=Foto");
+  await page.setInputFiles("input[type=file]", __dirname + "/ean.jpg");
+  await page.waitForSelector("text=Pressung", { timeout: 20000 }).catch(() => {});
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: __dirname + "/scan2.png", fullPage: true });
+  console.log("barcode field", await page.inputValue("input[placeholder=Barcode]").catch(() => "-"));
+  console.log("searches", searches);
+  console.log("errors", errors);
+  await b.close();
+})();

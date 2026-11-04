@@ -5,3 +5,6 @@ dev-dist
 *.log
 .dev.vars
 .wrangler
+tools/e2e/*.png
+tools/e2e/*.pdf
+tools/e2e/*.jpg

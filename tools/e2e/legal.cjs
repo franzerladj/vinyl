@@ -1,0 +1,30 @@
+const { chromium, devices } = require("playwright");
+const install = require("./mock.cjs");
+(async () => {
+  const b = await chromium.launch();
+  // Ohne Mock = nicht angemeldet
+  const ctx0 = await b.newContext({ ...devices["iPhone 13"] });
+  const p0 = await ctx0.newPage();
+  const hosts = new Set();
+  p0.on("request", (r) => hosts.add(new URL(r.url()).host));
+  await p0.goto("http://localhost:8787/datenschutz");
+  await p0.waitForTimeout(1500);
+  console.log("datenschutz", await p0.isVisible("text=Deine Rechte"));
+  await p0.screenshot({ path: __dirname + "/legal.png" });
+  await p0.goto("http://localhost:8787/");
+  await p0.waitForTimeout(1500);
+  console.log("login has legal", await p0.isVisible("text=Impressum"));
+  const ctx = await b.newContext({ ...devices["iPhone 13"], colorScheme: "dark" });
+  const page = await ctx.newPage();
+  page.on("request", (r) => hosts.add(new URL(r.url()).host));
+  const errors = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await install(page);
+  await page.goto("http://localhost:8787/release/5");
+  await page.waitForTimeout(2500);
+  console.log("facade", await page.locator(".video-facade").count(), "iframes", await page.locator("iframe").count());
+  await page.goto('http://localhost:8787/stickers?ids=5'); await page.waitForTimeout(2500); console.log('fonts', await page.evaluate(async () => { await document.fonts.ready; return [...document.fonts].filter(f => f.status === 'loaded').map(f => f.family + ' ' + f.stretch); }));
+  console.log("hosts", [...hosts]);
+  console.log("errors", errors);
+  await b.close();
+})();
