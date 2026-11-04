@@ -1,16 +1,20 @@
-import { NavBar } from "../components/ui";
-import { useEffect, useMemo, useState } from "react";
+// Set kuratieren: Kiste packen, Reihenfolge selbst bauen, „Was passt danach?“ mit Begründung,
+// Mix-Notizen, Reinhören, Live-Modus. Die Automatik ist nur noch eine Hilfe, kein Ersatz.
+import { MenuSheet, NavBar } from "../components/ui";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, type DJSet, type TrackMeta } from "../lib/db";
+import { db, type DJSet, type Release, type TrackMeta } from "../lib/db";
 import { toast } from "../lib/store";
-import { Seg, Sheet } from "../components/bits";
-import { IconBack, IconDown, IconUp, IconX } from "../components/icons";
+import { Cover, haptic, Seg, Sheet } from "../components/bits";
+import { IconPlay, IconPlus, IconX } from "../components/icons";
 import { TrackLine } from "./Sets";
-import { buildSetlist, targetEnergy, type Curve } from "../../../shared/setlist";
+import { previewUrl } from "../lib/free";
+import { buildSetlist, setStats, suggestNext, targetEnergy, type Curve, type SetTrack, type Suggestion } from "../../../shared/setlist";
 import { estimateBpm, estimateVibe } from "../../../shared/vibes";
 import { matchesQuery } from "../../../shared/textSearch";
 import { bpmDelta, keyDistance, parseKey } from "../../../shared/music";
+import { parseDuration } from "../../../shared/match";
 
 const CURVES: [Curve, string, string][] = [
   ["warmup", "Warm-up", "ruhig starten, langsam steigern"],
@@ -20,52 +24,53 @@ const CURVES: [Curve, string, string][] = [
   ["closing", "Closing", "vom Peak sanft ausklingen"],
 ];
 
+type Data = {
+  tracks: TrackMeta[];
+  byId: Map<string, TrackMeta>;
+  rels: Map<number, Release>;
+  metas: Map<number, { shelf?: string; crates?: string[] }>;
+  ratings: Map<number, number>;
+};
+
 export default function SetEditor() {
   const { id } = useParams();
   const nav = useNavigate();
   const isNew = id === "new";
-  const [set, setSet] = useState<DJSet>({ name: "", curve: "journey", trackIds: [], createdAt: Date.now() });
-  const [cfg, setCfg] = useState({ length: 20, startBpm: "", endBpm: "", maxJump: 6, keyWeight: 1, style: "", minStars: 0, onlyWithBpm: false, crate: "", perRecord: 1 });
-  const [genNote, setGenNote] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [view, setView] = useState<"set" | "crate">("set");
+  const [set, setSet] = useState<DJSet>({ name: "", curve: "journey", trackIds: [], createdAt: Date.now(), crateIds: [], mixNotes: {} });
+  const [dirty, setDirty] = useState(false);
+  const [view, setView] = useState<"order" | "crate">("order");
+  const [picker, setPicker] = useState(false);
+  const [auto, setAuto] = useState(false);
+  const [insertAt, setInsertAt] = useState<number | null>(null);
+  const [noteFor, setNoteFor] = useState<string | null>(null);
+  const [live, setLive] = useState(false);
+  const [wide, setWide] = useState(false);
+  const [playing, setPlaying] = useState<string | null>(null);
+  const audio = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
-    if (!isNew) db.sets.get(Number(id)).then((s) => s && setSet(s));
+    if (!isNew) db.sets.get(Number(id)).then((s) => s && setSet({ crateIds: [], mixNotes: {}, ...s }));
   }, [id, isNew]);
 
-  const data = useLiveQuery(async () => {
-    const ids = [...new Set((await db.collection.toArray()).map((c) => c.releaseId))];
-    const [tracks, rels, metas, coll] = await Promise.all([db.tracks.where("releaseId").anyOf(ids).toArray(), db.releases.bulkGet(ids), db.recordMeta.bulkGet(ids), db.collection.toArray()]);
+  const update = (patch: Partial<DJSet>) => {
+    setSet((s) => ({ ...s, ...patch }));
+    setDirty(true);
+  };
+
+  const data = useLiveQuery(async (): Promise<Data> => {
+    const coll = await db.collection.toArray();
+    const ids = [...new Set(coll.map((c) => c.releaseId))];
+    const [tracks, rels, metas] = await Promise.all([db.tracks.where("releaseId").anyOf(ids).toArray(), db.releases.bulkGet(ids), db.recordMeta.bulkGet(ids)]);
     return {
-      ratings: new Map(coll.map((c) => [c.releaseId, c.rating])),
       tracks,
       byId: new Map(tracks.map((t) => [t.id, t])),
       rels: new Map(rels.filter(Boolean).map((r) => [r!.id, r!])),
       metas: new Map(metas.filter(Boolean).map((m) => [m!.releaseId, m!])),
+      ratings: new Map(coll.map((c) => [c.releaseId, c.rating])),
     };
   });
 
-  const styles = useMemo(() => {
-    const c = new Map<string, number>();
-    data?.rels.forEach((r) => r.styles.forEach((s) => c.set(s, (c.get(s) ?? 0) + 1)));
-    return [...c.entries()].sort((a, b) => b[1] - a[1]).slice(0, 25).map(([s]) => s);
-  }, [data]);
-  const crates = useMemo(() => [...new Set([...(data?.metas.values() ?? [])].flatMap((m) => m.crates ?? []))], [data]);
-
-  const pool = useMemo(() => {
-    if (!data) return [];
-    return data.tracks.filter((t) => {
-      const r = data.rels.get(t.releaseId);
-      if (cfg.onlyWithBpm && !t.bpm) return false;
-      if (cfg.style && !r?.styles.includes(cfg.style)) return false;
-      if (cfg.minStars && (t.stars ?? 0) < cfg.minStars) return false;
-      if (cfg.crate && !data.metas.get(t.releaseId)?.crates?.includes(cfg.crate)) return false;
-      return true;
-    });
-  }, [data, cfg]);
-
-  // Fehlende BPM schätzen (Nachbartracks der Platte oder typisches Tempo des Styles), damit mehr Tracks ins Set passen
+  // Fehlendes Tempo schätzen (andere Tracks der Platte oder typisches Tempo des Styles)
   const estBpm = useMemo(() => {
     const m = new Map<string, number>();
     if (!data) return m;
@@ -78,53 +83,57 @@ export default function SetEditor() {
     }
     return m;
   }, [data]);
-  const estimatedInSet = set.trackIds.filter((id) => estBpm.has(id)).length;
 
-  const generate = () => {
-    if (!pool.length) return toast("Keine Tracks im Pool. Filter lockern oder erst BPM ergänzen.");
-    // Qualität: eigene Bewertung (Track-Sterne, sonst Platte) und wie sicher Tempo und Tonart sind
-    const quality = (t: (typeof pool)[number]) => {
-      const stars = t.stars || data?.ratings.get(t.releaseId) || 0;
-      const rating = stars ? stars / 5 : 0.5;
-      const bpm = t.bpm ? (t.bpmSource === "Analyse" ? 0.85 : 1) : estBpm.has(t.id) ? 0.35 : 0;
-      const key = t.key ? (t.keySource?.startsWith("Analyse") ? 0.6 : 1) : 0;
-      return 0.45 * rating + 0.35 * bpm + 0.2 * key;
+  /** Track in die Form für Vorschläge und Ordnen bringen: mit Platte, Schätzwerten und Qualität */
+  const toSetTrack = (t: TrackMeta): SetTrack => {
+    const stars = t.stars || data?.ratings.get(t.releaseId) || 0;
+    const bpmQ = t.bpm ? (t.bpmSource === "Analyse" ? 0.85 : 1) : estBpm.has(t.id) ? 0.35 : 0;
+    const keyQ = t.key ? (t.keySource?.startsWith("Analyse") ? 0.6 : 1) : 0;
+    const bpm = t.bpm ?? estBpm.get(t.id) ?? null;
+    return {
+      id: t.id,
+      group: String(t.releaseId),
+      bpm,
+      key: t.key ?? null,
+      energy: t.energy ?? estimateVibe({ styles: data?.rels.get(t.releaseId)?.styles ?? [], bpm: bpm ?? undefined }).energy,
+      quality: 0.45 * (stars ? stars / 5 : 0.5) + 0.35 * bpmQ + 0.2 * keyQ,
     };
-    const order = buildSetlist(
-      pool.map((t) => ({
-        id: t.id,
-        group: String(t.releaseId),
-        quality: quality(t),
-        bpm: t.bpm ?? estBpm.get(t.id) ?? null,
-        key: t.key ?? null,
-        energy: t.energy ?? estimateVibe({ styles: data?.rels.get(t.releaseId)?.styles ?? [], bpm: t.bpm ?? estBpm.get(t.id) }).energy,
-      })),
-      {
-        length: cfg.length,
-        curve: set.curve as Curve,
-        startBpm: Number(cfg.startBpm) || undefined,
-        endBpm: Number(cfg.endBpm) || undefined,
-        maxBpmJumpPercent: cfg.maxJump,
-        keyWeight: cfg.keyWeight,
-        maxPerRecord: cfg.perRecord,
-      },
-    );
-    // Hinweis, wenn Platten mehrfach drin sind oder das Set kürzer wurde
-    const perRel = new Map<number, number>();
-    order.forEach((id) => {
-      const r = data?.byId.get(id)?.releaseId;
-      if (r != null) perRel.set(r, (perRel.get(r) ?? 0) + 1);
-    });
-    const multi = [...perRel.values()].filter((k) => k > 1).length;
-    const records = new Set(pool.map((t) => t.releaseId)).size;
-    setGenNote(
-      multi && cfg.perRecord === 1
-        ? `Nur ${records} Platten passen zu den Filtern, deshalb kommen ${multi} Platten zweimal vor (nie direkt hintereinander).`
-        : order.length < cfg.length
-          ? `Nur ${order.length} Tracks passen zu den Filtern.`
-          : null,
-    );
-    setSet({ ...set, trackIds: order });
+  };
+
+  const tracks = set.trackIds.map((tid) => data?.byId.get(tid)).filter(Boolean) as TrackMeta[];
+  const seq = useMemo(() => tracks.map(toSetTrack), [tracks, data, estBpm]); // eslint-disable-line react-hooks/exhaustive-deps
+  const crate = set.crateIds ?? [];
+  const crateSet = new Set(crate);
+  const stats = setStats(seq);
+  const durOf = (t: TrackMeta) => parseDuration(data?.rels.get(t.releaseId)?.tracklist?.find((x) => x.position === t.position)?.duration);
+  // Beim Mixen überlappen Tracks: grob 80 % der Länge, nur der letzte läuft ganz
+  const minutes = Math.round(tracks.reduce((s, t, i) => s + (durOf(t) ?? 360) * (i < tracks.length - 1 ? 0.8 : 1), 0) / 60);
+
+  /** Vorschläge für die Stelle nach `index` (−1 = Anfang) */
+  const suggestionsAt = (index: number): Suggestion[] => {
+    if (!data) return [];
+    const prev = index >= 0 ? seq[index] : null;
+    const used = new Set(seq.map((t) => t.group!));
+    const pool = (wide || !crate.length ? data.tracks : data.tracks.filter((t) => crateSet.has(t.releaseId))).filter((t) => !set.trackIds.includes(t.id));
+    const t = seq.length <= 1 ? 0 : Math.min(1, (index + 1) / Math.max(1, seq.length));
+    return suggestNext(prev, pool.map(toSetTrack), { usedGroups: used, energyGoal: targetEnergy(set.curve as Curve, t), limit: 6 });
+  };
+
+  const insertTrack = (tid: string, at: number) => {
+    const t = data?.byId.get(tid);
+    const ids = [...set.trackIds];
+    ids.splice(at, 0, tid);
+    // Platte kommt automatisch mit in die Kiste
+    update({ trackIds: ids, crateIds: t && !crateSet.has(t.releaseId) ? [...crate, t.releaseId] : crate });
+    haptic(10);
+  };
+
+  const move = (from: number, to: number) => {
+    if (from === to || to < 0 || to >= set.trackIds.length) return;
+    const ids = [...set.trackIds];
+    const [x] = ids.splice(from, 1);
+    ids.splice(to, 0, x);
+    update({ trackIds: ids });
   };
 
   const save = async () => {
@@ -132,274 +141,484 @@ export default function SetEditor() {
     const newId = await db.sets.put(s);
     void import("../lib/push").then((p) => p.syncPushData());
     toast("Set gespeichert");
+    setDirty(false);
     if (isNew) nav(`/sets/${newId}`, { replace: true });
     setSet({ ...s, id: newId });
   };
 
-  const move = (i: number, d: number) => {
-    const ids = [...set.trackIds];
-    const j = i + d;
-    if (j < 0 || j >= ids.length) return;
-    [ids[i], ids[j]] = [ids[j], ids[i]];
-    setSet({ ...set, trackIds: ids });
+  // Reinhören: ein Audio-Element für alles (iOS spielt nur nach Tippen)
+  const togglePreview = (t: TrackMeta) => {
+    const a = audio.current;
+    if (!a) return;
+    if (playing === t.id) {
+      a.pause();
+      setPlaying(null);
+      return;
+    }
+    a.src = t.deezerId ? `/api/audio/preview/${t.deezerId}` : previewUrl(t.artist, t.title, durOf(t));
+    a.play().then(
+      () => setPlaying(t.id),
+      () => toast("Keine Hörprobe gefunden"),
+    );
   };
-
-  const tracks = set.trackIds.map((tid) => data?.byId.get(tid)).filter(Boolean) as TrackMeta[];
-
-  const asText = () =>
-    `${set.name}${set.date ? ` · ${new Date(set.date).toLocaleDateString("de-DE")}` : ""}${set.venue ? ` · ${set.venue}` : ""}\n\n` +
-    tracks.map((t, i) => `${String(i + 1).padStart(2, "0")}. ${t.artist} – ${t.title} [${t.position}]${t.bpm ? ` ${t.bpm} BPM` : ""}${t.key ? ` ${t.key}` : ""}`).join("\n");
+  useEffect(() => {
+    const a = audio.current;
+    return () => a?.pause();
+  }, []);
 
   const share = async () => {
-    const text = asText();
+    const text =
+      `${set.name}${set.date ? ` · ${new Date(set.date).toLocaleDateString("de-DE")}` : ""}${set.venue ? ` · ${set.venue}` : ""}\n\n` +
+      tracks.map((t, i) => `${String(i + 1).padStart(2, "0")}. ${t.artist} – ${t.title} [${t.position}]${t.bpm ? ` ${t.bpm} BPM` : ""}${t.key ? ` ${t.key}` : ""}`).join("\n");
     if (navigator.share) await navigator.share({ title: set.name, text }).catch(() => undefined);
     else await navigator.clipboard.writeText(text).then(() => toast("Setlist kopiert"));
   };
 
-  // Platten, die für das Set eingepackt werden müssen
-  const crateList = useMemo(() => {
-    const m = new Map<number, string[]>();
-    tracks.forEach((t) => m.set(t.releaseId, [...(m.get(t.releaseId) ?? []), t.position]));
-    return [...m.entries()].map(([rid, pos]) => ({ r: data?.rels.get(rid), meta: data?.metas.get(rid), pos })).sort((a, b) => (a.meta?.shelf ?? "~").localeCompare(b.meta?.shelf ?? "~", "de", { numeric: true }));
-  }, [tracks, data]);
-
-  const addTrack = (t: TrackMeta) => {
-    setSet({ ...set, trackIds: [...set.trackIds, t.id] });
-    setAdding(false);
-  };
-
   return (
     <>
+      <audio ref={audio} onEnded={() => setPlaying(null)} onPause={() => setPlaying(null)} />
       <NavBar
         title={set.name || (isNew ? "Neues Set" : "Set")}
         backTo="/sets"
         backLabel="Sets"
         right={
-          <>
-            {!isNew && (
-              <button
-                className="text-btn"
-                style={{ color: "var(--bad)", fontWeight: 500 }}
-                onClick={async () => {
-                  if (!confirm("Set löschen?")) return;
-                  await db.sets.delete(Number(id));
-                  nav("/sets", { viewTransition: true });
-                }}
-              >
-                Löschen
-              </button>
-            )}
-            <button className="text-btn" onClick={save}>
-              Speichern
-            </button>
-          </>
+          <button className="text-btn" onClick={save} style={{ fontWeight: dirty ? 700 : 500 }}>
+            Speichern
+          </button>
         }
       />
       <div className="page stack">
-        <input className="input" placeholder="Name, z.B. Freitag Klubraum" value={set.name} onChange={(e) => setSet({ ...set, name: e.target.value })} style={{ fontSize: 18, fontWeight: 600 }} />
+        <input className="input" placeholder="Name, z. B. Freitag Klubraum" value={set.name} onChange={(e) => update({ name: e.target.value })} style={{ fontSize: 18, fontWeight: 600 }} />
         <div className="grid2">
-          <input className="input" type="date" value={set.date ?? ""} onChange={(e) => setSet({ ...set, date: e.target.value })} />
-          <input className="input" placeholder="Location" value={set.venue ?? ""} onChange={(e) => setSet({ ...set, venue: e.target.value })} />
+          <input className="input" type="date" value={set.date ?? ""} onChange={(e) => update({ date: e.target.value })} />
+          <input className="input" placeholder="Location" value={set.venue ?? ""} onChange={(e) => update({ venue: e.target.value })} />
+        </div>
+        <div className="chips">
+          {CURVES.map(([c, l, d]) => (
+            <button key={c} className={`chip ${set.curve === c ? "on" : ""}`} onClick={() => update({ curve: c })} title={d}>
+              {l}
+            </button>
+          ))}
         </div>
 
-        <details className="card" open={set.trackIds.length === 0}>
-          <summary style={{ cursor: "pointer", fontWeight: 600 }}>Setlist vorschlagen lassen</summary>
-          <div className="stack" style={{ marginTop: 10 }}>
-            <div className="chips" style={{ flexWrap: "wrap" }}>
-              {CURVES.map(([c, l, d]) => (
-                <button key={c} className={`chip ${set.curve === c ? "on" : ""}`} onClick={() => setSet({ ...set, curve: c })} title={d}>
-                  {l}
-                </button>
-              ))}
-            </div>
-            <EnergyCurve curve={set.curve as Curve} actual={tracks.map((t) => t.energy ?? null)} />
-            <div className="field" style={{ marginBottom: 10 }}>
-              Tracks pro Platte
-              <Seg
-                value={String(cfg.perRecord) as "1" | "2" | "3"}
-                options={[
-                  ["1", "Einer"],
-                  ["2", "Bis 2"],
-                  ["3", "Bis 3"],
-                ]}
-                onChange={(v) => setCfg({ ...cfg, perRecord: Number(v) })}
-              />
-              <span className="tiny" style={{ fontWeight: 400 }}>Tracks derselben Platte kommen nie direkt hintereinander. Reichen die Platten nicht, nimmt die App im Notfall mehr.</span>
-            </div>
-            <div className="grid3">
-              <label className="field">
-                Tracks
-                <input className="input" inputMode="numeric" value={cfg.length} onChange={(e) => setCfg({ ...cfg, length: Number(e.target.value) || 0 })} />
-              </label>
-              <label className="field">
-                Start-BPM
-                <input className="input" inputMode="numeric" placeholder="frei" value={cfg.startBpm} onChange={(e) => setCfg({ ...cfg, startBpm: e.target.value })} />
-              </label>
-              <label className="field">
-                End-BPM
-                <input className="input" inputMode="numeric" placeholder="frei" value={cfg.endBpm} onChange={(e) => setCfg({ ...cfg, endBpm: e.target.value })} />
-              </label>
-              <label className="field">
-                max. BPM-Sprung
-                <select className="input" value={cfg.maxJump} onChange={(e) => setCfg({ ...cfg, maxJump: Number(e.target.value) })}>
-                  {[3, 4, 6, 8, 12].map((v) => (
-                    <option key={v} value={v}>
-                      {v} %
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                Harmonie
-                <select className="input" value={cfg.keyWeight} onChange={(e) => setCfg({ ...cfg, keyWeight: Number(e.target.value) })}>
-                  <option value={0}>egal</option>
-                  <option value={1}>wichtig</option>
-                  <option value={2}>sehr wichtig</option>
-                </select>
-              </label>
-              <label className="field">
-                min. Sterne
-                <select className="input" value={cfg.minStars} onChange={(e) => setCfg({ ...cfg, minStars: Number(e.target.value) })}>
-                  {[0, 1, 2, 3, 4, 5].map((v) => (
-                    <option key={v} value={v}>
-                      {v || "alle"}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            <div className="grid2">
-              <select className="input" value={cfg.style} onChange={(e) => setCfg({ ...cfg, style: e.target.value })}>
-                <option value="">Alle Styles</option>
-                {styles.map((s) => (
-                  <option key={s}>{s}</option>
-                ))}
-              </select>
-              <select className="input" value={cfg.crate} onChange={(e) => setCfg({ ...cfg, crate: e.target.value })}>
-                <option value="">Ganze Sammlung</option>
-                {crates.map((c) => (
-                  <option key={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-            <label className="row sub">
-              <input type="checkbox" checked={cfg.onlyWithBpm} onChange={(e) => setCfg({ ...cfg, onlyWithBpm: e.target.checked })} /> nur Tracks mit gemessenem BPM (sonst wird fehlendes Tempo aus Platte und Style geschätzt)
-            </label>
-            <button className="btn primary" onClick={generate}>
-              Vorschlag erstellen ({new Set(pool.map((t) => t.releaseId)).size} Platten, {pool.length} Tracks)
-            </button>
-            {genNote && <span className="sub" style={{ color: "var(--warn)" }}>{genNote}</span>}
-            <span className="sub">Pro Platte wählt die App den Track, der am besten passt: nach Tempo, Tonart, Energie und deiner Bewertung. Gemessene Werte schlagen geschätzte.{estimatedInSet > 0 ? ` Im aktuellen Set sind ${estimatedInSet} Tempi geschätzt (mit ~ markiert).` : ""}</span>
-          </div>
-        </details>
-
+        {/* Überblick */}
         {tracks.length > 0 && (
-          <div className="row">
-            <Seg
-              value={view}
-              options={[
-                ["set", `Reihenfolge (${tracks.length})`],
-                ["crate", `Einpacken (${crateList.length})`],
-              ]}
-              onChange={setView}
-            />
-            <span className="spacer" />
-            <button className="btn small ghost" onClick={share}>
-              Teilen
-            </button>
+          <div className="card set-summary">
+            <div className="set-summary-nums">
+              <span>
+                <b>{tracks.length}</b> Tracks
+              </span>
+              <span>
+                <b>~{minutes}</b> min
+              </span>
+              {stats.minBpm && (
+                <span>
+                  <b>
+                    {Math.round(stats.minBpm)}
+                    {Math.round(stats.maxBpm!) !== Math.round(stats.minBpm) ? `–${Math.round(stats.maxBpm!)}` : ""}
+                  </b>{" "}
+                  BPM
+                </span>
+              )}
+              {stats.known > 0 && (
+                <span>
+                  <b>
+                    {stats.harmonic}/{stats.known}
+                  </b>{" "}
+                  harmonisch
+                </span>
+              )}
+            </div>
+            <EnergyCurve curve={set.curve as Curve} actual={seq.map((t) => t.energy)} />
+            <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+              <button className="btn small primary" onClick={() => setLive(true)}>
+                <IconPlay /> Live-Modus
+              </button>
+              <button className="btn small" onClick={share}>
+                Teilen
+              </button>
+              <button className="btn small ghost" onClick={() => setAuto(true)}>
+                Automatik
+              </button>
+            </div>
           </div>
         )}
 
-        {view === "set" ? (
-          <div className="list">
-            {tracks.map((t, i) => {
-              const prev = tracks[i - 1];
-              const d = prev ? bpmDelta(prev.bpm, t.bpm) : 0;
-              const kd = prev ? keyDistance(parseKey(prev.key), parseKey(t.key)) : 0;
-              return (
-                <div key={t.id}>
-                  {prev && (
-                    <div className="transition">
-                      <span className="dot" style={{ background: d <= 3 ? "var(--ok)" : d <= 6 ? "var(--warn)" : "var(--bad)" }} />
-                      {prev.bpm && t.bpm ? (Math.round(t.bpm) === Math.round(prev.bpm) ? "gleiches Tempo" : `${t.bpm > prev.bpm ? "+" : ""}${(t.bpm - prev.bpm).toFixed(0)} BPM (${d.toFixed(1).replace(".", ",")} %)`) : "BPM ?"}
-                      <span className="dot" style={{ background: kd <= 1 ? "var(--ok)" : kd <= 2 ? "var(--warn)" : "var(--bad)" }} />
-                      {kd <= 1 ? "harmonisch" : kd <= 2 ? "Energy-Boost" : prev.key && t.key ? "Key-Clash" : "Key ?"}
-                    </div>
-                  )}
-                  <TrackLine
-                    t={t}
-                    r={data?.rels.get(t.releaseId)}
-                    extra={
-                      <span className="sub">
-                        #{i + 1}
-                        {!t.bpm && estBpm.has(t.id) ? ` · ~${estBpm.get(t.id)} BPM geschätzt` : ""}
-                      </span>
-                    }
-                    actions={
-                      <div className="mini-actions">
-                        <button className="icon-btn" onClick={() => move(i, -1)} aria-label="hoch">
-                          <IconUp />
-                        </button>
-                        <button className="icon-btn" onClick={() => move(i, 1)} aria-label="runter">
-                          <IconDown />
-                        </button>
-                        <button className="icon-btn" onClick={() => setSet({ ...set, trackIds: set.trackIds.filter((x) => x !== t.id) })} aria-label="entfernen">
-                          <IconX />
-                        </button>
-                      </div>
-                    }
-                  />
+        <Seg
+          value={view}
+          options={[
+            ["order", `Reihenfolge (${tracks.length})`],
+            ["crate", `Kiste (${crate.length})`],
+          ]}
+          onChange={setView}
+        />
+
+        {view === "order" ? (
+          <>
+            {tracks.length === 0 && (
+              <div className="card stack" style={{ gap: 8 }}>
+                <b>So baust du dein Set</b>
+                <span className="sub">Pack zuerst die Platten für den Abend in die Kiste. Dann wählst du Track für Track, Crate schlägt jeweils vor, was gut danach passt, und sagt warum.</span>
+                <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                  <button className="btn small primary" onClick={() => (setView("crate"), setPicker(true))}>
+                    Kiste packen
+                  </button>
+                  <button className="btn small ghost" onClick={() => setAuto(true)}>
+                    Automatisch vorschlagen
+                  </button>
                 </div>
-              );
-            })}
-            <button className="btn ghost" style={{ marginTop: 10 }} onClick={() => setAdding(true)}>
-              + Track hinzufügen
-            </button>
-          </div>
-        ) : (
-          <div className="list">
-            {crateList.map(({ r, meta, pos }) =>
-              r ? (
-                <div key={r.id} className="rec">
-                  <img className="cover" src={r.thumb} alt="" />
-                  <div className="rec-main">
-                    <div className="rec-title">{r.title}</div>
-                    <div className="rec-artist">{r.artist}</div>
-                    <div className="rec-meta">
-                      <span>{r.labels[0]?.catno}</span>
-                      <span>Tracks: {pos.join(", ")}</span>
-                    </div>
-                  </div>
-                  <div className="rec-side">{meta?.shelf ? <span className="badge accent">{meta.shelf}</span> : <span className="sub">kein Regalplatz</span>}</div>
-                </div>
-              ) : null,
+              </div>
             )}
-          </div>
+            <OrderList
+              tracks={tracks}
+              seq={seq}
+              rels={data?.rels}
+              estBpm={estBpm}
+              notes={set.mixNotes ?? {}}
+              playing={playing}
+              onPreview={togglePreview}
+              onMove={move}
+              onRemove={(i) => update({ trackIds: set.trackIds.filter((_, j) => j !== i) })}
+              onNote={setNoteFor}
+              onInsert={(i) => setInsertAt(i)}
+            />
+            {/* Am Ende immer: was passt danach? */}
+            <NextPanel
+              title={tracks.length ? `Was passt nach „${tracks[tracks.length - 1].title}“?` : "Womit anfangen?"}
+              items={suggestionsAt(tracks.length - 1)}
+              data={data}
+              wide={wide}
+              hasCrate={crate.length > 0}
+              onWide={setWide}
+              onPick={(tid) => insertTrack(tid, set.trackIds.length)}
+              onPreview={togglePreview}
+              playing={playing}
+            />
+          </>
+        ) : (
+          <CrateView
+            crate={crate}
+            data={data}
+            used={tracks.reduce((m, t) => m.set(t.releaseId, [...(m.get(t.releaseId) ?? []), t.position]), new Map<number, string[]>())}
+            onAdd={() => setPicker(true)}
+            onRemove={(rid) => update({ crateIds: crate.filter((x) => x !== rid), trackIds: set.trackIds.filter((tid) => data?.byId.get(tid)?.releaseId !== rid) })}
+          />
+        )}
+
+        {!isNew && (
+          <button
+            className="btn ghost"
+            style={{ color: "var(--bad)", marginTop: 16 }}
+            onClick={async () => {
+              if (!confirm("Set löschen?")) return;
+              await db.sets.delete(Number(id));
+              nav("/sets", { viewTransition: true });
+            }}
+          >
+            Set löschen
+          </button>
         )}
       </div>
-      <Sheet open={adding} onClose={() => setAdding(false)}>
-        <AddTrack tracks={data?.tracks ?? []} rels={data?.rels} last={tracks[tracks.length - 1]} onPick={addTrack} exclude={new Set(set.trackIds)} />
+
+      {/* Einfügen an einer Stelle */}
+      <Sheet open={insertAt !== null} onClose={() => setInsertAt(null)}>
+        {insertAt !== null && (
+          <NextPanel
+            title={insertAt === 0 ? "Was passt an den Anfang?" : insertAt >= tracks.length ? "Was passt ans Ende?" : `Zwischen #${insertAt} und #${insertAt + 1}`}
+            items={suggestionsAt(insertAt - 1)}
+            data={data}
+            wide={wide}
+            hasCrate={crate.length > 0}
+            onWide={setWide}
+            onPick={(tid) => {
+              insertTrack(tid, insertAt);
+              setInsertAt(null);
+            }}
+            onPreview={togglePreview}
+            playing={playing}
+            search
+          />
+        )}
       </Sheet>
+
+      <Sheet open={picker} onClose={() => setPicker(false)}>
+        <RecordPicker data={data} crate={crateSet} onToggle={(rid) => update({ crateIds: crateSet.has(rid) ? crate.filter((x) => x !== rid) : [...crate, rid] })} onDone={() => setPicker(false)} />
+      </Sheet>
+
+      <Sheet open={noteFor !== null} onClose={() => setNoteFor(null)}>
+        {noteFor && (
+          <NoteEditor
+            title={data?.byId.get(noteFor)?.title ?? ""}
+            value={set.mixNotes?.[noteFor] ?? ""}
+            onSave={(v) => {
+              const n = { ...(set.mixNotes ?? {}) };
+              if (v.trim()) n[noteFor] = v.trim();
+              else delete n[noteFor];
+              update({ mixNotes: n });
+              setNoteFor(null);
+            }}
+          />
+        )}
+      </Sheet>
+
+      <Sheet open={auto} onClose={() => setAuto(false)}>
+        {auto && (
+          <AutoHelp
+            data={data}
+            set={set}
+            seq={seq}
+            toSetTrack={toSetTrack}
+            onApply={(ids, crateIds) => {
+              update({ trackIds: ids, crateIds });
+              setAuto(false);
+              setView("order");
+            }}
+          />
+        )}
+      </Sheet>
+
+      {live && (
+        <LiveMode
+          tracks={tracks}
+          rels={data?.rels}
+          notes={set.mixNotes ?? {}}
+          played={new Set(set.played ?? [])}
+          onPlayed={(tid) => {
+            const next = { ...set, played: [...new Set([...(set.played ?? []), tid])] };
+            setSet(next);
+            if (next.id) void db.sets.put(next);
+          }}
+          onClose={() => setLive(false)}
+        />
+      )}
     </>
   );
 }
 
-function AddTrack({ tracks, rels, last, onPick, exclude }: { tracks: TrackMeta[]; rels?: Map<number, import("../lib/db").Release>; last?: TrackMeta; onPick: (t: TrackMeta) => void; exclude: Set<string> }) {
+// ---------------------------------------------------------------------------
+// Reihenfolge mit Ziehen zum Umsortieren, Übergängen, Notizen und Einfügen
+// ---------------------------------------------------------------------------
+function OrderList(p: {
+  tracks: TrackMeta[];
+  seq: SetTrack[];
+  rels?: Map<number, Release>;
+  estBpm: Map<string, number>;
+  notes: Record<string, string>;
+  playing: string | null;
+  onPreview: (t: TrackMeta) => void;
+  onMove: (from: number, to: number) => void;
+  onRemove: (i: number) => void;
+  onNote: (tid: string) => void;
+  onInsert: (i: number) => void;
+}) {
+  const list = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<{ from: number; over: number; y0: number; dy: number } | null>(null);
+
+  const startDrag = (i: number, e: React.PointerEvent) => {
+    e.preventDefault();
+    list.current?.setPointerCapture(e.pointerId);
+    haptic(8);
+    setDrag({ from: i, over: i, y0: e.clientY, dy: 0 });
+  };
+  const moveDrag = (e: React.PointerEvent) => {
+    if (!drag || !list.current) return;
+    const items = [...list.current.querySelectorAll<HTMLElement>("[data-item]")];
+    // Ziel nach der Mitte der Zeilen bestimmen (Zeile unter dem Finger, ohne die gezogene selbst)
+    let over = 0;
+    items.forEach((el, i) => {
+      if (i === drag.from) return;
+      const r = el.getBoundingClientRect();
+      if (e.clientY > r.top + r.height / 2) over = i < drag.from ? i + 1 : i;
+    });
+    if (over !== drag.over) haptic(4);
+    setDrag({ ...drag, over, dy: e.clientY - drag.y0 });
+  };
+  const endDrag = () => {
+    if (drag) p.onMove(drag.from, drag.over);
+    setDrag(null);
+  };
+
+  if (!p.tracks.length) return null;
+  return (
+    <div className={`order${drag ? " is-dragging" : ""}`} ref={list} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
+      <button className="order-insert" onClick={() => p.onInsert(0)} aria-label="Am Anfang einfügen">
+        <IconPlus />
+      </button>
+      {p.tracks.map((t, i) => {
+        const prev = p.seq[i - 1];
+        const cur = p.seq[i];
+        const d = prev ? bpmDelta(prev.bpm, cur.bpm) : 0;
+        const kd = prev ? keyDistance(parseKey(prev.key), parseKey(cur.key)) : 0;
+        const dragging = drag?.from === i;
+        const target = drag && !dragging && drag.over === i;
+        return (
+          <div key={t.id} data-item className={`order-item${dragging ? " dragging" : ""}${target ? (drag!.over > drag!.from ? " drop-after" : " drop-before") : ""}`} style={dragging ? { transform: `translateY(${drag!.dy}px)` } : undefined}>
+            {prev && (
+              <button className="transition press" onClick={() => p.onNote(t.id)}>
+                <span className="dot" style={{ background: d <= 3 ? "var(--ok)" : d <= 6 ? "var(--warn)" : "var(--bad)" }} />
+                {prev.bpm && cur.bpm ? (Math.round(cur.bpm) === Math.round(prev.bpm) ? "gleiches Tempo" : `${cur.bpm > prev.bpm ? "+" : ""}${Math.round(cur.bpm - prev.bpm)} BPM`) : "Tempo ?"}
+                <span className="dot" style={{ background: kd <= 1 ? "var(--ok)" : kd <= 2 ? "var(--warn)" : "var(--bad)" }} />
+                {kd <= 1 ? "harmonisch" : kd <= 2 ? "Energy-Boost" : prev.key && cur.key ? "Key-Clash" : "Key ?"}
+                <span className="transition-note">{p.notes[t.id] ? `„${p.notes[t.id]}“` : "+ Notiz"}</span>
+              </button>
+            )}
+            <div className="order-row">
+              <span className="order-handle" onPointerDown={(e) => startDrag(i, e)} aria-label="Ziehen zum Umsortieren" role="button">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                  <path d="M5 9h14M5 15h14" />
+                </svg>
+              </span>
+              <div className="order-track" onClick={() => p.onPreview(t)} role="button" aria-label={`${t.title} anhören`}>
+                <TrackLine
+                  t={t}
+                  r={p.rels?.get(t.releaseId)}
+                  extra={
+                    <span className="sub">
+                      #{i + 1}
+                      {p.playing === t.id ? " · läuft" : ""}
+                      {!t.bpm && p.estBpm.has(t.id) ? ` · ~${p.estBpm.get(t.id)} BPM geschätzt` : ""}
+                    </span>
+                  }
+                />
+              </div>
+              <button className="icon-btn order-remove" onClick={() => p.onRemove(i)} aria-label="Aus dem Set nehmen">
+                <IconX />
+              </button>
+            </div>
+            {i < p.tracks.length - 1 && (
+              <button className="order-insert" onClick={() => p.onInsert(i + 1)} aria-label={`Nach #${i + 1} einfügen`}>
+                <IconPlus />
+              </button>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Vorschläge mit Begründung
+// ---------------------------------------------------------------------------
+function NextPanel(p: {
+  title: string;
+  items: Suggestion[];
+  data?: Data;
+  wide: boolean;
+  hasCrate: boolean;
+  onWide: (v: boolean) => void;
+  onPick: (tid: string) => void;
+  onPreview: (t: TrackMeta) => void;
+  playing: string | null;
+  search?: boolean;
+}) {
   const [q, setQ] = useState("");
+  const found = useMemo(() => {
+    if (!q.trim() || !p.data) return [];
+    return p.data.tracks.filter((t) => matchesQuery(`${t.artist} ${t.title} ${p.data!.rels.get(t.releaseId)?.title ?? ""}`, q)).slice(0, 20);
+  }, [q, p.data]);
+  const rows: Suggestion[] = q.trim() ? found.map((t) => ({ id: t.id, reasons: [], score: 0 })) : p.items;
+  return (
+    <div className="next-panel">
+      <div className="next-head">
+        <b>{p.title}</b>
+        {p.hasCrate && (
+          <Seg
+            value={p.wide ? "all" : "crate"}
+            options={[
+              ["crate", "Kiste"],
+              ["all", "Alle"],
+            ]}
+            onChange={(v) => p.onWide(v === "all")}
+          />
+        )}
+      </div>
+      {p.search && <input className="input" placeholder="Oder gezielt suchen …" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: 8 }} />}
+      {rows.map((s) => {
+        const t = p.data?.byId.get(s.id);
+        if (!t) return null;
+        const r = p.data?.rels.get(t.releaseId);
+        const stars = t.stars || p.data?.ratings.get(t.releaseId) || 0;
+        return (
+          <div key={s.id} className="next-item">
+            <button className={`next-play${p.playing === t.id ? " on" : ""}`} onClick={() => p.onPreview(t)} aria-label={`${t.title} anhören`}>
+              <Cover src={r?.thumb} />
+              <span className="next-play-ico">
+                <IconPlay />
+              </span>
+            </button>
+            <div className="next-main" onClick={() => p.onPick(s.id)} role="button">
+              <b>
+                <span className="sub">{t.position}</span> {t.title}
+              </b>
+              <span className="sub next-sub">
+                {t.artist}
+                {r ? ` · ${r.title}` : ""}
+              </span>
+              <span className="next-reasons">
+                {t.bpm ? <i className="info">{Math.round(t.bpm)} BPM</i> : null}
+                {t.key ? <i className="info">{t.key}</i> : null}
+                {s.reasons
+                  .filter((x) => !x.text.includes("unbekannt"))
+                  .map((x) => (
+                    <i key={x.text} className={x.tone}>
+                      {x.text}
+                    </i>
+                  ))}
+                {stars ? <i className="info">★ {stars}</i> : null}
+              </span>
+            </div>
+            <button className="next-add" onClick={() => p.onPick(s.id)} aria-label="Ins Set">
+              <IconPlus />
+            </button>
+          </div>
+        );
+      })}
+      {!rows.length && <p className="sub" style={{ margin: "4px 0" }}>{q ? "Nichts gefunden." : p.hasCrate && !p.wide ? "Nichts mehr in der Kiste übrig. Auf „Alle“ schalten oder mehr Platten einpacken." : "Keine passenden Tracks gefunden."}</p>}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Kiste: Platten für den Abend
+// ---------------------------------------------------------------------------
+function CrateView({ crate, data, used, onAdd, onRemove }: { crate: number[]; data?: Data; used: Map<number, string[]>; onAdd: () => void; onRemove: (rid: number) => void }) {
+  const [sort, setSort] = useState<"added" | "shelf">("added");
   const list = useMemo(() => {
-    const lq = q.toLowerCase();
-    let l = tracks.filter((t) => !exclude.has(t.id));
-    if (lq) l = l.filter((t) => matchesQuery(`${t.artist} ${t.title} ${rels?.get(t.releaseId)?.title}`, lq));
-    else if (last) l = [...l].sort((a, b) => bpmDelta(last.bpm, a.bpm) + keyDistance(parseKey(last.key), parseKey(a.key)) * 2 - (bpmDelta(last.bpm, b.bpm) + keyDistance(parseKey(last.key), parseKey(b.key)) * 2));
-    return l.slice(0, 40);
-  }, [q, tracks, rels, last, exclude]);
+    const l = crate.map((rid) => ({ rid, r: data?.rels.get(rid), shelf: data?.metas.get(rid)?.shelf }));
+    return sort === "shelf" ? [...l].sort((a, b) => (a.shelf ?? "~").localeCompare(b.shelf ?? "~", "de", { numeric: true })) : l;
+  }, [crate, data, sort]);
   return (
     <div className="stack">
-      <input className="input" placeholder={last ? "Suchen oder Vorschläge nach dem letzten Track" : "Track suchen"} value={q} onChange={(e) => setQ(e.target.value)} />
-      <div className="list">
-        {list.map((t) => (
-          <div key={t.id} onClick={() => onPick(t)} style={{ cursor: "pointer" }}>
-            <TrackLine t={t} r={rels?.get(t.releaseId)} />
+      <div className="row">
+        <button className="btn small primary" onClick={onAdd}>
+          <IconPlus /> Platten einpacken
+        </button>
+        <span className="spacer" />
+        {crate.length > 0 && (
+          <Seg
+            value={sort}
+            options={[
+              ["added", "Wie gepackt"],
+              ["shelf", "Nach Regal"],
+            ]}
+            onChange={setSort}
+          />
+        )}
+      </div>
+      {!crate.length && <p className="sub">Noch leer. Pack die Platten ein, die du mitnehmen willst. Aus ihnen kommen dann die Vorschläge.</p>}
+      <div className="crate-grid">
+        {list.map(({ rid, r, shelf }) => (
+          <div key={rid} className="crate-tile">
+            <div className="crate-cover">
+              <Cover src={r?.cover || r?.thumb} />
+              <button className="crate-x" onClick={() => onRemove(rid)} aria-label="Aus der Kiste nehmen">
+                <IconX />
+              </button>
+              {used.get(rid) && <span className="crate-used">{used.get(rid)!.join(", ")}</span>}
+            </div>
+            <b>{r?.title ?? rid}</b>
+            <span>{[r?.artist, shelf].filter(Boolean).join(" · ")}</span>
           </div>
         ))}
       </div>
@@ -407,15 +626,257 @@ function AddTrack({ tracks, rels, last, onPick, exclude }: { tracks: TrackMeta[]
   );
 }
 
+function RecordPicker({ data, crate, onToggle, onDone }: { data?: Data; crate: Set<number>; onToggle: (rid: number) => void; onDone: () => void }) {
+  const [q, setQ] = useState("");
+  const [style, setStyle] = useState("");
+  const styles = useMemo(() => {
+    const c = new Map<string, number>();
+    data?.rels.forEach((r) => r.styles.forEach((s) => c.set(s, (c.get(s) ?? 0) + 1)));
+    return [...c.entries()].sort((a, b) => b[1] - a[1]).slice(0, 14).map(([s]) => s);
+  }, [data]);
+  const bpmByRel = useMemo(() => {
+    const m = new Map<number, number[]>();
+    data?.tracks.forEach((t) => t.bpm && m.set(t.releaseId, [...(m.get(t.releaseId) ?? []), Math.round(t.bpm)]));
+    return m;
+  }, [data]);
+  const list = useMemo(() => {
+    const rels = [...(data?.rels.values() ?? [])];
+    return rels
+      .filter((r) => (!style || r.styles.includes(style)) && (!q.trim() || matchesQuery(`${r.artist} ${r.title} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")} ${(r.tracklist ?? []).map((t) => t.title).join(" ")}`, q)))
+      .sort((a, b) => a.artist.localeCompare(b.artist, "de"))
+      .slice(0, 80);
+  }, [data, q, style]);
+  const bpmText = (rid: number) => {
+    const b = bpmByRel.get(rid) ?? [];
+    return b.length ? (Math.min(...b) === Math.max(...b) ? `${b[0]} BPM` : `${Math.min(...b)}–${Math.max(...b)} BPM`) : "";
+  };
+  return (
+    <div className="stack">
+      <div className="row">
+        <b style={{ fontSize: 18 }}>Kiste packen</b>
+        <span className="spacer" />
+        <button className="text-btn" onClick={onDone}>
+          Fertig ({crate.size})
+        </button>
+      </div>
+      <input className="input" placeholder="Artist, Titel, Label, Track …" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="chips chips-scroll">
+        <button className={`chip ${!style ? "on" : ""}`} onClick={() => setStyle("")}>
+          Alle
+        </button>
+        {styles.map((s) => (
+          <button key={s} className={`chip ${style === s ? "on" : ""}`} onClick={() => setStyle(style === s ? "" : s)}>
+            {s}
+          </button>
+        ))}
+      </div>
+      <div className="list">
+        {list.map((r) => {
+          const on = crate.has(r.id);
+          return (
+            <button key={r.id} className={`pick-rec press${on ? " on" : ""}`} onClick={() => (haptic(6), onToggle(r.id))} aria-pressed={on}>
+              <Cover src={r.thumb} />
+              <span className="pick-rec-main">
+                <b>{r.title}</b>
+                <span>{[r.artist, bpmText(r.id), r.styles[0]].filter(Boolean).join(" · ")}</span>
+              </span>
+              <span className={`pick-check${on ? " on" : ""}`}>{on ? "✓" : "+"}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function NoteEditor({ title, value, onSave }: { title: string; value: string; onSave: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  return (
+    <div className="stack">
+      <b style={{ fontSize: 18 }}>Mix-Notiz</b>
+      <span className="sub">Übergang zu „{title}“</span>
+      <textarea className="input" rows={3} maxLength={200} placeholder="z. B. im Breakdown rein, Bass bei 1:20 raus, 16 Takte mischen" value={v} onChange={(e) => setV(e.target.value)} />
+      <div className="chips">
+        {["Bass tauschen", "im Breakdown rein", "kurzer Cut", "langer Blend", "Echo raus", "Pitch anpassen"].map((x) => (
+          <button key={x} className="chip" onClick={() => setV(v ? `${v}, ${x}` : x)}>
+            {x}
+          </button>
+        ))}
+      </div>
+      <button className="btn primary block" onClick={() => onSave(v)}>
+        Notiz speichern
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Automatik als Hilfe: nur ordnen, oder aus der Kiste vorschlagen
+// ---------------------------------------------------------------------------
+function AutoHelp({ data, set, seq, toSetTrack, onApply }: { data?: Data; set: DJSet; seq: SetTrack[]; toSetTrack: (t: TrackMeta) => SetTrack; onApply: (ids: string[], crateIds: number[]) => void }) {
+  const crate = set.crateIds ?? [];
+  const [length, setLength] = useState(Math.max(10, seq.length || 20));
+  const [perRecord, setPerRecord] = useState(1);
+  const [keyWeight, setKeyWeight] = useState(1);
+  const opts = { curve: set.curve as Curve, keyWeight };
+  const order = () => {
+    if (seq.length < 3) return toast("Erst ein paar Tracks auswählen, dann ordnet Crate sie.");
+    onApply(buildSetlist(seq, { ...opts, length: seq.length, maxPerRecord: 3 }), crate);
+    toast("Reihenfolge geordnet. Deine Auswahl bleibt gleich.");
+  };
+  const fill = () => {
+    if (!data) return;
+    const pool = (crate.length ? data.tracks.filter((t) => crate.includes(t.releaseId)) : data.tracks).map(toSetTrack);
+    if (!pool.length) return toast("Keine Tracks gefunden");
+    if (seq.length && !confirm("Das ersetzt deine aktuelle Reihenfolge. Weiter?")) return;
+    const ids = buildSetlist(pool, { ...opts, length, maxPerRecord: perRecord });
+    const rids = [...new Set(ids.map((i) => data.byId.get(i)?.releaseId).filter((x): x is number => x != null))];
+    onApply(ids, [...new Set([...crate, ...rids])]);
+  };
+  return (
+    <div className="stack">
+      <b style={{ fontSize: 18 }}>Automatik</b>
+      <div className="card stack" style={{ gap: 8, background: "var(--surface-2)" }}>
+        <b>Nur ordnen</b>
+        <span className="sub">Deine Tracks bleiben, Crate sortiert sie nach Energie-Kurve, Tempo und Tonart.</span>
+        <button className="btn small primary" onClick={order} disabled={seq.length < 3}>
+          {seq.length} Tracks ordnen
+        </button>
+      </div>
+      <div className="card stack" style={{ gap: 8, background: "var(--surface-2)" }}>
+        <b>{crate.length ? "Aus der Kiste vorschlagen" : "Aus der Sammlung vorschlagen"}</b>
+        <span className="sub">Ein Startpunkt zum Weiterbauen. {crate.length ? `Nimmt nur die ${crate.length} Platten aus deiner Kiste.` : "Tipp: Pack vorher eine Kiste, dann kommt nur raus, was du mitnimmst."}</span>
+        <div className="grid2">
+          <label className="field">
+            Tracks
+            <input className="input" inputMode="numeric" value={length} onChange={(e) => setLength(Number(e.target.value) || 0)} />
+          </label>
+          <label className="field">
+            Harmonie
+            <select className="input" value={keyWeight} onChange={(e) => setKeyWeight(Number(e.target.value))}>
+              <option value={0}>egal</option>
+              <option value={1}>wichtig</option>
+              <option value={2}>sehr wichtig</option>
+            </select>
+          </label>
+        </div>
+        <div className="field">
+          Tracks pro Platte
+          <Seg
+            value={String(perRecord) as "1" | "2" | "3"}
+            options={[
+              ["1", "Einer"],
+              ["2", "Bis 2"],
+              ["3", "Bis 3"],
+            ]}
+            onChange={(v) => setPerRecord(Number(v))}
+          />
+        </div>
+        <button className="btn small" onClick={fill}>
+          Vorschlag erstellen
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Live-Modus beim Auflegen
+// ---------------------------------------------------------------------------
+function LiveMode({ tracks, rels, notes, played, onPlayed, onClose }: { tracks: TrackMeta[]; rels?: Map<number, Release>; notes: Record<string, string>; played: Set<string>; onPlayed: (tid: string) => void; onClose: () => void }) {
+  const first = tracks.findIndex((t) => !played.has(t.id));
+  const [i, setI] = useState(first < 0 ? 0 : first);
+  const [menu, setMenu] = useState(false);
+  const cur = tracks[i];
+  const next = tracks[i + 1];
+  useEffect(() => {
+    // Bildschirm anlassen, solange der Live-Modus offen ist
+    let lock: { release(): Promise<void> } | null = null;
+    (navigator as Navigator & { wakeLock?: { request(t: "screen"): Promise<{ release(): Promise<void> }> } }).wakeLock?.request("screen").then(
+      (l) => (lock = l),
+      () => undefined,
+    );
+    return () => void lock?.release();
+  }, []);
+  if (!cur) return null;
+  const r = rels?.get(cur.releaseId);
+  const nr = next ? rels?.get(next.releaseId) : undefined;
+  return (
+    <div className="live" role="dialog" aria-label="Live-Modus">
+      <div className="live-top">
+        <button className="text-btn" onClick={onClose}>
+          Fertig
+        </button>
+        <span className="sub">
+          {i + 1} / {tracks.length}
+        </span>
+        <button className="text-btn" onClick={() => setMenu(true)}>
+          Liste
+        </button>
+      </div>
+      <div className="live-now">
+        <Cover src={r?.cover || r?.thumb} className="cover live-cover" />
+        <small>Läuft</small>
+        <h2>{cur.title}</h2>
+        <span className="sub">
+          {cur.artist} · {r?.title} · {cur.position}
+        </span>
+        <div className="live-stats">
+          {cur.bpm ? <b>{Math.round(cur.bpm)} BPM</b> : null}
+          {cur.key ? <b>{cur.key}</b> : null}
+        </div>
+      </div>
+      <div className="live-next">
+        {next ? (
+          <>
+            <small>Als Nächstes</small>
+            <div className="row" style={{ gap: 12 }}>
+              <Cover src={nr?.thumb} />
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <b className="live-next-title">{next.title}</b>
+                <span className="sub">
+                  {next.artist} · {next.position}
+                  {next.bpm ? ` · ${Math.round(next.bpm)} BPM` : ""}
+                  {next.key ? ` · ${next.key}` : ""}
+                </span>
+              </div>
+            </div>
+            {notes[next.id] && <p className="live-note">„{notes[next.id]}“</p>}
+          </>
+        ) : (
+          <small>Letzter Track</small>
+        )}
+      </div>
+      <div className="live-actions">
+        <button className="btn lg" disabled={i === 0} onClick={() => setI(i - 1)}>
+          Zurück
+        </button>
+        <button
+          className="btn primary lg"
+          onClick={() => {
+            haptic(15);
+            onPlayed(cur.id);
+            if (next) setI(i + 1);
+            else onClose();
+          }}
+        >
+          {next ? "Gespielt, weiter" : "Set beenden"}
+        </button>
+      </div>
+      <MenuSheet open={menu} onClose={() => setMenu(false)} title="Springen zu" items={tracks.map((t, j) => ({ label: `${j + 1}. ${t.title} · ${t.artist}${played.has(t.id) ? " ✓" : ""}`, onClick: () => (setI(j), setMenu(false)) }))} />
+    </div>
+  );
+}
+
 function EnergyCurve({ curve, actual }: { curve: Curve; actual: (number | null)[] }) {
   const W = 300;
-  const H = 60;
+  const H = 56;
   const pts = Array.from({ length: 31 }, (_, i) => i / 30).map((t) => `${t * W},${H - (targetEnergy(curve, t) / 10) * H}`);
   const act = actual.map((e, i) => (e == null ? null : `${(i / Math.max(1, actual.length - 1)) * W},${H - (e / 10) * H}`)).filter(Boolean);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 60 }} aria-label="Energie-Kurve">
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: 56 }} aria-label="Energie-Verlauf: gestrichelt die gewählte Kurve, farbig dein Set">
       <polyline points={pts.join(" ")} fill="none" stroke="var(--text-3)" strokeDasharray="4 4" strokeWidth="2" />
-      {act.length > 1 && <polyline points={act.join(" ")} fill="none" stroke="var(--accent)" strokeWidth="2" />}
+      {act.length > 1 && <polyline points={act.join(" ")} fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinejoin="round" />}
     </svg>
   );
 }

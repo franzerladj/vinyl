@@ -84,6 +84,10 @@ export interface DJSet {
   curve: string;
   trackIds: string[];
   played?: string[];
+  /** Eingepackte Platten (Release-IDs): die Kiste für diesen Abend */
+  crateIds?: number[];
+  /** Mix-Notizen pro Übergang, Schlüssel = ID des Tracks, der reinkommt */
+  mixNotes?: Record<string, string>;
   createdAt: number;
   notes?: string;
 }

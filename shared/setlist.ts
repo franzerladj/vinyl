@@ -189,3 +189,71 @@ export function buildSetlist(tracks: SetTrack[], opts: SetlistOptions): string[]
   }
   return best.map((t) => t.id);
 }
+
+// ---------------------------------------------------------------------------
+// Kuratieren statt generieren: Vorschläge mit Begründung für den nächsten Track
+// ---------------------------------------------------------------------------
+export interface Suggestion {
+  id: string;
+  score: number;
+  reasons: { text: string; tone: "ok" | "warn" | "bad" | "info" }[];
+}
+
+/**
+ * Welche Tracks passen nach `prev`? Bewertet Tempo, Tonart, Energie (Richtung der gewünschten Kurve),
+ * Bewertung und Datenlage. Platten, die schon im Set sind, fallen raus (eine Platte, ein Plattenteller).
+ */
+export function suggestNext(prev: SetTrack | null, candidates: SetTrack[], opts: { usedGroups?: Set<string>; energyGoal?: number | null; limit?: number } = {}): Suggestion[] {
+  const out: Suggestion[] = [];
+  for (const c of candidates) {
+    if (opts.usedGroups?.has(c.group ?? c.id)) continue;
+    const reasons: Suggestion["reasons"] = [];
+    let cost = 0;
+    if (prev) {
+      if (prev.bpm && c.bpm) {
+        const d = bpmDelta(prev.bpm, c.bpm);
+        const diff = Math.round(c.bpm - prev.bpm);
+        cost += d <= 6 ? d * 0.6 : 6 + (d - 6) * 2;
+        reasons.push({ text: Math.abs(diff) < 1 ? "gleiches Tempo" : `${diff > 0 ? "+" : ""}${diff} BPM`, tone: d <= 3 ? "ok" : d <= 6 ? "warn" : "bad" });
+      } else {
+        cost += 3;
+        reasons.push({ text: "Tempo unbekannt", tone: "info" });
+      }
+      const kd = keyDistance(parseKey(prev.key), parseKey(c.key));
+      if (prev.key && c.key) {
+        cost += kd * 1.5;
+        if (kd <= 1) reasons.push({ text: `${prev.key} → ${c.key} harmonisch`, tone: "ok" });
+        else if (kd <= 2) reasons.push({ text: "Energy-Boost", tone: "warn" });
+        else reasons.push({ text: "Key-Clash", tone: "bad" });
+      } else cost += 1.5;
+    }
+    if (opts.energyGoal != null && c.energy != null) {
+      const de = c.energy - (prev?.energy ?? opts.energyGoal);
+      cost += Math.abs(c.energy - opts.energyGoal) * 1.2;
+      if (Math.abs(de) >= 1) reasons.push({ text: `Energie ${de > 0 ? "+" : ""}${Math.round(de)}`, tone: Math.abs(c.energy - opts.energyGoal) <= 1.5 ? "ok" : "warn" });
+    }
+    cost += (1 - (c.quality ?? 0.5)) * 3;
+    out.push({ id: c.id, score: -cost, reasons });
+  }
+  // Pro Platte nur den besten Track vorschlagen
+  const best = new Map<string, Suggestion>();
+  const groupOf = new Map(candidates.map((c) => [c.id, c.group ?? c.id]));
+  for (const s of out.sort((a, b) => b.score - a.score)) if (!best.has(groupOf.get(s.id)!)) best.set(groupOf.get(s.id)!, s);
+  return [...best.values()].slice(0, opts.limit ?? 6);
+}
+
+/** Kennzahlen eines Sets: harmonische Übergänge, Tempo-Spanne, größter Sprung */
+export function setStats(seq: SetTrack[]) {
+  let harmonic = 0;
+  let known = 0;
+  let maxJump = 0;
+  for (let i = 1; i < seq.length; i++) {
+    if (seq[i - 1].key && seq[i].key) {
+      known++;
+      if (keyDistance(parseKey(seq[i - 1].key), parseKey(seq[i].key)) <= 1) harmonic++;
+    }
+    if (seq[i - 1].bpm && seq[i].bpm) maxJump = Math.max(maxJump, bpmDelta(seq[i - 1].bpm, seq[i].bpm));
+  }
+  const bpms = seq.map((t) => t.bpm).filter((b): b is number => Boolean(b));
+  return { harmonic, known, maxJump, minBpm: bpms.length ? Math.min(...bpms) : null, maxBpm: bpms.length ? Math.max(...bpms) : null };
+}

@@ -5,9 +5,9 @@ import { NavBar } from "../components/ui";
  * Solange Platzhalter drinstehen, zeigt die Seite einen Hinweis.
  */
 export const OPERATOR = {
-  name: "[Vorname Nachname / Firma]",
-  street: "[Straße Hausnummer]",
-  city: "[PLZ Ort]",
+  name: "Franz Kralik",
+  street: "Mainstr. 8",
+  city: "95444 Bayreuth",
   country: "Deutschland",
   email: "[E-Mail-Adresse]",
   phone: "",

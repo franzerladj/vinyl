@@ -55,6 +55,7 @@ node tools/e2e/profile.cjs  # Crate-Profil bearbeiten und beim Freund ansehen
 node tools/e2e/pick.cjs     # Verzeihende Suche (Platte des Moments, Sammlung)
 node tools/e2e/nobpm.cjs    # Beschriften: Platten ohne Tempo
 node tools/e2e/setgen.cjs   # Set erzeugen: ein Track pro Platte, nie hintereinander
+node tools/e2e/curate.cjs   # Set kuratieren: Kiste, Vorschläge, Notiz, Ziehen, Live-Modus
 node tools/e2e/wrap.cjs     # Umbruch-Audit aller Seiten (320/375/390 px, hell/dunkel; SHOTS=1 für Screenshots)
 ```
 

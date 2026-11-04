@@ -179,3 +179,26 @@ describe("Set nach Platten", () => {
     expect(order).not.toContain("a:1");
   });
 });
+
+describe("Kuratieren", () => {
+  it("schlägt passende Tracks mit Begründung vor, eine Platte nur einmal", async () => {
+    const { suggestNext } = await import("../shared/setlist");
+    const prev = { id: "p", group: "p", bpm: 122, key: "8A", energy: 5 };
+    const cands = [
+      { id: "a:1", group: "a", bpm: 123, key: "9A", energy: 6, quality: 0.8 },
+      { id: "a:2", group: "a", bpm: 123, key: "9A", energy: 6, quality: 0.4 },
+      { id: "b:1", group: "b", bpm: 135, key: "3B", energy: 9 },
+      { id: "c:1", group: "c", bpm: 121, key: "8A", energy: 5 },
+      { id: "p:2", group: "p", bpm: 122, key: "8A", energy: 5 },
+    ];
+    const s = suggestNext(prev, cands, { usedGroups: new Set(["p"]), energyGoal: 6 });
+    expect(s.map((x) => x.id)).toEqual(["a:1", "c:1", "b:1"]);
+    expect(s[0].reasons.map((r) => r.text)).toContain("8A → 9A harmonisch");
+    expect(s.at(-1)!.reasons.some((r) => r.text === "Key-Clash")).toBe(true);
+  });
+  it("zählt harmonische Übergänge", async () => {
+    const { setStats } = await import("../shared/setlist");
+    const st = setStats([{ id: "1", bpm: 120, key: "8A", energy: 5 }, { id: "2", bpm: 122, key: "9A", energy: 5 }, { id: "3", bpm: 128, key: "2B", energy: 6 }]);
+    expect(st).toMatchObject({ harmonic: 1, known: 2, minBpm: 120, maxBpm: 128 });
+  });
+});
