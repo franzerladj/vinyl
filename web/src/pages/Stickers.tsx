@@ -10,8 +10,8 @@ import { toast } from "../lib/store";
 import { Empty, haptic, Seg } from "../components/bits";
 import { IconPrint } from "../components/icons";
 import { Sticker } from "../components/print/Sticker";
-import { InsertCard, ObiFold, ObiStrip, type CardTheme } from "../components/print/InsertCard";
-import type { Layout, PrintItem, PrintOpts } from "../components/print/types";
+import { DEFAULT_ACCENT, InsertCard, ObiFold, ObiStrip, type CardTheme } from "../components/print/InsertCard";
+import { FONTS, type Layout, type PrintFont, type PrintItem, type PrintOpts } from "../components/print/types";
 
 type Kind = "card" | "obi" | "sticker";
 
@@ -59,8 +59,22 @@ const DEFAULTS: Opts = {
   showQr: true,
   showDuration: false,
   showCover: true,
+  showRating: false,
+  showAdded: false,
+  accent: DEFAULT_ACCENT,
+  font: "modern",
+  footer: "",
+  qrTarget: "discogs",
   skip: 0,
 };
+
+const ACCENTS = ["#ff6a00", "#e5243b", "#0a84ff", "#30d158", "#bf5af2", "#ffd60a", "#0b0b0b"];
+
+function qrUrl(o: Opts, r: { id: number; artist: string; title: string }) {
+  if (o.qrTarget === "youtube") return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${r.artist} ${r.title}`)}`;
+  if (o.qrTarget === "app") return `${location.origin}/release/${r.id}`;
+  return discogsReleaseUrl(r.id);
+}
 
 const KIND_LABEL: Record<Kind, string> = { card: "Einleger", obi: "Obi-Streifen", sticker: "Sticker" };
 
@@ -94,6 +108,11 @@ export default function Stickers() {
         r: r!,
         printed: meta?.stickerPrintedAt ?? null,
         shelf: meta?.shelf,
+        rating: coll.find((c) => c.releaseId === id)?.rating,
+        added: (() => {
+          const d = coll.filter((c) => c.releaseId === id).at(-1)?.dateAdded;
+          return d ? new Date(d).toLocaleDateString("de-DE", { month: "2-digit", year: "numeric" }) : undefined;
+        })(),
         tracks: realTracks(r!.tracklist).map((t, i) => ({ position: t.position, title: t.title, duration: t.duration, meta: tm.get(trackId(id, t.position, i)) })),
       }));
   });
@@ -107,7 +126,7 @@ export default function Stickers() {
 
   // QR-Codes passend zum Farbschema (auf dunklen Karten weiß)
   const darkQr = opts.kind !== "sticker" && opts.theme !== "light";
-  const qrKey = (id: number) => `${id}:${darkQr ? "d" : "l"}`;
+  const qrKey = (id: number) => `${id}:${darkQr ? "d" : "l"}:${opts.qrTarget}`;
   useEffect(() => {
     if (!opts.showQr) return;
     const missing = selected.filter((s) => !qrs.has(qrKey(s.r.id)));
@@ -115,11 +134,11 @@ export default function Stickers() {
     Promise.all(
       missing.map(
         async (s) =>
-          [qrKey(s.r.id), await QRCode.toDataURL(discogsReleaseUrl(s.r.id), { margin: 0, width: 220, errorCorrectionLevel: "L", color: darkQr ? { dark: "#ffffff", light: "#00000000" } : { dark: "#000000", light: "#ffffff" } })] as const,
+          [qrKey(s.r.id), await QRCode.toDataURL(qrUrl(opts, s.r), { margin: 0, width: 220, errorCorrectionLevel: "L", color: darkQr ? { dark: "#ffffff", light: "#00000000" } : { dark: "#000000", light: "#ffffff" } })] as const,
       ),
     ).then((pairs) => setQrs((m) => new Map([...m, ...pairs])));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected, opts.showQr, darkQr, qrs]);
+  }, [selected, opts.showQr, opts.qrTarget, darkQr, qrs]);
 
   const layoutKey = opts.kind === "card" ? opts.cardLayout : opts.kind === "obi" ? opts.obiLayout : opts.stickerLayout;
   const tpl = ALL_LAYOUTS[layoutKey];
@@ -300,12 +319,32 @@ export default function Stickers() {
               options={[
                 ["light", "Weiß"],
                 ["dark", "Schwarz"],
-                ["cover", "Cover-Farben"],
+                ["cover", "Cover"],
+                ["accent", "Farbe"],
               ]}
               onChange={(theme) => upd({ theme })}
             />
           </>
         )}
+        <h3>{opts.kind === "sticker" ? "Stil" : "Schrift & Farbe"}</h3>
+        <Seg value={opts.font ?? "modern"} options={(Object.keys(FONTS) as PrintFont[]).map((k) => [k, FONTS[k].label])} onChange={(font) => upd({ font })} />
+        <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+          {ACCENTS.map((c) => (
+            <button
+              key={c}
+              aria-label={`Akzentfarbe ${c}`}
+              onClick={() => upd({ accent: c })}
+              style={{ width: 34, height: 34, borderRadius: "50%", border: 0, background: c, boxShadow: opts.accent === c ? "0 0 0 2px var(--bg), 0 0 0 4px var(--text)" : "inset 0 0 0 1px var(--hairline)", cursor: "pointer" }}
+            />
+          ))}
+          <label style={{ position: "relative", width: 34, height: 34, borderRadius: "50%", overflow: "hidden", background: "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)", cursor: "pointer" }} aria-label="Eigene Farbe">
+            <input type="color" value={opts.accent ?? DEFAULT_ACCENT} onChange={(e) => upd({ accent: e.target.value })} style={{ opacity: 0, position: "absolute", inset: 0, width: "100%", height: "100%" }} />
+          </label>
+        </div>
+        <label className="field">
+          Eigene Zeile, z. B. dein DJ-Name
+          <input className="input" maxLength={60} placeholder="Aus der Kiste von …" value={opts.footer ?? ""} onChange={(e) => upd({ footer: e.target.value })} />
+        </label>
 
         <h3>Inhalt</h3>
         <div className="group">
@@ -318,7 +357,9 @@ export default function Stickers() {
               ["showDuration", "Länge"],
               ["showStyles", "Styles"],
               ["showShelf", "Regalplatz"],
-              ["showQr", "QR-Code zu Discogs"],
+              ["showRating", "Meine Bewertung (Sterne)"],
+              ["showAdded", "In der Sammlung seit"],
+              ["showQr", "QR-Code"],
               ...(opts.kind === "card" ? ([["showCover", "Cover-Bild"]] as const) : []),
             ] as [keyof PrintOpts, string][]
           ).map(([k, l]) => (
@@ -328,6 +369,17 @@ export default function Stickers() {
             </label>
           ))}
         </div>
+        {opts.showQr && (
+          <Seg
+            value={opts.qrTarget ?? "discogs"}
+            options={[
+              ["discogs", "QR → Discogs"],
+              ["youtube", "→ YouTube"],
+              ["app", "→ Crate"],
+            ]}
+            onChange={(qrTarget) => upd({ qrTarget })}
+          />
+        )}
         {perPage > 1 && (
           <label className="field">
             Schon benutzte Plätze auf dem ersten Blatt überspringen

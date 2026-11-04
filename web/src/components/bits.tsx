@@ -115,20 +115,24 @@ export function Jobs() {
       )}
       {list.length > 0 && loc.pathname !== "/" && loc.pathname !== "/scan" && (
         <div className="jobs" aria-live="polite">
-          {list.map((j) => (
-            <div key={j.id} className="job">
-              <div className="row">
-                <span>{j.label}</span>
-                <span className="spacer" />
+          {(() => {
+            const done = list.reduce((a, j) => a + j.done, 0);
+            const total = list.reduce((a, j) => a + (j.total || 0), 0);
+            const pct = total ? Math.min(100, (100 * done) / total) : 6;
+            return (
+              <Link to="/settings/sync" className="job-pill press" aria-label="Sync-Status">
+                <svg viewBox="0 0 20 20" width="18" height="18" style={{ flex: "none" }}>
+                  <circle cx="10" cy="10" r="8" fill="none" stroke="var(--surface-3)" strokeWidth="2.5" />
+                  <circle cx="10" cy="10" r="8" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeDasharray={`${(pct / 100) * 50.3} 50.3`} transform="rotate(-90 10 10)" />
+                </svg>
+                <span className="job-label">{list[0].label}</span>
                 <span className="sub" style={{ fontVariantNumeric: "tabular-nums" }}>
-                  {j.done}/{j.total || "?"}
+                  {list[0].done}/{list[0].total || "?"}
                 </span>
-              </div>
-              <div className="progress">
-                <div style={{ width: `${j.total ? (100 * j.done) / j.total : 4}%` }} />
-              </div>
-            </div>
-          ))}
+                {list.length > 1 && <span className="badge">+{list.length - 1}</span>}
+              </Link>
+            );
+          })()}
         </div>
       )}
     </>

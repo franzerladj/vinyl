@@ -1,6 +1,6 @@
 import { camelotString, parseKey } from "../../../../shared/music";
 import { sideOf } from "../../lib/format";
-import type { PrintItem, PrintOpts } from "./types";
+import { FONTS, stars, type PrintItem, type PrintOpts } from "./types";
 
 type StickerData = PrintItem;
 type StickerOpts = PrintOpts;
@@ -80,18 +80,18 @@ export function Sticker({ s, w, h, o }: { s: StickerData; w: number; h: number; 
         boxSizing: "border-box",
         color: "#000",
         background: "#fff",
-        fontFamily: "'Helvetica Neue', Arial, sans-serif",
+        fontFamily: o.font && o.font !== "modern" ? FONTS[o.font].body : "'Helvetica Neue', Arial, sans-serif",
         overflow: "hidden",
         display: "flex",
         flexDirection: "column",
       }}
     >
-      <div style={{ display: "flex", gap: "2mm", height: `${headerH}mm`, borderBottom: "0.3mm solid #000", marginBottom: "1mm", flex: "none" }}>
+      <div style={{ display: "flex", gap: "2mm", height: `${headerH}mm`, borderBottom: `0.3mm solid ${o.accent ?? "#000"}`, marginBottom: "1mm", flex: "none" }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: "3.3mm", lineHeight: "3.8mm", fontWeight: 800, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.artist}</div>
           <div style={{ fontSize: "2.8mm", lineHeight: "3.3mm", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</div>
           <div style={{ fontSize: "2.1mm", lineHeight: "2.8mm", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "#333" }}>
-            {[label && `${label.name.replace(/\s\(\d+\)$/, "")} ${label.catno}`, r.year || null, o.showStyles ? r.styles.slice(0, 2).join(", ") : null, o.showShelf ? s.shelf : null].filter(Boolean).join(" · ")}
+            {[label && `${label.name.replace(/\s\(\d+\)$/, "")} ${label.catno}`, r.year || null, o.showStyles ? r.styles.slice(0, 2).join(", ") : null, o.showShelf ? s.shelf : null, o.showRating ? stars(s.rating) : null, o.footer || null].filter(Boolean).join(" · ")}
           </div>
         </div>
         {o.showQr && s.qr && <img src={s.qr} style={{ width: `${qrSize - 1}mm`, height: `${qrSize - 1}mm` }} alt="" />}
