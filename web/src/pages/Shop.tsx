@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
-import { discogs } from "../lib/api";
 import { db, getKV, setKV } from "../lib/db";
 import { money } from "../lib/format";
 import { bookmarkletCode } from "../lib/bookmarklet";
-import { jobUpdate, toast } from "../lib/store";
-import { Cover, Seg } from "../components/bits";
+import { loadPriceInfo, scanFavorites, scanSeller, toggleFavorite } from "../lib/prices";
+import { planBudget } from "../../../shared/deals";
+import { toast } from "../lib/store";
+import { Cover, DealDot, RecordRow, Seg } from "../components/bits";
+import { IconExternal, IconX } from "../components/icons";
 import { optimizeBasket, rankSellers, type Grade, type Listing, type OptimizeOptions } from "../../../shared/optimizer";
 
 interface ShopSettings {
@@ -18,18 +20,14 @@ interface ShopSettings {
 }
 const DEFAULTS: ShopSettings = { firstItem: 7, perExtraItem: 1.5, maxPrice: "", minRating: "98", minCondition: "VG+", maxSellers: "" };
 
-interface InvPage {
-  pagination: { pages: number };
-  listings: { id: number; price: { value: number; currency: string }; condition: string; sleeve_condition: string; ships_from: string; seller: { username: string; stats?: { rating?: string } }; release: { id: number; description: string } }[];
-}
-
 async function importListings(list: Listing[]) {
   const now = Date.now();
   await db.listings.bulkPut(list.map((l) => ({ ...l, importedAt: now })));
 }
 
 export default function Shop() {
-  const [tab, setTab] = useState<"basket" | "sellers" | "import">("basket");
+  const [tab, setTab] = useState<"basket" | "budget" | "sellers" | "import">("basket");
+  const [budget, setBudget] = useState("");
   const [settings, setSettings] = useState<ShopSettings>(DEFAULTS);
   const [paste, setPaste] = useState("");
   const [sellerName, setSellerName] = useState("");
@@ -77,46 +75,31 @@ export default function Shop() {
     }),
     [settings, data, excluded],
   );
+  const favorites = useLiveQuery(async () => (await db.sellers.toArray()).filter((f) => f.favorite), [], []);
+  const budgetItems = useLiveQuery(async () => {
+    const wants = await db.wants.toArray();
+    const ids = wants.map((w) => w.releaseId);
+    const [info, rels] = await Promise.all([loadPriceInfo(ids), db.releases.bulkGet(ids)]);
+    return wants
+      .map((w, i) => ({ id: w.releaseId, r: rels[i]!, price: info.get(w.releaseId)?.stat?.lowest ?? 0, deal: info.get(w.releaseId)!.deal, stars: w.rating, n: info.get(w.releaseId)?.stat?.numForSale ?? 0 }))
+      .filter((x) => x.r && x.price > 0 && x.n > 0);
+  }, [], []);
+  const plan = useMemo(() => {
+    const b = Number(budget.replace(",", "."));
+    return b > 0 ? planBudget(budgetItems.map((x) => ({ ...x, score: x.deal.score })), b, Number(settings.firstItem) || 0) : null;
+  }, [budget, budgetItems, settings.firstItem]);
   const result = useMemo(() => (data?.listings.length ? optimizeBasket(data.listings, opts) : null), [data, opts]);
   const ranking = useMemo(() => (data?.listings.length ? rankSellers(data.listings, opts).slice(0, 50) : []), [data, opts]);
 
-  const scanSeller = async () => {
-    const seller = sellerName.trim();
+  const doScan = async (name?: string) => {
+    const seller = (name ?? sellerName).trim();
     if (!seller) return;
-    const wants = new Set(await db.wants.toCollection().primaryKeys());
-    const job = `inv-${seller}`;
-    jobUpdate(job, { label: `Inventar ${seller}`, done: 0, total: 1 });
-    let found = 0;
     try {
-      let page = 1;
-      let pages = 1;
-      const maxPages = 50;
-      do {
-        const d = await discogs<InvPage>(`/users/${encodeURIComponent(seller)}/inventory?per_page=100&page=${page}&status=For%20Sale`, { background: true });
-        pages = Math.min(d.pagination.pages, maxPages);
-        const hits: Listing[] = d.listings
-          .filter((l) => wants.has(l.release.id))
-          .map((l) => ({
-            listingId: String(l.id),
-            releaseId: l.release.id,
-            seller: l.seller.username,
-            price: l.price.value,
-            condition: l.condition,
-            sleeveCondition: l.sleeve_condition,
-            shipsFrom: l.ships_from,
-            sellerRating: l.seller.stats?.rating ? Number(l.seller.stats.rating) : null,
-            title: l.release.description,
-          }));
-        found += hits.length;
-        await importListings(hits);
-        jobUpdate(job, { done: page, total: pages });
-        page++;
-      } while (page <= pages);
-      toast(`${found} Wants bei ${seller} gefunden`);
+      const n = await scanSeller(seller);
+      toast(`${n} Wants bei ${seller} gefunden`);
+      setSellerName("");
     } catch (e) {
       toast((e as Error).message);
-    } finally {
-      jobUpdate(job, null);
     }
   };
 
@@ -151,8 +134,9 @@ export default function Shop() {
           value={tab}
           options={[
             ["basket", "Warenkorb"],
+            ["budget", "Budget"],
             ["sellers", "Händler"],
-            ["import", "Angebote holen"],
+            ["import", "Angebote"],
           ]}
           onChange={setTab}
         />
@@ -271,29 +255,128 @@ export default function Shop() {
               )}
             </>
           ) : (
-            <div className="empty">Noch keine Angebote. Unter „Angebote holen“ geht es los.</div>
+            <div className="empty">Noch keine Angebote. Unter „Angebote“ geht es los, oder Lieblingshändler unter „Händler“ anlegen.</div>
           ))}
 
         {tab === "sellers" && (
-          <div className="list">
-            {ranking.map((s, i) => (
-              <div key={s.seller} className="rec">
-                <b style={{ width: 28, color: "var(--muted)" }}>{i + 1}</b>
-                <div className="rec-main">
-                  <div className="rec-title">{s.seller}</div>
-                  <div className="rec-meta">
-                    <span>{s.items.length} deiner Wants</span>
-                    <span>{money(s.total)} inkl. Versand</span>
-                    <span>Ø {money(s.total / s.items.length)}/Platte</span>
-                    {s.rating && <span>{s.rating}%</span>}
+          <>
+            <div className="card stack">
+              <div className="row">
+                <b>Lieblingshändler</b>
+                <span className="spacer" />
+                {favorites.length > 0 && (
+                  <button className="btn small tinted" onClick={() => scanFavorites(0).then((n) => toast(`${n} Treffer bei deinen Lieblingshändlern`), (e) => toast(e.message))}>
+                    Alle prüfen
+                  </button>
+                )}
+              </div>
+              <span className="sub">Die App durchsucht ihr Inventar nach jedem Sync automatisch nach deinen Wants. Dafür braucht es kein Lesezeichen.</span>
+              {favorites.map((f) => (
+                <div key={f.name} className="row">
+                  <span style={{ flex: 1, minWidth: 0 }} className="rec-title">
+                    ★ {f.name}
+                  </span>
+                  <span className="tiny">{f.lastScan ? `${f.lastHits ?? 0} Treffer · ${new Date(f.lastScan).toLocaleDateString("de-DE")}` : "noch nicht geprüft"}</span>
+                  <button className="icon-btn" aria-label="Entfernen" onClick={() => toggleFavorite(f.name)}>
+                    <IconX />
+                  </button>
+                </div>
+              ))}
+              <div className="row">
+                <input className="input" placeholder="Händlername hinzufügen" value={sellerName} onChange={(e) => setSellerName(e.target.value)} />
+                <button
+                  className="btn"
+                  onClick={async () => {
+                    const n = sellerName.trim();
+                    if (!n) return;
+                    if (!favorites.some((f) => f.name === n)) await toggleFavorite(n);
+                    await doScan(n);
+                  }}
+                >
+                  + Prüfen
+                </button>
+              </div>
+            </div>
+            {ranking.length > 0 && <h3>Wer hat die meisten deiner Wants?</h3>}
+            <div className="list">
+              {ranking.map((s, i) => {
+                const fav = favorites.some((f) => f.name === s.seller);
+                return (
+                  <div key={s.seller} className="rec">
+                    <b style={{ width: 28, color: "var(--text-3)" }}>{i + 1}</b>
+                    <div className="rec-main">
+                      <div className="rec-title">{s.seller}</div>
+                      <div className="rec-meta">
+                        <span>{s.items.length} deiner Wants</span>
+                        <span>{money(s.total)} inkl. Versand</span>
+                        <span>Ø {money(s.total / s.items.length)}/Platte</span>
+                        {s.rating ? <span>{s.rating}%</span> : null}
+                      </div>
+                    </div>
+                    <button className="icon-btn" aria-label={fav ? "Kein Lieblingshändler" : "Als Lieblingshändler merken"} onClick={() => toggleFavorite(s.seller)} style={{ color: fav ? "var(--accent)" : "var(--text-3)", fontSize: 20 }}>
+                      {fav ? "★" : "☆"}
+                    </button>
+                    <a className="icon-btn" href={`https://www.discogs.com/sell/mywants?seller=${encodeURIComponent(s.seller)}`} target="_blank" rel="noreferrer" aria-label="Auf Discogs öffnen">
+                      <IconExternal />
+                    </a>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {tab === "budget" && (
+          <>
+            <div className="card stack">
+              <b>Was bekomme ich für mein Budget?</b>
+              <span className="sub">Die App wählt die lohnendsten Wants: gute Preise laut Ampel, unter Wunschpreis, selten und gefragt, deine Bewertung. Pro Platte rechnet sie mit {money(Number(settings.firstItem) || 0)} Versand, weil die günstigsten Angebote meist bei verschiedenen Händlern liegen.</span>
+              <div className="row">
+                <input className="input" inputMode="decimal" placeholder="Budget in €, z.B. 150" value={budget} onChange={(e) => setBudget(e.target.value)} />
+              </div>
+            </div>
+            {plan && (
+              <>
+                <div className="grid3">
+                  <div className="stat">
+                    <b>{plan.picked.length}</b>
+                    <span>Platten</span>
+                  </div>
+                  <div className="stat">
+                    <b>{money(plan.total)}</b>
+                    <span>geschätzt</span>
+                  </div>
+                  <div className="stat">
+                    <b>{money((Number(budget.replace(",", ".")) || 0) - plan.total)}</b>
+                    <span>übrig</span>
                   </div>
                 </div>
-                <a className="btn small" href={`https://www.discogs.com/sell/mywants?seller=${encodeURIComponent(s.seller)}`} target="_blank" rel="noreferrer">
-                  ↗
-                </a>
-              </div>
-            ))}
-          </div>
+                <div className="list">
+                  {plan.picked.map((x) => (
+                    <RecordRow
+                      key={x.id}
+                      r={x.r}
+                      side={
+                        <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
+                          <span className="row" style={{ gap: 6 }}>
+                            <DealDot a={x.deal.ampel} />
+                            <span className="bpm" style={{ fontSize: 15 }}>{money(x.price)}</span>
+                          </span>
+                          {x.deal.reasons[0] && <span className="tiny">{x.deal.reasons[0]}</span>}
+                        </div>
+                      }
+                    />
+                  ))}
+                </div>
+                {plan.picked.length > 0 && (
+                  <button className="btn block tinted" onClick={() => setTab("basket")}>
+                    Bei möglichst wenigen Händlern zusammen kaufen → Warenkorb
+                  </button>
+                )}
+                {budgetItems.length === 0 && <div className="sub">Für den Budget-Plan braucht die App Marktpreise. Die kommen beim nächsten Sync automatisch, oder in der Wantlist auf „Preise laden“ tippen.</div>}
+              </>
+            )}
+          </>
         )}
 
         {tab === "import" && (
@@ -329,7 +412,7 @@ export default function Shop() {
               <span className="sub">Über die offizielle API. Findet alle deine Wants im Shop eines bestimmten Händlers (bis 5000 Artikel).</span>
               <div className="row">
                 <input className="input" placeholder="Händlername" value={sellerName} onChange={(e) => setSellerName(e.target.value)} />
-                <button className="btn" onClick={scanSeller}>
+                <button className="btn" onClick={() => doScan()}>
                   Prüfen
                 </button>
               </div>

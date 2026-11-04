@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { db, getKV, setKV } from "../lib/db";
 import { canClaude, logout, ownAnthropicKey, setOwnAnthropicKey } from "../lib/api";
 import { getSheetsConfig, pullTracksFromSheets, pushToSheets, type SheetsConfig } from "../lib/sheets";
-import { fetchMissingDetails, fullSync, lookupAudioFor, tagVibes } from "../lib/sync";
+import { autoPipeline, fetchMissingDetails, getAutoSettings, lookupAudioFor, tagVibes, type AutoSettings } from "../lib/sync";
+import { suggestionsState } from "../lib/prices";
 import { toast, useStore } from "../lib/store";
 import { IconBack } from "../components/icons";
 
@@ -24,6 +25,16 @@ export default function Settings() {
   const [currency, setCurrency] = useState("EUR");
   const [analyzeAudio, setAnalyzeAudio] = useState(true);
   const [ownKey, setOwnKey] = useState(ownAnthropicKey());
+  const [auto, setAuto] = useState<AutoSettings>({ analyze: true, audio: true });
+  const [sugg, setSugg] = useState<string>("unknown");
+  useEffect(() => {
+    getAutoSettings().then(setAuto);
+    suggestionsState().then(setSugg);
+  }, []);
+  const saveAuto = (a: AutoSettings) => {
+    setAuto(a);
+    void setKV("auto", a);
+  };
 
   useEffect(() => {
     getSheetsConfig().then(setSheets);
@@ -95,9 +106,27 @@ export default function Settings() {
 
         <h2>Daten ergänzen</h2>
         <div className="card stack">
-          <button className="btn" disabled={!!jobs.collection} onClick={run("Sync", fullSync)}>
-            Sammlung & Wantlist synchronisieren
+          <button className="btn primary" disabled={Object.keys(jobs).length > 0} onClick={run("Sync", async () => (await autoPipeline({ force: true }), "Alles synchron und analysiert"))}>
+            Alles synchronisieren & analysieren
           </button>
+          <label className="row sub">
+            <input type="checkbox" checked={auto.analyze} onChange={(e) => saveAuto({ ...auto, analyze: e.target.checked })} /> Nach jedem Sync automatisch BPM, Key, Vibes und Preise ergänzen
+          </label>
+          <label className="row sub">
+            <input type="checkbox" checked={auto.audio} onChange={(e) => saveAuto({ ...auto, audio: e.target.checked })} /> Dabei Hörproben analysieren (ca. 0,5 MB pro Track, am besten im WLAN)
+          </label>
+          {sugg === "needs-seller-settings" && (
+            <div className="card" style={{ background: "var(--accent-soft)" }}>
+              <b>Tipp für genauere Preise</b>
+              <div className="sub">
+                Discogs gibt Preisempfehlungen aus echten Verkäufen nur heraus, wenn deine Verkäufer-Einstellungen ausgefüllt sind (kostenlos, du musst nichts verkaufen).{" "}
+                <a href="https://www.discogs.com/settings/seller" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>
+                  Zu den Einstellungen ↗
+                </a>
+              </div>
+            </div>
+          )}
+          <div className="tiny" style={{ marginTop: 6 }}>Einzelne Schritte:</div>
           <button className="btn" onClick={run("Tracklists", () => fetchMissingDetails("collection"))}>
             Fehlende Tracklists laden
           </button>
@@ -105,7 +134,7 @@ export default function Settings() {
             BPM & Key aus Datenbanken
           </button>
           <button
-            className="btn primary"
+            className="btn"
             disabled={!!jobs["free-vibes"]}
             onClick={run("Vibes", async () => {
               const { enrichFree } = await import("../lib/free");

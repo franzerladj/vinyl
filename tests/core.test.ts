@@ -90,3 +90,29 @@ describe("vibes", () => {
     expect(loud.sources).toContain("Audio");
   });
 });
+
+import { evaluateDeal, planBudget } from "../shared/deals";
+describe("deals", () => {
+  it("bewertet gegen die Discogs-Empfehlung", () => {
+    expect(evaluateDeal({ lowest: 10, numForSale: 5, suggestedVgPlus: 20 }).ampel).toBe("green");
+    expect(evaluateDeal({ lowest: 20, numForSale: 5, suggestedVgPlus: 20 }).ampel).toBe("yellow");
+    expect(evaluateDeal({ lowest: 40, numForSale: 5, suggestedVgPlus: 20 }).ampel).toBe("red");
+  });
+  it("nutzt den Preisverlauf, wenn keine Empfehlung da ist", () => {
+    const d = evaluateDeal({ lowest: 12, numForSale: 4, history: [20, 21, 19, 12] });
+    expect(d.referenceSource).toBe("Preisverlauf");
+    expect(d.ampel).toBe("green");
+    expect(d.change).toBe(-7);
+  });
+  it("erkennt seltene, gefragte Platten und Wunschpreise", () => {
+    const d = evaluateDeal({ lowest: 30, numForSale: 2, have: 100, want: 400, targetPrice: 35 });
+    expect(d.urgency).toBe("hot");
+    expect(d.underTarget).toBe(true);
+    expect(evaluateDeal({ lowest: 30, numForSale: 0 }).score).toBe(0);
+  });
+  it("plant ein Budget", () => {
+    const r = planBudget([{ id: 1, price: 50, score: 90 }, { id: 2, price: 20, score: 80 }, { id: 3, price: 20, score: 10 }], 80, 5);
+    expect(r.picked.map((x) => x.id)).toEqual([1, 2]);
+    expect(r.total).toBe(80);
+  });
+});

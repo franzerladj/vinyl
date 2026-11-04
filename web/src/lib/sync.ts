@@ -232,29 +232,10 @@ export async function currency(): Promise<string> {
   return getKV("currency", "EUR");
 }
 
-interface Stats { lowest_price: { value: number; currency: string } | null; num_for_sale: number }
-
+/** Marktpreise laden (mit Verlauf und Preisempfehlung, siehe prices.ts) */
 export async function fetchMarketStats(ids: number[], maxAgeHours = 12) {
-  const cur = await currency();
-  const existing = await db.marketStats.bulkGet(ids);
-  const todo = ids.filter((_, i) => !existing[i] || Date.now() - existing[i]!.fetchedAt > maxAgeHours * 3600_000);
-  if (!todo.length) return;
-  const job = "stats";
-  jobUpdate(job, { label: "Marktpreise laden", done: 0, total: todo.length });
-  try {
-    let done = 0;
-    for (const id of todo) {
-      try {
-        const s = await discogs<Stats>(`/marketplace/stats/${id}?curr_abbr=${cur}`, { background: true });
-        await db.marketStats.put({ releaseId: id, lowest: s.lowest_price?.value ?? null, currency: s.lowest_price?.currency ?? cur, numForSale: s.num_for_sale ?? 0, fetchedAt: Date.now() });
-      } catch (e) {
-        console.warn("stats", id, e);
-      }
-      jobUpdate(job, { done: ++done });
-    }
-  } finally {
-    jobUpdate(job, null);
-  }
+  const { refreshPrices } = await import("./prices");
+  return refreshPrices(ids, { maxAgeHours, background: ids.length > 1 });
 }
 
 // ---------- Aktionen ----------
@@ -276,6 +257,14 @@ export async function addToCollection(id: number, folderId = 1) {
   // Neue Platte braucht einen Sticker
   const meta = await db.recordMeta.get(id);
   await db.recordMeta.put({ ...meta, releaseId: id, stickerPrintedAt: null });
+  // und gleich ihre Tracks analysieren (im Hintergrund)
+  void (async () => {
+    const ids = (await db.tracks.where("releaseId").equals(id).toArray()).map((t) => t.id);
+    const auto = await getAutoSettings();
+    if (!auto.analyze) return;
+    await lookupAudioFor(ids);
+    await tagVibes(ids, { audio: auto.audio });
+  })().catch((e) => console.warn("Analyse neue Platte", e));
   return rel;
 }
 
@@ -297,4 +286,37 @@ export async function rateRelease(releaseId: number, rating: number) {
 export async function fullSync() {
   await Promise.all([syncCollection(), syncWants()]);
   await fetchMissingDetails("collection");
+}
+
+export interface AutoSettings {
+  /** Nach dem Sync automatisch BPM, Key, Vibes und Preise ergänzen */
+  analyze: boolean;
+  /** Hörproben dabei analysieren (Datenvolumen) */
+  audio: boolean;
+}
+export const getAutoSettings = () => getKV<AutoSettings>("auto", { analyze: true, audio: true });
+
+let pipelineRunning = false;
+/**
+ * Kompletter Durchlauf: Sync, Tracklists, BPM/Key, Vibes (gratis oder Claude),
+ * Details der Wants, Preise mit Bewertung, Lieblingshändler. Alles im Hintergrund,
+ * Nutzeraktionen haben in der Warteschlange immer Vorrang.
+ */
+export async function autoPipeline(opts: { force?: boolean } = {}) {
+  if (pipelineRunning) return;
+  pipelineRunning = true;
+  try {
+    await fullSync();
+    const auto = await getAutoSettings();
+    if (!auto.analyze && !opts.force) return;
+    await lookupAudioFor();
+    await tagVibes(undefined, { audio: auto.audio });
+    await fetchMissingDetails("wants");
+    const { refreshPrices, scanFavorites } = await import("./prices");
+    await refreshPrices(await db.wants.toCollection().primaryKeys(), { maxAgeHours: 24 });
+    await scanFavorites(24);
+    await setKV("lastAutoRun", Date.now());
+  } finally {
+    pipelineRunning = false;
+  }
 }

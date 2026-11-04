@@ -320,3 +320,26 @@ export function SkeletonRows({ n = 6 }: { n?: number }) {
     </div>
   );
 }
+
+/** Preis-Ampel */
+export function DealDot({ a }: { a: "green" | "yellow" | "red" | "unknown" }) {
+  if (a === "unknown") return null;
+  const c = a === "green" ? "var(--ok)" : a === "yellow" ? "var(--warn)" : "var(--bad)";
+  const t = a === "green" ? "unter Marktwert" : a === "yellow" ? "fairer Preis" : "über Marktwert";
+  return <span className="dot" style={{ background: c, width: 9, height: 9 }} title={t} aria-label={t} />;
+}
+
+/** Mini-Verlaufskurve */
+export function Sparkline({ values, width = 120, height = 32 }: { values: number[]; width?: number; height?: number }) {
+  const v = values.filter((x) => x > 0);
+  if (v.length < 2) return null;
+  const lo = Math.min(...v);
+  const hi = Math.max(...v);
+  const pts = v.map((x, i) => `${(i / (v.length - 1)) * width},${height - 3 - ((x - lo) / (hi - lo || 1)) * (height - 6)}`).join(" ");
+  const down = v[v.length - 1] < v[0];
+  return (
+    <svg width={width} height={height} aria-hidden="true">
+      <polyline points={pts} fill="none" stroke={down ? "var(--ok)" : "var(--accent)"} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}

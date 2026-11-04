@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV } from "../lib/db";
-import { fullSync } from "../lib/sync";
+import { autoPipeline } from "../lib/sync";
 import { toast, useStore } from "../lib/store";
 import { Cover, Empty, haptic, markHero, Ring } from "../components/bits";
 import { IconCamera, IconCart, IconGear, IconList, IconSync, IconTag } from "../components/icons";
@@ -43,7 +43,7 @@ export default function Home() {
   useEffect(() => {
     if (!stats || busy) return;
     if (Date.now() - stats.lastSync > 6 * 3600_000 && navigator.onLine) {
-      fullSync().catch((e) => toast(`Sync fehlgeschlagen: ${e.message}`));
+      autoPipeline().catch((e) => toast(`Sync fehlgeschlagen: ${e.message}`));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stats?.lastSync]);
@@ -51,8 +51,8 @@ export default function Home() {
   const sync = async () => {
     haptic();
     try {
-      await fullSync();
-      toast("Alles synchron");
+      await autoPipeline({ force: true });
+      toast("Alles synchron und analysiert");
     } catch (e) {
       toast(`Sync fehlgeschlagen: ${(e as Error).message}`);
     }

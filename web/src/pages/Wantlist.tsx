@@ -2,13 +2,14 @@ import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
+import { loadPriceInfo } from "../lib/prices";
 import { fetchMarketStats, fetchMissingDetails, syncWants } from "../lib/sync";
 import { money } from "../lib/format";
 import { toast, useStore } from "../lib/store";
-import { Empty, RecordRow, SkeletonRows, useDebounced } from "../components/bits";
+import { DealDot, Empty, RecordRow, SkeletonRows, useDebounced } from "../components/bits";
 import { IconCart, IconSearch } from "../components/icons";
 
-type Sort = "added" | "artist" | "title" | "year" | "label" | "price" | "forsale" | "rating";
+type Sort = "deal" | "added" | "artist" | "title" | "year" | "label" | "price" | "forsale" | "rating";
 
 export default function Wantlist() {
   const [q, setQ] = useState("");
@@ -18,6 +19,7 @@ export default function Wantlist() {
   const [onlyAvailable, setOnlyAvailable] = useState(false);
   const [maxPrice, setMaxPrice] = useState("");
   const [group, setGroup] = useState<"none" | "label" | "style" | "decade">("none");
+  const [dealFilter, setDealFilter] = useState<"all" | "green" | "target" | "cheaper" | "hot">("all");
   const jobs = useStore((s) => s.jobs);
 
   const data = useLiveQuery(async () => {
@@ -25,7 +27,8 @@ export default function Wantlist() {
     const ids = wants.map((w) => w.releaseId);
     const [rels, stats, owned] = await Promise.all([db.releases.bulkGet(ids), db.marketStats.bulkGet(ids), db.collection.where("releaseId").anyOf(ids).toArray()]);
     const ownedSet = new Set(owned.map((o) => o.releaseId));
-    return wants.map((w, i) => ({ w, r: rels[i]!, s: stats[i], owned: ownedSet.has(w.releaseId) })).filter((x) => x.r);
+    const info = await loadPriceInfo(ids);
+    return wants.map((w, i) => ({ w, r: rels[i]!, s: stats[i], p: info.get(w.releaseId)!, owned: ownedSet.has(w.releaseId) })).filter((x) => x.r);
   });
 
   const styles = useMemo(() => {
@@ -37,7 +40,7 @@ export default function Wantlist() {
   const list = useMemo(() => {
     if (!data) return [];
     const mp = Number(maxPrice.replace(",", ".")) || Infinity;
-    const out = data.filter(({ r, s, w }) => {
+    const out = data.filter(({ r, s, w, p }) => {
       if (dq) {
         const hay = `${r.artist} ${r.title} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")} ${r.styles.join(" ")} ${w.notes ?? ""}`.toLowerCase();
         if (!dq.split(/\s+/).every((x) => hay.includes(x))) return false;
@@ -45,10 +48,15 @@ export default function Wantlist() {
       if (style && !r.styles.includes(style)) return false;
       if (onlyAvailable && !(s && s.numForSale > 0)) return false;
       if (maxPrice && !(s?.lowest != null && s.lowest <= mp)) return false;
+      if (dealFilter === "green" && p.deal.ampel !== "green") return false;
+      if (dealFilter === "target" && !p.deal.underTarget) return false;
+      if (dealFilter === "cheaper" && !((p.deal.change ?? 0) < -0.5)) return false;
+      if (dealFilter === "hot" && p.deal.urgency !== "hot") return false;
       return true;
     });
     const price = (x: (typeof out)[0]) => x.s?.lowest ?? Infinity;
     const cmp: Record<Sort, (a: (typeof out)[0], b: (typeof out)[0]) => number> = {
+      deal: (a, b) => b.p.deal.score - a.p.deal.score || price(a) - price(b),
       added: (a, b) => b.w.dateAdded.localeCompare(a.w.dateAdded),
       artist: (a, b) => a.r.artist.localeCompare(b.r.artist, "de"),
       title: (a, b) => a.r.title.localeCompare(b.r.title, "de"),
@@ -59,7 +67,7 @@ export default function Wantlist() {
       rating: (a, b) => b.w.rating - a.w.rating,
     };
     return [...out].sort(cmp[sort]);
-  }, [data, dq, style, onlyAvailable, maxPrice, sort]);
+  }, [data, dq, style, onlyAvailable, maxPrice, sort, dealFilter]);
 
   const grouped = useMemo(() => {
     if (group === "none") return [["", list]] as [string, typeof list][];
@@ -106,6 +114,7 @@ export default function Wantlist() {
           {(
             [
               ["added", "Neueste"],
+              ["deal", "Beste Deals"],
               ["price", "Preis ↑"],
               ["forsale", "Meiste Angebote"],
               ["artist", "Artist"],
@@ -132,6 +141,22 @@ export default function Wantlist() {
             <option value="decade">nach Jahrzehnt</option>
           </select>
         </div>
+        <div className="chips">
+          {(
+            [
+              ["all", "Alle Preise", null],
+              ["green", "Unter Marktwert", data?.filter((d) => d.p.deal.ampel === "green").length],
+              ["target", "Unter Wunschpreis", data?.filter((d) => d.p.deal.underTarget).length],
+              ["cheaper", "Günstiger geworden", data?.filter((d) => (d.p.deal.change ?? 0) < -0.5).length],
+              ["hot", "Selten & gefragt", data?.filter((d) => d.p.deal.urgency === "hot").length],
+            ] as [typeof dealFilter, string, number | null | undefined][]
+          ).map(([v, l, n]) => (
+            <button key={v} className={`chip ${dealFilter === v ? "on" : ""}`} onClick={() => setDealFilter(v)}>
+              {v !== "all" && <span className="dot" style={{ background: v === "green" || v === "target" ? "var(--ok)" : v === "hot" ? "var(--bad)" : "var(--accent)" }} />}
+              {l} {n ? <span className="sub">{n}</span> : null}
+            </button>
+          ))}
+        </div>
         {styles.length > 0 && (
           <div className="chips">
             {styles.map(([s, n]) => (
@@ -152,7 +177,7 @@ export default function Wantlist() {
             Tracklists laden
           </button>
         </div>
-        {(sort === "price" || sort === "forsale" || onlyAvailable || maxPrice) && priced === 0 && (
+        {(sort === "price" || sort === "forsale" || sort === "deal" || onlyAvailable || maxPrice || dealFilter !== "all") && priced === 0 && (
           <div className="card sub" style={{ background: "var(--accent-soft)" }}>Für diese Sortierung braucht die App Marktpreise. Tippe auf „Preise laden“ (ca. 1 Sekunde pro Platte).</div>
         )}
 
@@ -164,7 +189,7 @@ export default function Wantlist() {
               </h3>
             )}
             <div className="list rise">
-              {items.slice(0, 400).map(({ r, s, owned }) => (
+              {items.slice(0, 400).map(({ r, s, p, owned }) => (
                 <RecordRow
                   key={r.id}
                   r={r}
@@ -173,13 +198,19 @@ export default function Wantlist() {
                       {s ? (
                         s.numForSale > 0 ? (
                           <>
-                            <span className="bpm" style={{ fontSize: 15 }}>{money(s.lowest, s.currency)}</span>
+                            <span className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
+                              <DealDot a={p.deal.ampel} />
+                              <span className="bpm" style={{ fontSize: 15 }}>{money(s.lowest, s.currency)}</span>
+                            </span>
                             <span className="tiny">{s.numForSale} Angebote</span>
                           </>
                         ) : (
                           <span className="badge bad">nicht verfügbar</span>
                         )
                       ) : null}
+                      {p.deal.underTarget && <span className="badge ok">Wunschpreis</span>}
+                      {p.deal.urgency === "hot" && <span className="badge bad">zuschlagen</span>}
+                      {(p.deal.change ?? 0) < -0.5 && <span className="badge accent">↓ {money(-(p.deal.change ?? 0))}</span>}
                       {owned && <span className="badge ok">schon da</span>}
                     </div>
                   }

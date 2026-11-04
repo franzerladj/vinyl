@@ -85,9 +85,29 @@ export function InsertCard({ s, w, h, o, theme }: { s: PrintItem; w: number; h: 
   const headerH = Math.max(coverSize, artistSize * 2.4 + 9);
   const footerH = o.showQr ? 16 : 10;
   const avail = h - pad * 2 - headerH - footerH - 6;
-  const lines = s.tracks.length + sides.length * 0.6;
-  const lineH = Math.max(3.4, Math.min(7, avail / Math.max(1, lines)));
-  const fs = lineH * 0.6;
+  // Nur Spalten zeigen, zu denen es Daten gibt
+  const hasBpm = o.showBpm && s.tracks.some((t) => t.meta?.bpm);
+  const hasKey = (o.showCamelot || o.showKey) && s.tracks.some((t) => t.meta?.key);
+  const hasEnergy = o.showEnergy && s.tracks.some((t) => t.meta?.energy != null);
+  const hasDur = o.showDuration && s.tracks.some((t) => t.duration);
+  const sideLen = Math.max(1, ...sides.map(([sd]) => sd.length));
+  const posLen = Math.max(1, ...s.tracks.map((t) => t.position.length));
+  const fullTitle = (t: PrintTrack) => `${t.meta?.artist && t.meta.artist !== r.artist ? `${t.meta.artist} – ` : ""}${t.title}`;
+  // Größte Zeilenhöhe suchen, bei der alle Titel (max. 2 Zeilen umgebrochen) hineinpassen
+  const layout = (lh: number) => {
+    const f = lh * 0.6;
+    const sideW = sides.length > 1 ? sideLen * lh * 0.95 + 1 : 0;
+    const posW = posLen * f * 0.68 + 1;
+    const metaW = (hasBpm ? f * 2.2 : 0) + (hasKey ? f * 2.6 : 0) + (hasEnergy ? f * 1.4 : 0) + (hasDur ? f * 2.6 : 0) + 2;
+    const textW = Math.max(10, inner - sideW - posW - metaW - (sides.length > 1 ? 3 : 0));
+    const perLine = textW / (f * 0.53);
+    const rows = s.tracks.map((t) => Math.min(2, Math.ceil(fullTitle(t).length / perLine)));
+    const total = rows.reduce((a, b) => a + b, 0) * lh * 0.92 + sides.length * lh * 0.35 + s.tracks.length * lh * 0.12;
+    return { f, sideW, posW, total };
+  };
+  let lineH = 7.5;
+  while (lineH > 3.4 && layout(lineH).total > avail) lineH -= 0.1;
+  const { f: fs, sideW, posW } = layout(lineH);
 
   return (
     <div style={{ position: "relative", width: mm(w), height: mm(h), background: t.bg, color: t.fg, overflow: "hidden", fontFamily: "'Inter', -apple-system, system-ui, sans-serif", boxSizing: "border-box" }}>
@@ -116,22 +136,24 @@ export function InsertCard({ s, w, h, o, theme }: { s: PrintItem; w: number; h: 
           {sides.map(([side, ts]) => (
             <div key={side} style={{ display: "flex", gap: mm(3) }}>
               {sides.length > 1 && (
-                <div style={{ fontFamily: BRAND, fontStretch: "125%", fontWeight: 900, fontSize: mm(lineH * 1.25), lineHeight: mm(lineH), width: mm(lineH * 1.4), flex: "none", color: t.muted }}>{side}</div>
+                <div style={{ fontFamily: BRAND, fontStretch: "125%", fontWeight: 900, fontSize: mm(lineH * 1.15), lineHeight: mm(lineH), width: mm(sideW), flex: "none", color: t.muted, letterSpacing: "-0.02em" }}>{side}</div>
               )}
-              <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: mm(lineH * 0.12) }}>
                 {ts.map((tr) => (
-                  <div key={tr.position} style={{ display: "flex", alignItems: "center", gap: mm(1.6), height: mm(lineH), fontSize: mm(fs), whiteSpace: "nowrap" }}>
-                    <span style={{ width: mm(fs * 1.9), flex: "none", fontWeight: 700, color: t.muted, fontVariantNumeric: "tabular-nums" }}>{tr.position}</span>
-                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", fontWeight: 500 }}>
+                  <div key={tr.position} style={{ display: "flex", alignItems: "flex-start", gap: mm(1.6), minHeight: mm(lineH), fontSize: mm(fs), lineHeight: mm(lineH * 0.92) }}>
+                    <span style={{ width: mm(posW), flex: "none", fontWeight: 700, color: t.muted, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{tr.position}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontWeight: 500, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
                       {tr.meta?.artist && tr.meta.artist !== r.artist ? <span style={{ color: t.muted }}>{tr.meta.artist} – </span> : null}
                       {tr.title}
                     </span>
-                    {o.showDuration && tr.duration && <span style={{ color: t.muted, fontVariantNumeric: "tabular-nums" }}>{tr.duration}</span>}
-                    {o.showBpm && <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums", minWidth: mm(fs * 1.9), textAlign: "right" }}>{tr.meta?.bpm ? Math.round(tr.meta.bpm) : ""}</span>}
-                    {(o.showCamelot || o.showKey) && (
-                      <span style={{ minWidth: mm(fs * 2.4), textAlign: "right" }}>{o.showCamelot ? <Pill k={tr.meta?.key} size={fs} /> : <span style={{ fontWeight: 700 }}>{tr.meta?.key}</span>}</span>
+                    {hasDur && <span style={{ color: t.muted, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{tr.duration}</span>}
+                    {hasBpm && <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums", minWidth: mm(fs * 1.9), textAlign: "right" }}>{tr.meta?.bpm ? Math.round(tr.meta.bpm) : ""}</span>}
+                    {hasKey && <span style={{ minWidth: mm(fs * 2.4), textAlign: "right" }}>{o.showCamelot ? <Pill k={tr.meta?.key} size={fs} /> : <span style={{ fontWeight: 700 }}>{tr.meta?.key}</span>}</span>}
+                    {hasEnergy && (
+                      <span style={{ paddingTop: mm(fs * 0.15) }}>
+                        <Bars v={tr.meta?.energy} size={fs} color={theme === "light" ? "#ff6a00" : "#ff9a3c"} off={t.line} />
+                      </span>
                     )}
-                    {o.showEnergy && <Bars v={tr.meta?.energy} size={fs} color={theme === "light" ? "#ff6a00" : "#ff9a3c"} off={t.line} />}
                   </div>
                 ))}
               </div>
@@ -199,7 +221,7 @@ export function ObiStrip({ s, w, h, o, theme }: { s: PrintItem; w: number; h: nu
             <div key={side} style={{ marginBottom: mm(1.2) }}>
               {ts.map((tr) => (
                 <div key={tr.position} style={{ display: "flex", alignItems: "center", gap: mm(1.2), height: mm(lineH), fontSize: mm(fs), whiteSpace: "nowrap" }}>
-                  <span style={{ width: mm(5), fontWeight: 800, color: t.muted }}>{tr.position}</span>
+                  <span style={{ width: mm(Math.max(...s.tracks.map((x) => x.position.length)) * fs * 0.7 + 0.8), flex: "none", fontWeight: 800, color: t.muted }}>{tr.position}</span>
                   <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{tr.title}</span>
                   {o.showBpm && <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{tr.meta?.bpm ? Math.round(tr.meta.bpm) : ""}</span>}
                   {(o.showCamelot || o.showKey) && <Pill k={tr.meta?.key} size={fs} />}

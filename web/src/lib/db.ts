@@ -90,6 +90,35 @@ export interface MarketStat {
   fetchedAt: number;
 }
 
+export interface PricePoint {
+  id?: number;
+  releaseId: number;
+  at: number;
+  lowest: number | null;
+  numForSale: number;
+}
+
+export interface PriceSuggestion {
+  releaseId: number;
+  /** Discogs-Preisempfehlung je Zustand, z.B. { "VG+": 18.5, "NM": 24 } */
+  values: Record<string, number>;
+  currency: string;
+  fetchedAt: number;
+}
+
+export interface WantMeta {
+  releaseId: number;
+  targetPrice?: number | null;
+}
+
+export interface Seller {
+  name: string;
+  favorite: boolean;
+  addedAt: number;
+  lastScan?: number;
+  lastHits?: number;
+}
+
 export interface StoredListing extends Listing {
   importedAt: number;
 }
@@ -104,6 +133,10 @@ class CrateDB extends Dexie {
   marketStats!: Table<MarketStat, number>;
   listings!: Table<StoredListing, string>;
   kv!: Table<{ key: string; value: unknown }, string>;
+  priceHistory!: Table<PricePoint, number>;
+  priceSuggestions!: Table<PriceSuggestion, number>;
+  wantMeta!: Table<WantMeta, number>;
+  sellers!: Table<Seller, string>;
 
   constructor() {
     super("crate");
@@ -117,6 +150,13 @@ class CrateDB extends Dexie {
       marketStats: "releaseId, fetchedAt",
       listings: "listingId, releaseId, seller",
       kv: "key",
+    });
+    // v2: Preisverlauf, Preisempfehlungen, Wunschpreise, Lieblingshändler
+    this.version(2).stores({
+      priceHistory: "++id, releaseId, at",
+      priceSuggestions: "releaseId, fetchedAt",
+      wantMeta: "releaseId",
+      sellers: "name, favorite",
     });
   }
 }

@@ -6,7 +6,8 @@ import { db, realTracks, trackId, type TrackMeta } from "../lib/db";
 import { addToCollection, addWant, fetchMarketStats, fetchRelease, lookupAudioFor, removeWant, tagVibes } from "../lib/sync";
 import { discogsReleaseUrl, discogsSellUrl, formatLine, money, sideOf } from "../lib/format";
 import { toast, useStore } from "../lib/store";
-import { Cover, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, TapTempo, type Preview } from "../components/bits";
+import { Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, Sparkline, TapTempo, type Preview } from "../components/bits";
+import { loadPriceInfo, setTargetPrice } from "../lib/prices";
 import { IconBack, IconCart, IconExternal, IconHeart, IconPlay, IconPlus, IconPrint, IconSparkle } from "../components/icons";
 
 export default function ReleasePage() {
@@ -25,6 +26,7 @@ export default function ReleasePage() {
   const isWant = useLiveQuery(async () => Boolean(await db.wants.get(id)), [id], false);
   const meta = useLiveQuery(() => db.recordMeta.get(id), [id]);
   const stat = useLiveQuery(() => db.marketStats.get(id), [id]);
+  const price = useLiveQuery(async () => (await loadPriceInfo([id])).get(id), [id]);
 
   useEffect(() => {
     db.releases.get(id).then((r) => {
@@ -121,6 +123,45 @@ export default function ReleasePage() {
             <b style={{ fontSize: 20 }}>{rel.community ? `${rel.community.have}/${rel.community.want}` : "–"}</b>
           </div>
         </div>
+
+        {isWant && price && (
+          <div className="card stack" style={{ marginTop: 10, gap: 10 }}>
+            <div className="row">
+              <DealDot a={price.deal.ampel} />
+              <b>
+                {price.deal.ampel === "green" ? "Gutes Angebot" : price.deal.ampel === "yellow" ? "Fairer Preis" : price.deal.ampel === "red" ? "Gerade teuer" : "Noch zu wenig Preisdaten"}
+              </b>
+              <span className="spacer" />
+              <Sparkline values={price.history.map((h) => h.lowest ?? 0)} width={90} height={26} />
+            </div>
+            {price.deal.reasons.length > 0 && <div className="sub">{price.deal.reasons.join(" · ")}</div>}
+            {price.suggestion && (
+              <div className="chips">
+                {["M", "NM", "VG+", "VG", "G+"].filter((g) => price.suggestion!.values[g]).map((g) => (
+                  <span key={g} className="chip" style={{ cursor: "default" }}>
+                    {g} <span className="sub">{money(price.suggestion!.values[g], price.suggestion!.currency)}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            {price.suggestion && <div className="tiny">Preisempfehlung von Discogs aus echten Verkäufen</div>}
+            <label className="row">
+              <span className="sub" style={{ flex: "none" }}>Mein Wunschpreis</span>
+              <input
+                className="input"
+                inputMode="decimal"
+                placeholder="z.B. 15"
+                defaultValue={price.target ?? ""}
+                key={String(price.target)}
+                onBlur={(e) => {
+                  const v = Number(e.target.value.replace(",", "."));
+                  void setTargetPrice(id, v > 0 ? v : null).then(() => v > 0 && toast(`Wunschpreis ${money(v)} gesetzt`));
+                }}
+                style={{ maxWidth: 120, marginLeft: "auto" }}
+              />
+            </label>
+          </div>
+        )}
 
         {rel.styles.length > 0 && (
           <div className="chips" style={{ marginTop: 14 }}>
