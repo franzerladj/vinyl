@@ -1,6 +1,5 @@
-// Verschlüsselte Session im httpOnly-Cookie (AES-256-GCM). Kein Datenbank-Server nötig.
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
-import { config } from "./config";
+// Verschlüsselte Session im httpOnly-Cookie (AES-256-GCM über Web Crypto).
+// Läuft gleich auf Cloudflare Workers und Node 20+. Keine Datenbank nötig.
 
 export interface Session {
   token: string;
@@ -8,23 +7,37 @@ export interface Session {
   username: string;
 }
 
-const key = () => createHash("sha256").update(config.sessionSecret || "dev-only-insecure").digest();
+const enc = new TextEncoder();
+const keyCache = new Map<string, Promise<CryptoKey>>();
 
-export function seal(data: unknown): string {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key(), iv);
-  const enc = Buffer.concat([cipher.update(JSON.stringify(data), "utf8"), cipher.final()]);
-  return Buffer.concat([iv, cipher.getAuthTag(), enc]).toString("base64url");
+function getKey(secret: string) {
+  const s = secret || "dev-only-insecure-secret";
+  let k = keyCache.get(s);
+  if (!k) {
+    k = crypto.subtle.digest("SHA-256", enc.encode(s)).then((h) => crypto.subtle.importKey("raw", h, "AES-GCM", false, ["encrypt", "decrypt"]));
+    keyCache.set(s, k);
+  }
+  return k;
 }
 
-export function unseal<T>(value: string | undefined): T | null {
+const b64url = (buf: Uint8Array) => btoa(String.fromCharCode(...buf)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const fromB64url = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+
+export async function seal(secret: string, data: unknown): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await getKey(secret), enc.encode(JSON.stringify(data))));
+  const out = new Uint8Array(iv.length + ct.length);
+  out.set(iv);
+  out.set(ct, iv.length);
+  return b64url(out);
+}
+
+export async function unseal<T>(secret: string, value: string | undefined): Promise<T | null> {
   if (!value) return null;
   try {
-    const buf = Buffer.from(value, "base64url");
-    const decipher = createDecipheriv("aes-256-gcm", key(), buf.subarray(0, 12));
-    decipher.setAuthTag(buf.subarray(12, 28));
-    const dec = Buffer.concat([decipher.update(buf.subarray(28)), decipher.final()]);
-    return JSON.parse(dec.toString("utf8")) as T;
+    const buf = fromB64url(value);
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.subarray(0, 12) }, await getKey(secret), buf.subarray(12));
+    return JSON.parse(new TextDecoder().decode(pt)) as T;
   } catch {
     return null;
   }

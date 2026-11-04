@@ -1,0 +1,9 @@
+# Cloudflare Pages: statische App aus web/dist, API als Pages Functions (functions/)
+name = "crate"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "web/dist"
+
+# Kostenloses KI-Kontingent (Bilderkennung, Vibes)
+[ai]
+binding = "AI"

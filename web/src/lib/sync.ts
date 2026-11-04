@@ -1,8 +1,8 @@
 // Abgleich mit Discogs + Anreicherung (Tracklists, BPM/Key, Vibes, Preise)
-import { api, discogs } from "./api";
+import { api, canClaude, discogs } from "./api";
 import { db, realTracks, setKV, getKV, trackId, type Release, type TrackMeta } from "./db";
 import { artistName } from "./format";
-import { jobUpdate, toast, username } from "./store";
+import { getState, jobUpdate, toast, username } from "./store";
 import type { BasicInformation, DRelease, Pagination } from "./types";
 
 const u = () => encodeURIComponent(username());
@@ -188,11 +188,22 @@ export async function lookupAudioFor(trackIds?: string[]) {
   return found;
 }
 
-/** Energie + Vibe-Tags per KI schätzen lassen */
-export async function tagVibes(trackIds?: string[]) {
+/**
+ * Energie + Vibes ergänzen. Mit Claude (Allowlist oder eigener Key) per KI,
+ * sonst kostenlos über Regeln, Last.fm und Audio-Analyse.
+ */
+export async function tagVibes(trackIds?: string[], opts: { audio?: boolean } = {}) {
+  if (!canClaude(getState().me)) {
+    const { enrichFree } = await import("./free");
+    return enrichFree(trackIds, { audio: opts.audio ?? true });
+  }
+  return tagVibesClaude(trackIds);
+}
+
+async function tagVibesClaude(trackIds?: string[]) {
   const all = trackIds ? ((await db.tracks.bulkGet(trackIds)).filter(Boolean) as TrackMeta[]) : await db.tracks.toArray();
-  const todo = all.filter((t) => t.energy == null);
-  if (!todo.length) return;
+  const todo = all.filter((t) => t.energy == null || (t.vibeSource !== "manuell" && t.vibeSource !== "Claude"));
+  if (!todo.length) return 0;
   const rels = new Map((await db.releases.bulkGet([...new Set(todo.map((t) => t.releaseId))])).filter(Boolean).map((r) => [r!.id, r!]));
   const job = "vibes";
   jobUpdate(job, { label: "Vibes taggen (KI)", done: 0, total: todo.length });
@@ -207,13 +218,14 @@ export async function tagVibes(trackIds?: string[]) {
         }),
       });
       await db.transaction("rw", db.tracks, async () => {
-        for (const it of res.items) await db.tracks.update(it.id, { energy: it.energy, moods: [...new Set([...it.moods, it.slot])] });
+        for (const it of res.items) await db.tracks.update(it.id, { energy: it.energy, moods: [...new Set([...it.moods, it.slot])], vibeSource: "Claude" });
       });
       jobUpdate(job, { done: Math.min(todo.length, i + 40) });
     }
   } finally {
     jobUpdate(job, null);
   }
+  return todo.length;
 }
 
 export async function currency(): Promise<string> {

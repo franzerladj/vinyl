@@ -7,7 +7,7 @@ import { addToCollection, addWant, fetchMarketStats, fetchRelease, lookupAudioFo
 import { discogsReleaseUrl, discogsSellUrl, formatLine, money, sideOf } from "../lib/format";
 import { toast, useStore } from "../lib/store";
 import { Cover, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, TapTempo, type Preview } from "../components/bits";
-import { IconBack, IconCart, IconExternal, IconHeart, IconPlay, IconPlus, IconPrint, IconSparkle, IconWave } from "../components/icons";
+import { IconBack, IconCart, IconExternal, IconHeart, IconPlay, IconPlus, IconPrint, IconSparkle } from "../components/icons";
 
 export default function ReleasePage() {
   const id = Number(useParams().id);
@@ -135,14 +135,22 @@ export default function ReleasePage() {
         <div className="row" style={{ marginTop: 22 }}>
           <h2 style={{ margin: 0 }}>Tracks</h2>
           <span className="spacer" />
-          <button className="btn small tinted" onClick={() => lookupAudioFor(tracks.map((t) => t.id)).then((n) => toast(n ? `${n} Track(s) ergänzt` : "Keine neuen Daten gefunden"), (e) => toast(e.message))}>
-            <IconWave /> BPM & Key
+          <button
+            className="btn small tinted"
+            onClick={async () => {
+              haptic();
+              try {
+                const ids = tracks.map((t) => t.id);
+                await lookupAudioFor(ids);
+                await tagVibes(ids, { audio: true });
+                toast("BPM, Key und Vibes ergänzt");
+              } catch (e) {
+                toast((e as Error).message);
+              }
+            }}
+          >
+            <IconSparkle /> Analysieren
           </button>
-          {me?.features.ai && (
-            <button className="btn small tinted" onClick={() => tagVibes(tracks.map((t) => t.id)).then(() => toast("Vibes getaggt"), (e) => toast(e.message))} aria-label="Vibes per KI">
-              <IconSparkle />
-            </button>
-          )}
         </div>
         <table className="tracks">
           <tbody>
@@ -311,6 +319,8 @@ function TrackEdit({ t, onSave, onPlaying }: { t: TrackMeta; onSave: (p: Partial
             stars,
             notes,
             bpmSource: bpm !== String(t.bpm ?? "") ? "manuell" : t.bpmSource,
+            keySource: key.trim() !== (t.key ?? "") ? "manuell" : t.keySource,
+            vibeSource: energy !== (t.energy ?? 5) || moods !== (t.moods ?? []).join(", ") ? "manuell" : t.vibeSource,
           })
         }
       >

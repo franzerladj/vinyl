@@ -3,3 +3,5 @@ web/dist
 dev-dist
 .env
 *.log
+.dev.vars
+.wrangler

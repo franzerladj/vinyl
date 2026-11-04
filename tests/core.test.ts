@@ -70,3 +70,23 @@ describe("setlist", () => {
     expect(energies[0]).toBeLessThan(energies[energies.length - 1]);
   });
 });
+
+import { estimateVibe } from "../shared/vibes";
+describe("vibes", () => {
+  it("schätzt Energie aus Style und BPM", () => {
+    const deep = estimateVibe({ styles: ["Deep House"], bpm: 118 });
+    const techno = estimateVibe({ styles: ["Techno"], bpm: 134 });
+    expect(deep.energy).toBeLessThan(techno.energy);
+    expect(deep.moods).toContain("deep");
+    expect(techno.slot).toBe("peak");
+  });
+  it("nutzt Last.fm-Tags und Audio-Energie", () => {
+    const base = estimateVibe({ styles: ["House"], bpm: 122 });
+    const chill = estimateVibe({ styles: ["House"], bpm: 122, tags: [{ name: "chillout", count: 100 }, { name: "dreamy", count: 60 }] });
+    expect(chill.energy).toBeLessThan(base.energy);
+    expect(chill.moods).toContain("chill");
+    const loud = estimateVibe({ styles: ["House"], bpm: 122, audioEnergy: 10 });
+    expect(loud.energy).toBeGreaterThan(base.energy);
+    expect(loud.sources).toContain("Audio");
+  });
+});

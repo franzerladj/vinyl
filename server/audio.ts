@@ -1,5 +1,5 @@
 // BPM- und Tonart-Lookup über GetSongBPM (mit API-Key) und Deezer (BPM, Hörprobe).
-import { config } from "./config";
+import type { Config } from "./env";
 
 export interface AudioInfo {
   bpm: number | null;
@@ -10,7 +10,7 @@ export interface AudioInfo {
 
 const clean = (s: string) => s.replace(/\(.*?\)|\[.*?\]/g, "").replace(/\s+/g, " ").trim();
 
-async function getSongBpm(artist: string, title: string): Promise<Partial<AudioInfo> | null> {
+async function getSongBpm(config: Config, artist: string, title: string): Promise<Partial<AudioInfo> | null> {
   if (!config.getSongBpmKey) return null;
   const lookup = `song:${clean(title)} artist:${clean(artist)}`;
   const url = `https://api.getsong.co/search/?api_key=${config.getSongBpmKey}&type=both&lookup=${encodeURIComponent(lookup)}`;
@@ -22,7 +22,7 @@ async function getSongBpm(artist: string, title: string): Promise<Partial<AudioI
   return { bpm: hit.tempo ? Math.round(Number(hit.tempo)) : null, key: hit.key_of || null };
 }
 
-async function deezer(artist: string, title: string): Promise<Partial<AudioInfo> | null> {
+export async function deezer(artist: string, title: string): Promise<Partial<AudioInfo> | null> {
   type Hit = { id: number; title: string; preview?: string; artist?: { name: string } };
   const search = async (q: string) => {
     const res = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=5`);
@@ -40,8 +40,8 @@ async function deezer(artist: string, title: string): Promise<Partial<AudioInfo>
   return { bpm: track.bpm && track.bpm > 0 ? Math.round(track.bpm) : null, previewUrl: track.preview || hit.preview || null };
 }
 
-export async function lookupAudio(artist: string, title: string): Promise<AudioInfo> {
-  const [g, d] = await Promise.allSettled([getSongBpm(artist, title), deezer(artist, title)]);
+export async function lookupAudio(config: Config, artist: string, title: string): Promise<AudioInfo> {
+  const [g, d] = await Promise.allSettled([getSongBpm(config, artist, title), deezer(artist, title)]);
   const gs = g.status === "fulfilled" ? g.value : null;
   const ds = d.status === "fulfilled" ? d.value : null;
   const source: string[] = [];
@@ -53,4 +53,14 @@ export async function lookupAudio(artist: string, title: string): Promise<AudioI
     source,
     previewUrl: ds?.previewUrl ?? null,
   };
+}
+
+/** Hörprobe von Deezer durchreichen (für die Analyse im Browser, dort fehlen CORS-Header) */
+export async function fetchPreview(artist: string, title: string): Promise<Response> {
+  const d = await deezer(artist, title);
+  const url = d?.previewUrl;
+  if (!url || !/^https:\/\/[a-z0-9-]+\.dzcdn\.net\//.test(url)) return new Response("Keine Hörprobe", { status: 404 });
+  const r = await fetch(url);
+  if (!r.ok || !r.body) return new Response("Hörprobe nicht ladbar", { status: 502 });
+  return new Response(r.body, { headers: { "Content-Type": r.headers.get("Content-Type") ?? "audio/mpeg", "Cache-Control": "private, max-age=3600" } });
 }

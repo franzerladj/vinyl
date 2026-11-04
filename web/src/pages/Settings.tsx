@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { db, getKV, setKV } from "../lib/db";
-import { logout } from "../lib/api";
+import { canClaude, logout, ownAnthropicKey, setOwnAnthropicKey } from "../lib/api";
 import { getSheetsConfig, pullTracksFromSheets, pushToSheets, type SheetsConfig } from "../lib/sheets";
 import { fetchMissingDetails, fullSync, lookupAudioFor, tagVibes } from "../lib/sync";
 import { toast, useStore } from "../lib/store";
@@ -22,6 +22,8 @@ export default function Settings() {
   const jobs = useStore((s) => s.jobs);
   const [sheets, setSheets] = useState<SheetsConfig>({ url: "", secret: "" });
   const [currency, setCurrency] = useState("EUR");
+  const [analyzeAudio, setAnalyzeAudio] = useState(true);
+  const [ownKey, setOwnKey] = useState(ownAnthropicKey());
 
   useEffect(() => {
     getSheetsConfig().then(setSheets);
@@ -100,18 +102,68 @@ export default function Settings() {
             Fehlende Tracklists laden
           </button>
           <button className="btn" disabled={!!jobs.audio} onClick={run("BPM/Key", async () => `${await lookupAudioFor()} Tracks mit BPM/Key ergänzt`)}>
-            BPM & Key für alle Tracks suchen
+            BPM & Key aus Datenbanken
           </button>
-          <span className="sub">
-            Quellen: Deezer (BPM, Hörprobe)
-            {me?.features.keyLookup ? " und GetSongBPM (BPM + Key)" : ". Für Tonarten einen kostenlosen GetSongBPM-Key auf dem Server hinterlegen"}. Bei Underground-Pressungen findet sich oft nichts, dann hilft Tap-Tempo auf der Platten-Seite.
-          </span>
-          {me?.features.ai && (
-            <button className="btn" disabled={!!jobs.vibes} onClick={run("Vibes", () => tagVibes())}>
-              Energie & Vibes per KI schätzen
+          <button
+            className="btn primary"
+            disabled={!!jobs["free-vibes"]}
+            onClick={run("Vibes", async () => {
+              const { enrichFree } = await import("../lib/free");
+              return `${await enrichFree(undefined, { audio: analyzeAudio })} Tracks ergänzt`;
+            })}
+          >
+            Vibes & Energie ergänzen (gratis)
+          </button>
+          <label className="row sub">
+            <input type="checkbox" checked={analyzeAudio} onChange={(e) => setAnalyzeAudio(e.target.checked)} /> Hörproben analysieren (Energie, fehlende BPM und Keys, ca. 0,5 MB pro Track, besser im WLAN)
+          </label>
+          {canClaude(me) && (
+            <button className="btn" disabled={!!jobs.vibes} onClick={run("Vibes", async () => `${await tagVibes()} Tracks mit Claude getaggt`)}>
+              Genauer mit Claude taggen
             </button>
           )}
         </div>
+
+        <h2>Datenquellen</h2>
+        <div className="group">
+          {(
+            [
+              ["Discogs", true, "Sammlung, Wantlist, Tracklists, Preise"],
+              ["Deezer", true, "BPM und Hörproben"],
+              ["Audio-Analyse", true, "Energie, Tempo und Tonart aus der Hörprobe, auf dem Gerät"],
+              ["Texterkennung", true, "Katalognummer vom Foto lesen, auf dem Gerät"],
+              ["Last.fm", me?.features.lastfm, "Vibe-Tags von Hörern"],
+              ["GetSongBPM", me?.features.keyLookup, "BPM und Tonart"],
+              ["Workers AI", me?.features.freeAi, "Fotos erkennen, kostenloses Kontingent"],
+              ["Claude", canClaude(me), "Beste Erkennung und Vibes, optional"],
+            ] as [string, boolean | undefined, string][]
+          ).map(([n, on, d]) => (
+            <div key={n} className="group-row">
+              <span className="dot" style={{ background: on ? "var(--ok)" : "var(--surface-3)" }} />
+              <div>
+                <div style={{ fontWeight: 600 }}>{n}</div>
+                <div className="tiny">{d}</div>
+              </div>
+              <span className="chev sub">{on ? "aktiv" : "aus"}</span>
+            </div>
+          ))}
+        </div>
+        <label className="field" style={{ marginTop: 12 }}>
+          Eigener Anthropic-Key (optional, bleibt auf diesem Gerät)
+          <input
+            className="input"
+            type="password"
+            autoComplete="off"
+            placeholder="sk-ant-…"
+            value={ownKey}
+            onChange={(e) => setOwnKey(e.target.value.trim())}
+            onBlur={() => {
+              setOwnAnthropicKey(ownKey);
+              if (ownKey) toast("Key gespeichert");
+            }}
+          />
+        </label>
+        <p className="tiny">Mit eigenem Key nutzt du Claude für Fotos und Vibes auf deine Kosten. Der Key geht nur zur Anfrage durch den Server und wird dort nicht gespeichert.</p>
 
         <h2>Google Sheets</h2>
         <div className="card stack">

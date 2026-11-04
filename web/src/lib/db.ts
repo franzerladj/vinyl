@@ -52,6 +52,12 @@ export interface TrackMeta {
   notes?: string;
   previewUrl?: string | null;
   bpmSource?: string;
+  keySource?: string;
+  /** Woher Energie und Vibes stammen: "manuell", "Claude", "Styles + BPM + Audio" … */
+  vibeSource?: string;
+  /** Energie aus der Analyse der Hörprobe (1..10) */
+  audioEnergy?: number | null;
+  analyzedAt?: number;
   lookedUpAt?: number;
 }
 

@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BrowserMultiFormatReader, type IScannerControls } from "@zxing/browser";
-import { api, discogs } from "../lib/api";
+import { api, canRecognize, discogs } from "../lib/api";
+import { ocrImage } from "../lib/free";
 import { addToCollection, addWant } from "../lib/sync";
 import { toast, useStore } from "../lib/store";
 import type { SearchResult } from "../lib/types";
 import { Cover, Seg } from "../components/bits";
 import { IconBack, IconCamera } from "../components/icons";
 
-interface Recognition { artist: string; title: string; label: string; catno: string; barcode: string; year: string; matrix: string; confidence: string; notes: string }
+interface Recognition { artist: string; title: string; label: string; catno: string; barcode: string; year: string; matrix: string; confidence: string; notes: string; engine?: string; q?: string }
 
 async function resizeImage(file: File, max = 1568): Promise<string> {
   const bmp = await createImageBitmap(file);
@@ -28,6 +29,7 @@ async function findCandidates(p: Partial<Recognition>): Promise<SearchResult[]> 
   if (p.catno) queries.push(`catno=${encodeURIComponent(p.catno)}`);
   if (p.artist || p.title) queries.push(`artist=${encodeURIComponent(p.artist ?? "")}&release_title=${encodeURIComponent(p.title ?? "")}&format=Vinyl`);
   if (p.artist || p.title) queries.push(`q=${encodeURIComponent(`${p.artist ?? ""} ${p.title ?? ""}`.trim())}&format=Vinyl`);
+  if (p.q) queries.push(`q=${encodeURIComponent(p.q)}`);
   const seen = new Set<number>();
   const out: SearchResult[] = [];
   for (const q of queries) {
@@ -40,8 +42,10 @@ async function findCandidates(p: Partial<Recognition>): Promise<SearchResult[]> 
 
 export default function Scan() {
   const nav = useNavigate();
-  const ai = useStore((s) => s.me?.features.ai);
-  const [mode, setMode] = useState<"photo" | "barcode" | "manual">(ai ? "photo" : "barcode");
+  const me = useStore((s) => s.me);
+  const serverAi = canRecognize(me);
+  const [mode, setMode] = useState<"photo" | "barcode" | "manual">("photo");
+  const [ocrProgress, setOcrProgress] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [rec, setRec] = useState<Recognition | null>(null);
   const [results, setResults] = useState<SearchResult[] | null>(null);
@@ -89,20 +93,47 @@ export default function Scan() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, results]);
 
+  /** Texterkennung direkt auf dem Gerät (kostenlos, ohne Server) */
+  const runOcr = async (dataUrl: string) => {
+    setOcrProgress(0);
+    try {
+      const g = await ocrImage(dataUrl, setOcrProgress);
+      const r: Recognition = { artist: "", title: "", label: "", catno: g.catno, barcode: g.barcode, year: "", matrix: "", confidence: "niedrig", notes: "Text auf dem Gerät gelesen.", engine: "ocr", q: g.query };
+      setRec(r);
+      setManual((m) => ({ ...m, catno: g.catno || m.catno, barcode: g.barcode || m.barcode }));
+      setResults(await findCandidates(r));
+    } finally {
+      setOcrProgress(null);
+    }
+  };
+
   const onPhoto = async (file?: File) => {
     if (!file) return;
     setBusy(true);
     setResults(null);
+    setRec(null);
     try {
       const b64 = await resizeImage(file);
-      setPreview(`data:image/jpeg;base64,${b64}`);
-      const r = await api<Recognition>("/api/ai/recognize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: b64, mediaType: "image/jpeg" }),
-      });
-      setRec(r);
-      setResults(await findCandidates(r));
+      const dataUrl = `data:image/jpeg;base64,${b64}`;
+      setPreview(dataUrl);
+      if (serverAi) {
+        try {
+          const r = await api<Recognition>("/api/ai/recognize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ image: b64, mediaType: "image/jpeg" }),
+          });
+          setRec(r);
+          const found = await findCandidates(r);
+          if (found.length) {
+            setResults(found);
+            return;
+          }
+        } catch (e) {
+          console.warn("Server-Erkennung", e);
+        }
+      }
+      await runOcr(dataUrl);
     } catch (e) {
       toast((e as Error).message);
     } finally {
@@ -144,26 +175,31 @@ export default function Scan() {
           }}
         />
 
-        {mode === "photo" &&
-          (ai ? (
-            <>
-              <label className="card stack press" style={{ alignItems: "center", padding: 32, cursor: "pointer", textAlign: "center", border: "1.5px dashed var(--surface-3)", background: "transparent" }}>
-                {preview ? <img src={preview} style={{ maxHeight: 220, borderRadius: 10 }} alt="" /> : <IconCamera />}
-                <b>{busy ? "Erkenne Platte …" : "Cover, Label oder Runout fotografieren"}</b>
-                <span className="sub">Die KI liest Artist, Titel, Label, Katalognummer und Barcode ab.</span>
-                <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => onPhoto(e.target.files?.[0])} />
-              </label>
-              {rec && (
-                <div className="card sub">
-                  Erkannt ({rec.confidence}): <b style={{ color: "var(--text)" }}>{[rec.artist, rec.title].filter(Boolean).join(" – ")}</b>
-                  {rec.label && ` · ${rec.label}`} {rec.catno && ` · ${rec.catno}`} {rec.barcode && ` · ${rec.barcode}`}
-                  {rec.notes && <div style={{ marginTop: 4 }}>{rec.notes}</div>}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="card sub">Für die Foto-Erkennung braucht der Server einen ANTHROPIC_API_KEY. Barcode und Katalognummer funktionieren ohne.</div>
-          ))}
+        {mode === "photo" && (
+          <>
+            <label className="card stack press" style={{ alignItems: "center", padding: 32, cursor: "pointer", textAlign: "center", border: "1.5px dashed var(--surface-3)", background: "transparent" }}>
+              {preview ? <img src={preview} style={{ maxHeight: 220, borderRadius: 10 }} alt="" /> : <IconCamera />}
+              <b>{ocrProgress != null ? `Lese Text … ${Math.round(ocrProgress * 100)} %` : busy ? "Erkenne Platte …" : "Cover, Label oder Runout fotografieren"}</b>
+              <span className="sub">
+                {serverAi ? "Die KI liest Artist, Titel, Label, Katalognummer und Barcode ab." : "Die App liest Katalognummer und Text direkt auf dem Handy. Am besten klappt das Center-Label oder die Rückseite."}
+              </span>
+              <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => onPhoto(e.target.files?.[0])} />
+            </label>
+            {rec && (
+              <div className="card sub">
+                {rec.engine === "ocr" ? "Gelesen" : `Erkannt (${rec.confidence})`}:{" "}
+                <b style={{ color: "var(--text)" }}>{[rec.artist, rec.title].filter(Boolean).join(" – ") || rec.q || "kein Text"}</b>
+                {rec.label && ` · ${rec.label}`} {rec.catno && ` · ${rec.catno}`} {rec.barcode && ` · ${rec.barcode}`}
+                {rec.notes && <div style={{ marginTop: 4 }}>{rec.notes}</div>}
+                {preview && rec.engine !== "ocr" && (
+                  <button className="btn small ghost" style={{ marginTop: 6, paddingLeft: 0 }} onClick={() => runOcr(preview).catch((e) => toast(e.message))}>
+                    Stattdessen Text auf dem Gerät lesen
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
 
         {mode === "barcode" && !results && (
           <div className="scan-wrap">
