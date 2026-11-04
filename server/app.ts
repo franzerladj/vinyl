@@ -426,3 +426,55 @@ app.post("/api/push/run", async (c) => {
   await cfg.kv.put("cron:next", last);
   return c.json({ users: keys.length, done: report, budgetLeft: budget });
 });
+
+// ---------- Freunde finden: freiwilliges Crate-Verzeichnis ----------
+// Discogs bietet keine Personensuche. Wer möchte, wird für andere Crate-Nutzer auffindbar.
+// Schlüssel: dir:<name klein> (Discogs-Name) und dirn:<echter Name normalisiert>:<name> für die Suche nach Teilen.
+interface DirEntry {
+  username: string;
+  name?: string;
+  avatar?: string;
+  location?: string;
+  records?: number;
+}
+const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+app.post("/api/dir/me", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const b = await c.req.json<{ visible: boolean } & Omit<DirEntry, "username">>();
+  const u = s.username.toLowerCase();
+  const old = JSON.parse((await cfg.kv.get(`dir:${u}`)) ?? "null") as DirEntry | null;
+  // Alte Namensschlüssel entfernen
+  if (old?.name) for (const part of norm(old.name).split(" ")) if (part) await cfg.kv.delete(`dirn:${part}:${u}`);
+  if (!b.visible) {
+    await cfg.kv.delete(`dir:${u}`);
+    return c.json({ visible: false });
+  }
+  const e: DirEntry = { username: s.username, name: b.name?.slice(0, 80) || undefined, avatar: b.avatar?.startsWith("https://") ? b.avatar.slice(0, 300) : undefined, location: b.location?.slice(0, 80) || undefined, records: Number(b.records) || undefined };
+  await cfg.kv.put(`dir:${u}`, JSON.stringify(e));
+  // Vor- und Nachname einzeln suchbar machen
+  if (e.name) for (const part of norm(e.name).split(" ").slice(0, 4)) if (part.length > 1) await cfg.kv.put(`dirn:${part}:${u}`, u);
+  return c.json({ visible: true });
+});
+
+app.get("/api/dir/me", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ visible: false });
+  return c.json({ visible: Boolean(await cfg.kv.get(`dir:${s.username.toLowerCase()}`)) });
+});
+
+app.get("/api/dir/search", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ results: [] }, 401);
+  const q = norm(c.req.query("q") ?? "").split(" ")[0] ?? "";
+  if (q.length < 2) return c.json({ results: [] });
+  const me = s.username.toLowerCase();
+  const [byUser, byName] = await Promise.all([cfg.kv.list({ prefix: `dir:${q}` }), cfg.kv.list({ prefix: `dirn:${q}` })]);
+  const names = [...new Set([...byUser.keys.map((k) => k.name.slice(4)), ...byName.keys.map((k) => k.name.split(":")[2])])].filter((u) => u && u !== me).slice(0, 8);
+  const results = (await Promise.all(names.map(async (u) => JSON.parse((await cfg.kv.get(`dir:${u}`)) ?? "null") as DirEntry | null))).filter(Boolean);
+  return c.json({ results });
+});

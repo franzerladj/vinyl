@@ -30,6 +30,12 @@ module.exports = async function install(page) {
     if (p === "/api/push/status") return json({ available: true, devices: 0, prefs: null });
     if (p === "/api/push/friend-added") return json({ ok: true, status: "wartet" });
     if (p.startsWith("/api/push/")) return json({ ok: true });
+    if (p === "/api/dir/search") {
+      const q = (url.searchParams.get("q") || "").toLowerCase();
+      const all = [{ username: "kumpel", name: "Max Kumpel", location: "Bayreuth", records: 320 }, { username: "deepdigger", name: "Lena Groove", location: "Leipzig", records: 812 }, { username: "maxbeats", name: "Max Beat", location: "Berlin", records: 95 }];
+      return json({ results: all.filter((x) => x.username.startsWith(q) || x.name.toLowerCase().split(" ").some((w) => w.startsWith(q))) });
+    }
+    if (p === "/api/dir/me") return json({ visible: false });
     const um = p.match(/\/users\/([^/]+)(\/.*)?$/);
     if (um && um[1] !== "franzerladj") {
       const u = decodeURIComponent(um[1]);

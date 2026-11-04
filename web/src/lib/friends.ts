@@ -163,7 +163,73 @@ export async function refreshMyProfile(maxAgeHours = 24): Promise<MyProfile | nu
   const p = await discogs<Profile>(`/users/${encodeURIComponent(me)}`, { background: true });
   const prof: MyProfile = { avatar: p.avatar_url || undefined, name: p.name || undefined, location: p.location || undefined, fetchedAt: Date.now() };
   await setKV("myProfile", prof);
+  // Eintrag im Crate-Verzeichnis aktuell halten (Bild, Name, Ort)
+  if (await getKV("discoverable", false)) void setDiscoverable(true, prof).catch(() => undefined);
   return prof;
+}
+
+// ---------------------------------------------------------------------------
+// Freunde finden: Crate-Verzeichnis (freiwillig), exakter Discogs-Name, Lieblingshändler
+// ---------------------------------------------------------------------------
+export interface PersonHit {
+  username: string;
+  name?: string;
+  avatar?: string;
+  location?: string;
+  records?: number;
+  source: "crate" | "discogs" | "seller";
+}
+
+export async function setDiscoverable(visible: boolean, prof?: MyProfile | null) {
+  const p = prof ?? (await getKV<MyProfile | null>("myProfile", null));
+  const records = await db.collection.count();
+  const r = await fetch("/api/dir/me", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ visible, name: p?.name, avatar: p?.avatar, location: p?.location, records }) });
+  if (!r.ok) throw new Error("Konnte nicht gespeichert werden");
+  await setKV("discoverable", visible);
+}
+
+export async function isDiscoverable(): Promise<boolean> {
+  const r = await fetch("/api/dir/me", { credentials: "include" }).then((x) => x.json() as Promise<{ visible: boolean }>).catch(() => null);
+  if (r) await setKV("discoverable", r.visible);
+  return r?.visible ?? (await getKV("discoverable", false));
+}
+
+const exactCache = new Map<string, PersonHit | null>();
+
+/** Vorschläge beim Tippen: Crate-Nutzer, dann exakter Discogs-Name, dazu passende Lieblingshändler */
+export async function searchPeople(raw: string, onUpdate: (hits: PersonHit[]) => void) {
+  const q = raw.trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?discogs\.com\/([a-z]{2}\/)?(user|seller)\//, "").replace(/\/.*$/, "");
+  if (q.length < 2) return onUpdate([]);
+  const me = username().toLowerCase();
+  const known = new Set((await db.friends.toArray()).map((f) => f.username.toLowerCase()));
+  const sellers: PersonHit[] = (await db.sellers.toArray()).filter((s) => s.name.toLowerCase().includes(q.toLowerCase())).slice(0, 3).map((s) => ({ username: s.name, source: "seller" }));
+  const crate = await fetch(`/api/dir/search?q=${encodeURIComponent(q)}`, { credentials: "include" })
+    .then((r) => r.json() as Promise<{ results: Omit<PersonHit, "source">[] }>)
+    .then((j) => j.results.map((x) => ({ ...x, source: "crate" as const })))
+    .catch(() => [] as PersonHit[]);
+  const merge = (list: PersonHit[]) => {
+    const seen = new Set<string>();
+    return list.filter((h) => {
+      const k = h.username.toLowerCase();
+      if (seen.has(k) || k === me || known.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  };
+  onUpdate(merge([...crate, ...sellers]));
+  // Exakter Discogs-Name (Discogs hat keine Personensuche, nur Profile per Name)
+  if (q.length < 3 || !/^[\w.\-]+$/.test(q)) return;
+  let exact = exactCache.get(q.toLowerCase());
+  if (exact === undefined) {
+    try {
+      const p = await discogs<Profile>(`/users/${encodeURIComponent(q)}`);
+      exact = { username: p.username, name: p.name || undefined, avatar: p.avatar_url || undefined, location: p.location || undefined, records: p.num_collection ?? undefined, source: "discogs" };
+    } catch {
+      exact = null;
+    }
+    exactCache.set(q.toLowerCase(), exact);
+  }
+  if (exact) onUpdate(merge([exact, ...crate, ...sellers]));
 }
 
 // ---------------------------------------------------------------------------

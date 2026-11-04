@@ -3,6 +3,8 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
 import { notifyFriendAdded } from "../lib/push";
+import { isDiscoverable, searchPeople, setDiscoverable, type PersonHit } from "../lib/friends";
+import { Switch } from "../components/ui";
 import { addFriend, collectionUrl, friendFeed, friendMatches, inviteLink, lentRecords, messageUrl, profileUrl, removeFriend, syncFriend, tasteMatch, type FriendMatch } from "../lib/friends";
 import { toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, RecordRow, Seg, SkeletonRows, useDebounced } from "../components/bits";
@@ -20,6 +22,21 @@ function FriendList() {
   const me = useStore((s) => s.me);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [hits, setHits] = useState<PersonHit[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [visible, setVisible] = useState<boolean | null>(null);
+  const dq = useDebounced(name, 350);
+  useEffect(() => {
+    void isDiscoverable().then(setVisible);
+  }, []);
+  useEffect(() => {
+    let alive = true;
+    setSearching(dq.trim().length >= 2);
+    void searchPeople(dq, (h) => alive && setHits(h)).finally(() => alive && setSearching(false));
+    return () => {
+      alive = false;
+    };
+  }, [dq]);
 
   const friends = useLiveQuery(async () => {
     const list = await db.friends.orderBy("addedAt").reverse().toArray();
@@ -102,6 +119,41 @@ function FriendList() {
             <IconPlus />
           </button>
         </form>
+
+        {name.trim().length >= 2 && (
+          <div className="group people-hits" role="listbox" aria-label="Vorschläge">
+            {hits.map((h) => (
+              <button key={h.username} className="people-hit press" role="option" aria-selected={false} disabled={busy} onClick={() => add(h.username)}>
+                <Avatar src={h.avatar} name={h.username} size={40} />
+                <span className="people-main">
+                  <b>{h.name || h.username}</b>
+                  <small>
+                    {[h.name ? h.username : null, h.location, h.records ? `${h.records} Platten` : null].filter(Boolean).join(" · ")}
+                    {h.source === "crate" ? <em>auf Crate</em> : h.source === "seller" ? <em>Lieblingshändler</em> : <em>Discogs-Profil</em>}
+                  </small>
+                </span>
+                <span className="people-add">
+                  <IconPlus />
+                </span>
+              </button>
+            ))}
+            {!hits.length && (
+              <div className="people-empty sub">
+                {searching ? "Suche …" : "Niemand gefunden. Den genauen Discogs-Namen eingeben oder die Einladung schicken."}
+              </div>
+            )}
+          </div>
+        )}
+
+        {visible === false && !name && (
+          <div className="card row" style={{ gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b>Für Kumpels auffindbar sein</b>
+              <div className="sub">Dann finden dich andere Crate-Nutzer über die Suche, mit Name, Ort und Profilbild von Discogs.</div>
+            </div>
+            <Switch checked={false} label="Für Kumpels auffindbar" onChange={() => setDiscoverable(true).then(() => (setVisible(true), toast("Du bist jetzt auffindbar")), (e) => toast(e.message))} />
+          </div>
+        )}
 
         {friends?.length ? (
           <div className="list rise">
@@ -190,6 +242,15 @@ function FriendList() {
             Privatsphäre bei Discogs öffnen ↗
           </a>
         </div>
+        {visible && (
+          <div className="card row" style={{ gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b>Für Kumpels auffindbar</b>
+              <div className="sub">Andere Crate-Nutzer finden dich über die Suche.</div>
+            </div>
+            <Switch checked label="Für Kumpels auffindbar" onChange={() => setDiscoverable(false).then(() => (setVisible(false), toast("Du bist nicht mehr auffindbar")), (e) => toast(e.message))} />
+          </div>
+        )}
       </div>
     </>
   );

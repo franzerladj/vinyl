@@ -713,3 +713,15 @@ details > summary::after { float: none; position: absolute; right: 0; top: 50%; 
 .nobpm-row b { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nobpm-row small { font-size: 12.5px; color: var(--text-2); }
 .nobpm-row .chev { color: var(--text-3); font-size: 20px; }
+
+/* Freunde: Vorschläge beim Tippen */
+.people-hits { overflow: hidden; animation: pop 0.35s var(--spring) both; }
+.people-hit { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 14px; border: 0; background: none; color: var(--text); text-align: left; font: inherit; cursor: pointer; }
+.people-hit + .people-hit { border-top: 0.5px solid var(--hairline); }
+.people-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.people-main b { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.people-main small { font-size: 13px; color: var(--text-2); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.people-main em { font-style: normal; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); }
+.people-add { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; flex: none; }
+.people-add svg { width: 18px; height: 18px; }
+.people-empty { padding: 14px; }
