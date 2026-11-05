@@ -851,3 +851,5 @@ button.transition::before { display: none; }
 button.transition .dot { flex: none; }
 button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: right; max-width: none; }
 .app:has(.live) .nav, .app:has(.live) .topbar, .app:has(.live) .jobs, .app:has(.live) .navbar { display: none; }
+.share-preview { display: grid; place-items: center; min-height: 320px; }
+.share-preview img { height: min(56dvh, 520px); aspect-ratio: 9 / 16; border-radius: 18px; box-shadow: var(--shadow); object-fit: cover; }

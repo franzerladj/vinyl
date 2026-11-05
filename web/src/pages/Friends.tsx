@@ -6,7 +6,11 @@ import { notifyFriendAdded } from "../lib/push";
 import { isDiscoverable, searchPeople, setDiscoverable, type PersonHit } from "../lib/friends";
 import { Switch } from "../components/ui";
 import { ProfileHeader } from "../components/ProfileCard";
-import { loadProfile } from "../lib/profile";
+import { ShareCardSheet } from "../components/ShareCard";
+import { renderProfileCard } from "../lib/shareCard";
+import { getKV } from "../lib/db";
+import type { MyProfile } from "../lib/friends";
+import { loadMyProfile, loadProfile } from "../lib/profile";
 import type { CrateProfile } from "../../../shared/profile";
 import { addFriend, collectionUrl, friendFeed, friendMatches, inviteLink, lentRecords, messageUrl, profileUrl, removeFriend, syncFriend, tasteMatch, type FriendMatch } from "../lib/friends";
 import { toast, useStore } from "../lib/store";
@@ -29,6 +33,7 @@ function FriendList() {
   const [hits, setHits] = useState<PersonHit[]>([]);
   const [searching, setSearching] = useState(false);
   const [visible, setVisible] = useState<boolean | null>(null);
+  const [card, setCard] = useState(false);
   const dq = useDebounced(name, 350);
   useEffect(() => {
     void isDiscoverable().then(setVisible);
@@ -192,11 +197,27 @@ function FriendList() {
           <SkeletonRows n={3} />
         )}
 
-        {friends && friends.length > 0 && (
-          <button className="btn block tinted" onClick={share}>
-            <IconShare /> Freunde einladen
+        <div className="row" style={{ gap: 8 }}>
+          {friends && friends.length > 0 && (
+            <button className="btn tinted" style={{ flex: 1 }} onClick={share}>
+              <IconShare /> Freunde einladen
+            </button>
+          )}
+          <button className="btn" style={{ flex: 1 }} onClick={() => setCard(true)}>
+            Profil als Story
           </button>
-        )}
+        </div>
+        <ShareCardSheet
+          open={card}
+          onClose={() => setCard(false)}
+          title="Dein Profil als Story"
+          filename={`crate-${me?.username ?? "profil"}.png`}
+          text={`Folg mir auf Crate: ${inviteLink()}`}
+          make={async () => {
+            const [mine, disc, records] = await Promise.all([loadMyProfile(), getKV<MyProfile | null>("myProfile", null), db.collection.count()]);
+            return renderProfileCard({ username: me?.username ?? "", name: disc?.name, avatar: disc?.avatar, location: disc?.location, profile: mine, records, inviteUrl: inviteLink() });
+          }}
+        />
 
         {lent && lent.length > 0 && (
           <>

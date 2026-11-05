@@ -16,6 +16,9 @@ import type { MyProfile } from "../lib/friends";
 import { NavBar, Switch } from "../components/ui";
 import { ShippingEditor } from "../components/ShippingEditor";
 import { ProfileHeader } from "../components/ProfileCard";
+import { ShareCardSheet } from "../components/ShareCard";
+import { renderProfileCard } from "../lib/shareCard";
+import { inviteLink } from "../lib/friends";
 import { loadMyProfile, saveMyProfile } from "../lib/profile";
 import { linkText, LINK_LABEL, parseLink, sanitizeProfile, type CrateProfile } from "../../../shared/profile";
 import { DEFAULT_PREFS, disablePush, enablePush, isIOS, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs } from "../lib/push";
@@ -802,6 +805,8 @@ function ProfileEditPage() {
   const [linkIn, setLinkIn] = useState("");
   const [q, setQ] = useState("");
   const [saving, setSaving] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const records = useLiveQuery(() => db.collection.count(), [], 0);
   useEffect(() => {
     void loadMyProfile().then((x) => {
       if (x) setP(x);
@@ -1014,6 +1019,17 @@ function ProfileEditPage() {
         <button className="btn primary block" onClick={save} disabled={saving || !loaded}>
           {saving ? "Speichert …" : "Profil speichern"}
         </button>
+        <button className="btn block" onClick={() => setSharing(true)} disabled={!loaded}>
+          Als Story teilen
+        </button>
+        <ShareCardSheet
+          open={sharing}
+          onClose={() => setSharing(false)}
+          title="Dein Profil als Story"
+          filename={`crate-${me?.username ?? "profil"}.png`}
+          text={`Folg mir auf Crate: ${inviteLink()}`}
+          make={() => renderProfileCard({ username: me?.username ?? "", name: discogs?.name, avatar: discogs?.avatar, location: discogs?.location, profile: sanitizeProfile(p), records, inviteUrl: inviteLink() })}
+        />
         <p className="tiny" style={{ textAlign: "center" }}>Sichtbar für angemeldete Crate-Nutzer, die dich als Freund hinzufügen. In der Suche erscheinst du nur, wenn du auf der Freunde-Seite „Für Freunde auffindbar“ eingeschaltet hast.</p>
       </div>
     </>

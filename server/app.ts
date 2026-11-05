@@ -577,3 +577,21 @@ app.get("/api/profile/:u", async (c) => {
   if (!/^[\w.\-]{2,40}$/.test(u)) return c.json({ profile: null });
   return c.json({ profile: JSON.parse((await cfg.kv.get(profKey(u))) ?? "null") });
 });
+
+// ---------- Bilder für Teilen-Karten ----------
+// Discogs-Cover haben keine CORS-Freigabe; zum Zeichnen auf ein Canvas reicht der Server sie durch.
+// Nur Discogs-Bildserver, damit das kein offener Proxy ist.
+app.get("/api/img", async (c) => {
+  const u = c.req.query("u") ?? "";
+  let url: URL;
+  try {
+    url = new URL(u);
+  } catch {
+    return c.text("ungültig", 400);
+  }
+  if (url.protocol !== "https:" || !/^(i|st|img)\.discogs\.com$/.test(url.hostname)) return c.text("nicht erlaubt", 403);
+  const r = await fetch(url.toString(), { headers: { "User-Agent": c.var.cfg.userAgent } });
+  const type = r.headers.get("Content-Type") ?? "";
+  if (!r.ok || !type.startsWith("image/")) return c.text("Bild nicht ladbar", 502);
+  return new Response(r.body, { headers: { "Content-Type": type, "Cache-Control": "public, max-age=604800", "Access-Control-Allow-Origin": "*" } });
+});

@@ -4,7 +4,9 @@ import { MenuSheet, NavBar } from "../components/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, type DJSet, type Release, type TrackMeta } from "../lib/db";
+import { db, getKV, type DJSet, type Release, type TrackMeta } from "../lib/db";
+import { ShareCardSheet } from "../components/ShareCard";
+import { renderSetCard } from "../lib/shareCard";
 import { toast } from "../lib/store";
 import { Cover, haptic, Seg, Sheet } from "../components/bits";
 import { IconPlay, IconPlus, IconX } from "../components/icons";
@@ -46,6 +48,9 @@ export default function SetEditor() {
   const [live, setLive] = useState(false);
   const [wide, setWide] = useState(false);
   const [playing, setPlaying] = useState<string | null>(null);
+  const [shareMenu, setShareMenu] = useState(false);
+  const [card, setCard] = useState(false);
+  const djName = useLiveQuery(async () => (await getKV<{ djName?: string } | null>("crateProfile:me", null))?.djName ?? (await getKV<{ name?: string } | null>("myProfile", null))?.name);
   const audio = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
@@ -234,7 +239,7 @@ export default function SetEditor() {
               <button className="btn small primary" onClick={() => setLive(true)}>
                 <IconPlay /> Live-Modus
               </button>
-              <button className="btn small" onClick={share}>
+              <button className="btn small" onClick={() => setShareMenu(true)}>
                 Teilen
               </button>
               <button className="btn small ghost" onClick={() => setAuto(true)}>
@@ -376,6 +381,33 @@ export default function SetEditor() {
           />
         )}
       </Sheet>
+
+      <MenuSheet
+        open={shareMenu}
+        onClose={() => setShareMenu(false)}
+        title="Set teilen"
+        items={[
+          { label: "Als Story-Bild (Instagram)", onClick: () => (setShareMenu(false), setCard(true)) },
+          { label: "Als Text (Tracklist)", onClick: () => (setShareMenu(false), void share()) },
+        ]}
+      />
+      <ShareCardSheet
+        open={card}
+        onClose={() => setCard(false)}
+        title="Set als Story"
+        filename={`crate-set-${(set.name || "set").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`}
+        text={set.name}
+        make={() =>
+          renderSetCard({
+            name: set.name || "Mein Set",
+            date: set.date,
+            venue: set.venue,
+            dj: djName ?? undefined,
+            tracks: tracks.map((t) => ({ title: t.title, artist: t.artist, bpm: t.bpm, key: t.key, cover: data?.rels.get(t.releaseId)?.cover || data?.rels.get(t.releaseId)?.thumb })),
+            stats: [`${tracks.length} Tracks`, stats.minBpm ? `${Math.round(stats.minBpm)}–${Math.round(stats.maxBpm!)} BPM` : null, stats.known ? `${stats.harmonic}/${stats.known} harmonisch` : null].filter(Boolean).join("  ·  "),
+          })
+        }
+      />
 
       {live && (
         <LiveMode
