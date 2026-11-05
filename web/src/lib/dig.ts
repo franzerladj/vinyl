@@ -3,7 +3,8 @@
 import { discogs } from "./api";
 import { db, getKV, setKV } from "./db";
 import type { SearchResult } from "./types";
-import { emptyWeights, learn, mix, splitTitle, top, type DigAction, type DigCard, type DigSource, type DigWeights } from "../../../shared/dig";
+import { currency } from "./sync";
+import { decadeLabel, decadeYears, emptyWeights, inDecade, learn, mix, splitTitle, top, type DigAction, type DigCard, type DigSource, type DigWeights } from "../../../shared/dig";
 
 const FALLBACK_STYLES = ["Deep House", "Disco", "Soul", "Jazz-Funk", "Techno", "Boogie", "House", "Funk"];
 const SEEN_MAX = 4000;
@@ -95,6 +96,10 @@ async function friendCards(): Promise<DigCard[]> {
 
 export interface DigFilter {
   style?: string;
+  /** z. B. 1990 für die 90er */
+  decade?: number;
+  /** Höchstpreis in der eigenen Währung (günstigstes Angebot) */
+  maxPrice?: number;
 }
 
 /** Neue Runde Karten aus allen Quellen holen und mischen */
@@ -105,19 +110,26 @@ export async function buildQueue(f: DigFilter = {}, exclude: Set<number> = new S
   const styles = f.style ? [f.style] : myStyles.length ? myStyles : FALLBACK_STYLES;
   const [s1, s2, s3] = pick(styles, 3).concat(pick(FALLBACK_STYLES, 3));
   const year = new Date().getFullYear();
-  const jobs: Promise<DigCard[]>[] = [
-    search(`style=${enc(s1)}&year=${year}`, "new", `Neu in ${s1}`),
-    search(`style=${enc(s1)}&year=${year - 1}`, "new", `Neu in ${s1}`),
-    search(`style=${enc(s2)}&page=${1 + Math.floor(Math.random() * 5)}`, "rare", `Gesucht in ${s2}`).then((cs) =>
-      cs.filter((c) => (c.want ?? 0) > 50 && (c.want ?? 0) / Math.max(1, c.have ?? 0) > 1.2),
-    ),
-    search(`style=${enc(s3)}&page=${1 + Math.floor(Math.random() * 20)}`, "random", `Zufallsfund ${s3}`),
-  ];
-  if (!f.style) {
-    for (const l of pick(top(w.label, 10), 2)) jobs.push(search(`label=${enc(l)}`, "foryou", `Mehr von ${l}`));
-    for (const a of pick(top(w.artist, 10), 1)) jobs.push(search(`artist=${enc(a)}`, "foryou", `Mehr von ${a}`));
-    jobs.push(friendCards());
-  }
+  const dec = f.decade;
+  const ys = dec ? decadeYears(dec, 4) : [];
+  const yearParam = (i: number) => (dec ? `&year=${ys[i % ys.length]}` : "");
+  const jobs: Promise<DigCard[]>[] = dec
+    ? [
+        search(`style=${enc(s1)}${yearParam(0)}`, "random", `${s1} aus den ${decadeLabel(dec)}`),
+        search(`style=${enc(s1)}${yearParam(1)}&page=2`, "random", `${s1} aus den ${decadeLabel(dec)}`),
+        search(`style=${enc(s2)}${yearParam(2)}&page=${1 + Math.floor(Math.random() * 3)}`, "rare", `Gesucht in ${s2}`).then((cs) =>
+          cs.filter((c) => (c.want ?? 0) > 30 && (c.want ?? 0) / Math.max(1, c.have ?? 0) > 1),
+        ),
+        search(`style=${enc(s3)}${yearParam(3)}&page=${1 + Math.floor(Math.random() * 5)}`, "random", `Zufallsfund ${s3}`),
+      ]
+    : [
+        search(`style=${enc(s1)}&year=${year}`, "new", `Neu in ${s1}`),
+        search(`style=${enc(s1)}&year=${year - 1}`, "new", `Neu in ${s1}`),
+        search(`style=${enc(s2)}&page=${1 + Math.floor(Math.random() * 5)}`, "rare", `Gesucht in ${s2}`).then((cs) =>
+          cs.filter((c) => (c.want ?? 0) > 50 && (c.want ?? 0) / Math.max(1, c.have ?? 0) > 1.2),
+        ),
+        search(`style=${enc(s3)}&page=${1 + Math.floor(Math.random() * 20)}`, "random", `Zufallsfund ${s3}`),
+      ];
   const sources = await Promise.all(jobs);
   const [owned, wanted, skipped] = await Promise.all([
     db.collection.toArray().then((c) => c.map((x) => x.releaseId)),
@@ -126,7 +138,8 @@ export async function buildQueue(f: DigFilter = {}, exclude: Set<number> = new S
   ]);
   const ex = new Set([...exclude, ...owned, ...wanted, ...skipped]);
   // Style-Filter: auch Label- und Freunde-Karten müssen passen
-  const filtered = f.style ? sources.map((s) => s.filter((c) => c.styles.includes(f.style!))) : sources;
+  // Jahrzehnt: auch Label-, Artist- und Freunde-Karten müssen passen
+  const filtered = sources.map((s) => s.filter((c) => (!f.style || c.styles.includes(f.style)) && inDecade(c.year, f.decade)));
   return mix(filtered, w, ex);
 }
 
@@ -143,6 +156,10 @@ export async function moreLike(c: DigCard, exclude: Set<number>): Promise<DigCar
 export interface DigDetail {
   tracks: { position: string; title: string; duration?: string }[];
   video?: string;
+  /** Günstigstes Angebot in der eigenen Währung, null = keins */
+  lowest?: number | null;
+  forSale?: number;
+  currency?: string;
 }
 
 const details = new Map<number, Promise<DigDetail>>();
@@ -151,8 +168,14 @@ const details = new Map<number, Promise<DigDetail>>();
 export function digDetail(id: number): Promise<DigDetail> {
   let p = details.get(id);
   if (!p) {
-    p = discogs<{ tracklist?: { position: string; title: string; duration?: string; type_?: string }[]; videos?: { uri: string }[] }>(`/releases/${id}`)
-      .then((r) => ({
+    p = currency()
+      .then((cur) =>
+        discogs<{ tracklist?: { position: string; title: string; duration?: string; type_?: string }[]; videos?: { uri: string }[]; lowest_price?: number | null; num_for_sale?: number }>(`/releases/${id}?curr_abbr=${cur}`).then((r) => ({ r, cur })),
+      )
+      .then(({ r, cur }) => ({
+        lowest: r.lowest_price ?? null,
+        forSale: r.num_for_sale ?? 0,
+        currency: cur,
         tracks: (r.tracklist ?? []).filter((t) => !t.type_ || t.type_ === "track"),
         video: r.videos?.map((v) => v.uri.match(/[?&]v=([\w-]{11})/)?.[1]).find(Boolean),
       }))

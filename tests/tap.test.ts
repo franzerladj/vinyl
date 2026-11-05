@@ -30,4 +30,19 @@ describe("Tap-Tempo", () => {
   it("braucht mindestens drei Tipps", () => {
     expect(estimateTapTempo([0, 500])).toBeNull();
   });
+  it("pendelt sich bei langem Tippen ein und meldet kein Abdriften", () => {
+    const r = estimateTapTempo(taps(124, 48, 30, 7))!;
+    expect(Math.abs(r.bpm - 124)).toBeLessThan(0.2);
+    expect(r.drift).toBe(0);
+  });
+  it("erkennt, wenn man langsamer wird", () => {
+    // von 124 auf 119 BPM abgerutscht
+    const t: number[] = [];
+    let at = 1000;
+    for (let i = 0; i < 32; i++) {
+      t.push(at);
+      at += 60000 / (124 - (i * 5) / 31);
+    }
+    expect(estimateTapTempo(t)!.drift).toBe(-1);
+  });
 });

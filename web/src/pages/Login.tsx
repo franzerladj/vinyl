@@ -96,7 +96,16 @@ export function LoginFinish({ token, verifier }: { token: string; verifier: stri
   useEffect(() => {
     completeLogin(token, verifier, setText)
       .then(() => {
-        history.replaceState(null, "", "/");
+        // Zurück dorthin, wo ein geteilter Link hinwollte (Freund hinzufügen, Set übernehmen)
+        let back = "/";
+        try {
+          const saved = sessionStorage.getItem("crate:after");
+          sessionStorage.removeItem("crate:after");
+          if (saved?.startsWith("/") && !saved.startsWith("//")) back = saved;
+        } catch {
+          /* egal */
+        }
+        history.replaceState(null, "", back);
         location.reload();
       })
       .catch((e: Error) => setError(e.message));

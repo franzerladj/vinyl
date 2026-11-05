@@ -15,7 +15,7 @@ for (let id = 1; id <= 100; id++) {
   R[id] = { id, title: t, year: 1986 + (id * 3) % 38, thumb: id % 11 === 0 ? "" : img(COLORS[id % COLORS.length]), cover_image: id % 11 === 0 ? "" : img(COLORS[id % COLORS.length]),
     artists: [{ name: a }], labels: [{ name: LABELS[id % LABELS.length], catno: `${LABELS[id % LABELS.length].slice(0, 3).toUpperCase()}${100 + id}` }],
     formats: [{ name: "Vinyl", qty: "1", descriptions: ["12\"", id % 2 ? "33 ⅓ RPM" : "45 RPM"] }], genres: ["Electronic"], styles: STYLES[id % STYLES.length], country: ["US", "UK", "Germany", "Japan"][id % 4], uri: "",
-    tracklist: tracks, videos: [{ uri: `https://www.youtube.com/watch?v=${String(id).padStart(11, "x")}`, title: `${a} - ${t}`, duration: 360 }], community: { have: 100 + id * 37, want: 200 + ((id * 97) % 900) } };
+    tracklist: tracks, videos: [{ uri: `https://www.youtube.com/watch?v=${String(id).padStart(11, "x")}`, title: `${a} - ${t}`, duration: 360 }], community: { have: 100 + id * 37, want: 200 + ((id * 97) % 900) }, lowest_price: id % 7 === 0 ? null : 6 + ((id * 17) % 60), num_for_sale: id % 7 === 0 ? 0 : (id * 5) % 40 };
 }
 const basic = (r) => ({ id: r.id, title: r.title, year: r.year, thumb: r.thumb, cover_image: r.cover_image, artists: r.artists, labels: r.labels, formats: r.formats, genres: r.genres, styles: r.styles });
 const COLL = Array.from({ length: 45 }, (_, i) => i + 1);

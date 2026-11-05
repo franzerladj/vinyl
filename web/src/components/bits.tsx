@@ -238,8 +238,10 @@ export function TapTempo({ onBpm }: { onBpm: (bpm: number) => void }) {
       const last = taps.current.at(-1);
       if (!r || last == null || r.taps < 4 || !ring.current) return;
       const period = 60000 / r.bpm;
+      // Erst blinken, wenn nicht mehr getippt wird. Während des Tippens würde man sonst
+      // unbewusst dem Blinken folgen statt der Musik, und das Tempo rutscht nach unten.
       const beat = Math.floor((performance.now() - last) / period);
-      if (beat !== lastBeat && beat >= 1) {
+      if (beat !== lastBeat && beat >= 2) {
         lastBeat = beat;
         ring.current.classList.remove("beat");
         void ring.current.offsetWidth;
@@ -260,7 +262,7 @@ export function TapTempo({ onBpm }: { onBpm: (bpm: number) => void }) {
   const n = res?.taps ?? taps.current.length;
   // Genauigkeit als Fortschritt: ±3 BPM = leer, ±0,3 BPM = voll
   const quality = err == null || n < 4 ? Math.min(0.25, n * 0.06) : Math.max(0.08, Math.min(1, (3 - err) / 2.7));
-  const status = !res || n < 4 ? `Im Takt tippen${n ? ` (${n})` : ""}` : err! > 1.5 ? "Weiter tippen …" : err! > 0.5 ? "Fast genau" : "Genau";
+  const status = !res || n < 4 ? `Im Takt tippen${n ? ` (${n})` : ""}` : res.drift ? (res.drift < 0 ? "Du wirst langsamer" : "Du wirst schneller") : err! > 1.5 ? "Weiter tippen …" : err! > 0.5 ? "Fast genau" : "Genau";
 
   return (
     <div className="tap card">

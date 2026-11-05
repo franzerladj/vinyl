@@ -30,6 +30,10 @@ Wichtige Eigenheiten:
 - BPM: Deezer-Album-Matching (`server/audio.ts`, `POST /api/audio/release`, Artist wird getrennt geprüft), dann Einzelsuche, dann Analyse der Hörprobe im Web Worker (`shared/audioAnalysis.ts`, Bassdrum-Band + Kammfilter, Style als Tempo-Hinweis). Gemessen an echten Hörproben: rund 95 % richtig. Keys: nur Analyse (Schätzung) oder GetSongBPM. AcousticBrainz liefert für typische Platten nichts.
 - Hörproben laufen über den Server (`/api/audio/preview`). iOS: Ton nur nach Tippen, deshalb ein einziges Audio-Element wiederverwenden.
 - Schriften selbst gehostet (`@fontsource-variable/*`), YouTube erst nach Antippen (DSGVO).
+- Sets teilen: das ganze Set steckt im Link (`/sets/shared#…`, `shared/setShare.ts`), nichts auf dem Server. Empfänger sieht, welche Platten er hat, und übernimmt die spielbaren Tracks. Nach dem Login führt `crate:after` (sessionStorage) zum Link zurück.
+- Kisten-Vorlagen: KV `crateTemplates` (`web/src/lib/crateTemplates.ts`). Set-Verlauf: `web/src/lib/setHistory.ts`. Cue-Punkte: `TrackMeta.cueIn/cueOut`.
+- Teilen-Karten (Story 1080×1920): `web/src/lib/shareCard.ts`, Discogs-Bilder über `/api/img` (CORS).
+- Tap-Tempo (`shared/tap.ts`): Regression über alle Tipps, erkennt Abdriften. Der Ring blinkt erst nach dem Tippen, sonst folgt man dem Blinken statt der Musik.
 - Push-Mitteilungen: `server/push.ts` (VAPID + aes128gcm selbst gebaut, getestet in `tests/push.test.ts`), Routen `/api/push/*` in `server/app.ts`, Client `web/src/lib/push.ts`, Service Worker `web/public/push-sw.js` (per `importScripts`). Speicher: KV-Binding `PUSH` (Namespace `crate-push`). Zeitplan: Worker `crate-cron` (`workers/cron/`, alle 10 Minuten; holt `/api/push/users` und ruft pro Nutzer `/api/push/run?u=` mit `X-Cron-Secret`, je eigener Aufruf mit ~45 Unteranfragen). Wants ohne Angebot oder mit Wunschpreis werden bevorzugt geprüft (`pickWants`), KV nur bei Änderungen beschreiben (Schreib-Kontingent). Öffentlicher VAPID-Schlüssel in `shared/pushKey.ts`, privater als Secret `VAPID_PRIVATE_JWK`. Server-Daten nur für Nutzer mit eingeschalteten Mitteilungen, beim Ausschalten gelöscht. iPhone: nur als Home-Bildschirm-App.
 
 ## Befehle
@@ -57,6 +61,8 @@ node tools/e2e/nobpm.cjs    # Beschriften: Platten ohne Tempo
 node tools/e2e/setgen.cjs   # Set erzeugen: ein Track pro Platte, nie hintereinander
 node tools/e2e/curate.cjs   # Set kuratieren: Kiste, Vorschläge, Notiz, Ziehen, Live-Modus
 node tools/e2e/history.cjs  # Set-Verlauf: „gespielt vor … im …“ bei Vorschlägen
+node tools/e2e/share.cjs    # Kisten-Vorlagen, Set per Link teilen und übernehmen
+node tools/e2e/feed.cjs     # Feed: Filter Jahrzehnt/Preis, Wischen nach links
 node tools/e2e/sharecard.cjs # Teilen-Karten (Profil, Set) als PNG erzeugen
 node tools/e2e/wrap.cjs     # Umbruch-Audit aller Seiten (320/375/390 px, hell/dunkel; SHOTS=1 für Screenshots)
 ```
@@ -79,6 +85,6 @@ Gesetzte Secrets in Cloudflare (nur Namen): `DISCOGS_CONSUMER_KEY`, `DISCOGS_CON
 
 - `GETSONGBPM_API_KEY` eintragen, sobald Franz ihn hat. Dann Keys-Abdeckung prüfen.
 - Impressum/Datenschutz: Anschrift in `web/src/pages/Legal.tsx` (`OPERATOR`) ausfüllen.
-- Feed: Wischen nach links als Geste, Filter Preis/Jahrzehnt/Format, Position merken.
+- Feed: Filter Format, Position merken.
 - Kamera auf echtem iPhone testen lassen. Nativer Scanner erst mit Capacitor.
 - Store-Screenshots mit echter Sammlung, eigene Domain, Discogs-App umbenennen (siehe `docs/app-store.md`).

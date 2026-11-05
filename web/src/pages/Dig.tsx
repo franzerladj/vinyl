@@ -1,16 +1,16 @@
 // Digging-Feed: eine Platte pro Bildschirm, senkrecht wischen, Hörprobe läuft automatisch.
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { buildQueue, digDetail, loadWeights, markSeen, markSkipped, moreLike, recordAction, type DigDetail } from "../lib/dig";
+import { buildQueue, digDetail, loadWeights, markSeen, markSkipped, moreLike, recordAction, type DigDetail, type DigFilter } from "../lib/dig";
 import { previewUrl } from "../lib/free";
 import { addToCollection, addWant } from "../lib/sync";
-import { discogsSellUrl } from "../lib/format";
+import { discogsSellUrl, money } from "../lib/format";
 import { toast } from "../lib/store";
 import { getKV, setKV } from "../lib/db";
 import { ytConsent } from "../lib/theme";
 import { haptic } from "../components/bits";
-import { IconBack, IconCart, IconHeart, IconPlay, IconPlus, IconShare, IconSparkle, IconX } from "../components/icons";
-import { top, type DigCard } from "../../../shared/dig";
+import { IconBack, IconCart, IconFilter, IconHeart, IconPlay, IconPlus, IconShare, IconSparkle, IconX } from "../components/icons";
+import { DECADES, decadeLabel, passesPrice, top, type DigCard } from "../../../shared/dig";
 import { parseDuration } from "../../../shared/match";
 
 type Audio = "idle" | "loading" | "playing" | "paused" | "none";
@@ -20,7 +20,12 @@ export default function Dig() {
   const [cards, setCards] = useState<DigCard[]>([]);
   const [active, setActive] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [style, setStyle] = useState<string | undefined>();
+  const [filter, setFilter] = useState<DigFilter>({});
+  const style = filter.style;
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [drag, setDrag] = useState<{ id: number; dx: number } | null>(null);
+  const [leaving, setLeaving] = useState<number | null>(null);
+  const touch = useRef<{ x: number; y: number; id: number; horizontal?: boolean } | null>(null);
   const [styles, setStyles] = useState<string[]>([]);
   const [unlocked, setUnlocked] = useState(false);
   const [audioState, setAudioState] = useState<Audio>("idle");
@@ -40,24 +45,26 @@ export default function Dig() {
     void (async () => {
       const w = await loadWeights();
       setStyles(top(w.style, 8));
-      const f = await getKV<{ style?: string }>("digFilter", {});
-      setStyle(f.style);
+      const f = await getKV<DigFilter>("digFilter", {});
+      setFilter(f);
       setCards(await buildQueue(f));
       setLoading(false);
     })();
   }, []);
 
-  const changeStyle = async (s?: string) => {
+  const applyFilter = async (f: DigFilter) => {
     haptic(6);
-    setStyle(s);
+    setFilter(f);
     setLoading(true);
     setCards([]);
     setActive(0);
     feed.current?.scrollTo({ top: 0 });
-    void setKV("digFilter", { style: s });
-    setCards(await buildQueue({ style: s }));
+    void setKV("digFilter", f);
+    setCards(await buildQueue(f));
     setLoading(false);
   };
+  const changeStyle = (s?: string) => applyFilter({ ...filter, style: s });
+  const extraFilters = (filter.decade ? 1 : 0) + (filter.maxPrice ? 1 : 0);
 
   // Aktive Karte über die Scroll-Position bestimmen
   useEffect(() => {
@@ -91,11 +98,15 @@ export default function Dig() {
       if (unlocked) a.play().catch(() => setAudioState("paused"));
       else setAudioState("paused");
     });
-    // Nächste zwei Karten vorladen
-    cards.slice(active + 1, active + 3).forEach((c) => void digDetail(c.id));
+    // Nächste Karten vorladen. Mit Preisgrenze weiter voraus, damit zu teure vorher rausfallen.
+    cards.slice(active + 1, active + (filter.maxPrice ? 6 : 3)).forEach((c) =>
+      void digDetail(c.id).then((d) => {
+        if (filter.maxPrice && d.lowest !== undefined && !passesPrice(d.lowest, filter.maxPrice)) setCards((cs) => cs.filter((x) => x.id !== c.id || cs.indexOf(x) <= active));
+      }),
+    );
     if (cards.length - active < 5 && !loadingMore.current) {
       loadingMore.current = true;
-      buildQueue({ style }, new Set(cards.map((c) => c.id)))
+      buildQueue(filter, new Set(cards.map((c) => c.id)))
         .then((more) => setCards((cs) => [...cs, ...more.filter((m) => !cs.some((c) => c.id === m.id))]))
         .finally(() => (loadingMore.current = false));
     }
@@ -137,8 +148,6 @@ export default function Dig() {
     else if (audioState !== "none") a.play().catch(() => setAudioState("none"));
   };
 
-  const next = () => feed.current?.scrollBy({ top: feed.current.clientHeight, behavior: "smooth" });
-
   const want = async (c: DigCard) => {
     if (wanted.has(c.id)) return;
     haptic(20);
@@ -170,11 +179,39 @@ export default function Dig() {
     }
   };
 
+  /** Weg damit: Karte fliegt nach links raus, die nächste rückt an ihre Stelle */
   const skip = (c: DigCard) => {
     haptic(8);
     void recordAction(c, "skip");
     void markSkipped(c.id);
-    next();
+    setLeaving(c.id);
+    setTimeout(() => {
+      setCards((cs) => cs.filter((x) => x.id !== c.id));
+      setLeaving(null);
+      setDrag(null);
+    }, 260);
+  };
+
+  // Wischen nach links = Weg. Senkrecht scrollt der Feed wie gewohnt.
+  const onTouchStart = (c: DigCard, e: React.TouchEvent) => {
+    const t = e.touches[0];
+    touch.current = { x: t.clientX, y: t.clientY, id: c.id };
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    const s = touch.current;
+    if (!s) return;
+    const t = e.touches[0];
+    const dx = t.clientX - s.x;
+    const dy = t.clientY - s.y;
+    if (s.horizontal === undefined && Math.hypot(dx, dy) > 10) s.horizontal = Math.abs(dx) > Math.abs(dy) * 1.3;
+    if (s.horizontal) setDrag({ id: s.id, dx: Math.min(0, dx) });
+  };
+  const onTouchEnd = (c: DigCard) => {
+    const s = touch.current;
+    touch.current = null;
+    if (!s?.horizontal) return;
+    if ((drag?.dx ?? 0) < -90) skip(c);
+    else setDrag(null);
   };
 
   const more = async (c: DigCard) => {
@@ -223,12 +260,20 @@ export default function Dig() {
         </button>
         <div className="dig-chips">
           {/* Aktiver Filter zuerst, dann „Für dich“ und die Lieblings-Styles */}
+          {extraFilters > 0 && (
+            <button className="dig-chip on" onClick={() => setFilterOpen(true)}>
+              {[filter.decade && decadeLabel(filter.decade), filter.maxPrice && `bis ${filter.maxPrice} €`].filter(Boolean).join(" · ")}
+            </button>
+          )}
           {[...new Set([style ?? "", "", ...styles])].map((s) => (
             <button key={s || "all"} className={`dig-chip${s === (style ?? "") ? " on" : ""}`} onClick={() => changeStyle(s || undefined)}>
               {s || "Für dich"}
             </button>
           ))}
         </div>
+        <button className={`dig-icon${extraFilters ? " on" : ""}`} onClick={() => setFilterOpen(true)} aria-label="Filter">
+          <IconFilter />
+        </button>
       </header>
 
       <div className="dig-feed" ref={feed}>
@@ -244,9 +289,14 @@ export default function Dig() {
           <div className="dig-card">
             <div className="dig-loading">
               Gerade nichts gefunden.
-              <button className="btn primary" onClick={() => changeStyle(style)}>
+              <button className="btn primary" onClick={() => applyFilter(filter)}>
                 Nochmal
               </button>
+              {extraFilters > 0 && (
+                <button className="btn" onClick={() => applyFilter({ style })}>
+                  Filter zurücksetzen
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -254,9 +304,17 @@ export default function Dig() {
           const near = Math.abs(i - active) <= 2;
           const isWanted = wanted.has(c.id);
           return (
-            <section key={c.id} className="dig-card" aria-label={`${c.artist} – ${c.title}`}>
+            <section
+              key={c.id}
+              className={`dig-card${leaving === c.id ? " leaving" : ""}`}
+              aria-label={`${c.artist} – ${c.title}`}
+              onTouchStart={(e) => onTouchStart(c, e)}
+              onTouchMove={onTouchMove}
+              onTouchEnd={() => onTouchEnd(c)}
+            >
               {near && (
-                <>
+                <div className="dig-swipe" style={drag?.id === c.id ? { transform: `translateX(${drag.dx}px) rotate(${drag.dx / 40}deg)`, transition: "none" } : undefined}>
+                  {drag?.id === c.id && <span className="dig-nope" style={{ opacity: Math.min(1, -drag.dx / 90) }}>Weg</span>}
                   <img className="dig-bg" src={c.cover} alt="" />
                   <div className="dig-shade" />
                   <div className="dig-stage" onClick={() => onCardTap(c)}>
@@ -276,6 +334,11 @@ export default function Dig() {
                     <div className="dig-meta">
                       {[c.label, c.catno, c.year, c.country].filter(Boolean).join(" · ")}
                     </div>
+                    {(() => {
+                      const dd = detail.get(c.id);
+                      if (!dd || dd.lowest === undefined) return null;
+                      return <div className="dig-price">{dd.lowest != null ? `ab ${money(dd.lowest, dd.currency)} · ${dd.forSale} ${dd.forSale === 1 ? "Angebot" : "Angebote"}` : "gerade kein Angebot"}</div>;
+                    })()}
                     <div className="dig-tags">
                       {c.styles.slice(0, 3).map((s) => (
                         <span key={s}>{s}</span>
@@ -332,12 +395,47 @@ export default function Dig() {
                       <small>Weg</small>
                     </button>
                   </div>
-                </>
+                </div>
               )}
             </section>
           );
         })}
       </div>
+
+      {filterOpen && (
+        <div className="dig-sheet-bg" onClick={() => setFilterOpen(false)}>
+          <div className="dig-sheet stack" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-grab" />
+            <b style={{ fontSize: 18 }}>Filter</b>
+            <span className="sub">Jahrzehnt</span>
+            <div className="chips">
+              {[undefined, ...DECADES].map((d) => (
+                <button key={d ?? 0} className={`chip ${filter.decade === d ? "on" : ""}`} onClick={() => setFilter({ ...filter, decade: d })}>
+                  {d ? decadeLabel(d) : "Alle"}
+                </button>
+              ))}
+            </div>
+            <span className="sub">Günstigstes Angebot</span>
+            <div className="chips">
+              {[undefined, 10, 20, 40, 80].map((p) => (
+                <button key={p ?? 0} className={`chip ${filter.maxPrice === p ? "on" : ""}`} onClick={() => setFilter({ ...filter, maxPrice: p })}>
+                  {p ? `bis ${p} €` : "Egal"}
+                </button>
+              ))}
+            </div>
+            {filter.maxPrice ? <span className="tiny sub">Platten ohne Angebot oder darüber werden übersprungen.</span> : null}
+            <button
+              className="btn primary block"
+              onClick={() => {
+                setFilterOpen(false);
+                void applyFilter(filter);
+              }}
+            >
+              Anwenden
+            </button>
+          </div>
+        </div>
+      )}
 
       {sheet != null && detail.get(sheet) && (
         <div className="dig-sheet-bg" onClick={() => setSheet(null)}>

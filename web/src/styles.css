@@ -554,7 +554,7 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .dig-top > * { pointer-events: auto; }
 .dig-icon { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; display: grid; place-items: center; color: #fff; background: rgba(0,0,0,.35); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 .dig-icon svg { width: 22px; height: 22px; }
-.dig-chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.dig-chips { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(90deg, #000 85%, transparent); }
 .dig-chips::-webkit-scrollbar { display: none; }
 .dig-chip { flex: none; border: 0; border-radius: 999px; padding: 8px 14px; font: inherit; font-size: 14px; font-weight: 600; color: rgba(255,255,255,.85); background: rgba(0,0,0,.3); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
 .dig-chip.on { background: #fff; color: #000; }
@@ -854,3 +854,23 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .share-preview { display: grid; place-items: center; min-height: 320px; }
 .share-preview img { height: min(56dvh, 520px); aspect-ratio: 9 / 16; border-radius: 18px; box-shadow: var(--shadow); object-fit: cover; }
 .live-cue { margin: 4px 0 0; font-size: 15px; font-weight: 600; color: var(--text-2); }
+
+/* Kisten-Vorlagen */
+.tpl-row { gap: 8px; padding: 6px 0; }
+.tpl-main { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; text-align: left; background: none; border: 0; padding: 8px 0; color: inherit; font: inherit; }
+.tpl-main b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* Geteiltes Set */
+.shared-meter { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.shared-meter span { display: block; height: 100%; border-radius: inherit; background: var(--ok); transition: width 0.6s var(--spring); }
+.shared-num { width: 20px; flex: none; text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; font-size: 13px; }
+.shared-track .badge { flex: none; }
+
+/* Feed: Wischen und Filter */
+.dig-swipe { position: absolute; inset: 0; transition: transform 0.35s var(--spring), opacity 0.25s; will-change: transform; }
+.dig-card { touch-action: pan-y; }
+.dig-card.leaving .dig-swipe { transform: translateX(-120%) rotate(-8deg) !important; opacity: 0; transition: transform 0.26s ease-in, opacity 0.26s !important; }
+.dig-nope { position: absolute; z-index: 3; top: calc(env(safe-area-inset-top) + 76px); right: 20px; padding: 6px 14px; border: 3px solid #ff453a; color: #ff453a; border-radius: 10px; font-weight: 800; font-size: 26px; letter-spacing: 0.04em; transform: rotate(10deg); pointer-events: none; text-transform: uppercase; }
+.dig-price { font-size: 13px; color: rgba(255,255,255,.85); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.dig-icon.on { background: var(--accent); }
+.dig-sheet .chips { flex-wrap: wrap; }

@@ -94,3 +94,30 @@ export function splitTitle(t: string): { artist: string; title: string } {
   const clean = (s: string) => s.replace(/\s\(\d+\)$/, "").replace(/\*$/, "");
   return i < 0 ? { artist: "", title: t } : { artist: clean(t.slice(0, i)), title: t.slice(i + 3) };
 }
+
+// ---------------------------------------------------------------------------
+// Filter: Jahrzehnt und Preis
+// ---------------------------------------------------------------------------
+
+export const DECADES = [1960, 1970, 1980, 1990, 2000, 2010, 2020] as const;
+
+/** „90er“, „00er“, „2020er“ wäre zu lang: zweistellig */
+export const decadeLabel = (d: number) => `${String(d).slice(2)}er`;
+
+export function inDecade(year: string | number | undefined, decade?: number): boolean {
+  if (!decade) return true;
+  const y = typeof year === "number" ? year : parseInt(year ?? "", 10);
+  return Number.isFinite(y) && y >= decade && y < decade + 10;
+}
+
+/** n verschiedene Jahre aus dem Jahrzehnt, nicht in der Zukunft */
+export function decadeYears(decade: number, n: number, rand: () => number = Math.random, now = new Date().getFullYear()): number[] {
+  const all = Array.from({ length: 10 }, (_, i) => decade + i).filter((y) => y <= now);
+  return [...all].sort(() => rand() - 0.5).slice(0, Math.min(n, all.length));
+}
+
+/** Preisfilter: ohne Grenze immer, sonst nur mit Angebot bis zum Höchstpreis */
+export function passesPrice(lowest: number | null | undefined, maxPrice?: number): boolean {
+  if (!maxPrice) return true;
+  return lowest != null && lowest <= maxPrice;
+}

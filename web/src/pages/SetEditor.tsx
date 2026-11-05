@@ -7,8 +7,10 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV, type DJSet, type Release, type TrackMeta } from "../lib/db";
 import { ShareCardSheet } from "../components/ShareCard";
 import { renderSetCard } from "../lib/shareCard";
+import { encodeSet } from "../../../shared/setShare";
 import { playedHistory, playedText, type PlayedAt } from "../lib/setHistory";
-import { toast } from "../lib/store";
+import { toast, username } from "../lib/store";
+import { deleteTemplate, saveTemplate, stillOwned, useTemplates } from "../lib/crateTemplates";
 import { Cover, haptic, Seg, Sheet } from "../components/bits";
 import { IconPlay, IconPlus, IconX } from "../components/icons";
 import { TrackLine } from "./Sets";
@@ -43,6 +45,8 @@ export default function SetEditor() {
   const [dirty, setDirty] = useState(false);
   const [view, setView] = useState<"order" | "crate">("order");
   const [picker, setPicker] = useState(false);
+  const [tplOpen, setTplOpen] = useState(false);
+  const templates = useTemplates();
   const [auto, setAuto] = useState(false);
   const [insertAt, setInsertAt] = useState<number | null>(null);
   const [noteFor, setNoteFor] = useState<string | null>(null);
@@ -182,6 +186,29 @@ export default function SetEditor() {
     else await navigator.clipboard.writeText(text).then(() => toast("Setlist kopiert"));
   };
 
+  // Link für Freunde: das ganze Set steckt im Link, für B2B mit Abgleich der Sammlungen
+  const shareLink = async () => {
+    const records: Record<number, { artist: string; title: string }> = {};
+    for (const t of tracks) {
+      const r = data?.rels.get(t.releaseId);
+      if (r) records[t.releaseId] = { artist: r.artist, title: r.title };
+    }
+    const code = encodeSet({
+      name: set.name || "Mein Set",
+      date: set.date,
+      venue: set.venue,
+      curve: set.curve,
+      by: djName || username() || undefined,
+      tracks: tracks.map((t) => ({ releaseId: t.releaseId, position: t.position, title: t.title, artist: t.artist, bpm: t.bpm ?? undefined, key: t.key ?? undefined, note: set.mixNotes?.[t.id] })),
+      crate: crate.map((rid) => ({ releaseId: rid, artist: data?.rels.get(rid)?.artist ?? "", title: data?.rels.get(rid)?.title ?? "" })),
+      records,
+    });
+    const url = `${location.origin}/sets/shared#${code}`;
+    const text = `Mein Set „${set.name || "Set"}“ auf Crate. Du siehst gleich, welche Platten du davon hast.`;
+    if (navigator.share) await navigator.share({ title: set.name, text, url }).catch(() => undefined);
+    else await navigator.clipboard.writeText(url).then(() => toast("Link kopiert"));
+  };
+
   return (
     <>
       <audio ref={audio} onEnded={() => setPlaying(null)} onPause={() => setPlaying(null)} />
@@ -271,6 +298,11 @@ export default function SetEditor() {
                   <button className="btn small primary" onClick={() => (setView("crate"), setPicker(true))}>
                     Kiste packen
                   </button>
+                  {templates.length > 0 && (
+                    <button className="btn small ghost" onClick={() => (setView("crate"), setTplOpen(true))}>
+                      Vorlage laden
+                    </button>
+                  )}
                   <button className="btn small ghost" onClick={() => setAuto(true)}>
                     Automatisch vorschlagen
                   </button>
@@ -311,6 +343,7 @@ export default function SetEditor() {
             data={data}
             used={tracks.reduce((m, t) => m.set(t.releaseId, [...(m.get(t.releaseId) ?? []), t.position]), new Map<number, string[]>())}
             onAdd={() => setPicker(true)}
+            onTemplates={() => setTplOpen(true)}
             onRemove={(rid) => update({ crateIds: crate.filter((x) => x !== rid), trackIds: set.trackIds.filter((tid) => data?.byId.get(tid)?.releaseId !== rid) })}
           />
         )}
@@ -357,6 +390,24 @@ export default function SetEditor() {
         <RecordPicker data={data} crate={crateSet} onToggle={(rid) => update({ crateIds: crateSet.has(rid) ? crate.filter((x) => x !== rid) : [...crate, rid] })} onDone={() => setPicker(false)} />
       </Sheet>
 
+      <Sheet open={tplOpen} onClose={() => setTplOpen(false)}>
+        {tplOpen && (
+          <TemplateSheet
+            crate={crate}
+            suggestedName={set.name}
+            onLoad={async (name, ids) => {
+              const owned = await stillOwned(ids);
+              const merged = [...new Set([...crate, ...owned])];
+              const added = merged.length - crate.length;
+              update({ crateIds: merged });
+              setTplOpen(false);
+              const gone = ids.length - owned.length;
+              toast(`${added} ${added === 1 ? "Platte" : "Platten"} aus „${name}“ eingepackt${gone ? `, ${gone} nicht mehr in der Sammlung` : ""}`);
+            }}
+          />
+        )}
+      </Sheet>
+
       <Sheet open={noteFor !== null} onClose={() => setNoteFor(null)}>
         {noteFor && (
           <NoteEditor
@@ -395,6 +446,7 @@ export default function SetEditor() {
         title="Set teilen"
         items={[
           { label: "Als Story-Bild (Instagram)", onClick: () => (setShareMenu(false), setCard(true)) },
+          { label: "Link für Freunde (B2B)", onClick: () => (setShareMenu(false), void shareLink()) },
           { label: "Als Text (Tracklist)", onClick: () => (setShareMenu(false), void share()) },
         ]}
       />
@@ -630,7 +682,7 @@ function NextPanel(p: {
 // ---------------------------------------------------------------------------
 // Kiste: Platten für den Abend
 // ---------------------------------------------------------------------------
-function CrateView({ crate, data, used, onAdd, onRemove }: { crate: number[]; data?: Data; used: Map<number, string[]>; onAdd: () => void; onRemove: (rid: number) => void }) {
+function CrateView({ crate, data, used, onAdd, onTemplates, onRemove }: { crate: number[]; data?: Data; used: Map<number, string[]>; onAdd: () => void; onTemplates: () => void; onRemove: (rid: number) => void }) {
   const [sort, setSort] = useState<"added" | "shelf">("added");
   const list = useMemo(() => {
     const l = crate.map((rid) => ({ rid, r: data?.rels.get(rid), shelf: data?.metas.get(rid)?.shelf }));
@@ -643,17 +695,20 @@ function CrateView({ crate, data, used, onAdd, onRemove }: { crate: number[]; da
           <IconPlus /> Platten einpacken
         </button>
         <span className="spacer" />
-        {crate.length > 0 && (
-          <Seg
-            value={sort}
-            options={[
-              ["added", "Wie gepackt"],
-              ["shelf", "Nach Regal"],
-            ]}
-            onChange={setSort}
-          />
-        )}
+        <button className="text-btn" style={{ whiteSpace: "nowrap" }} onClick={onTemplates}>
+          Vorlagen
+        </button>
       </div>
+      {crate.length > 1 && (
+        <Seg
+          value={sort}
+          options={[
+            ["added", "Wie gepackt"],
+            ["shelf", "Nach Regal"],
+          ]}
+          onChange={setSort}
+        />
+      )}
       {!crate.length && <p className="sub">Noch leer. Pack die Platten ein, die du mitnehmen willst. Aus ihnen kommen dann die Vorschläge.</p>}
       <div className="crate-grid">
         {list.map(({ rid, r, shelf }) => (
@@ -733,6 +788,60 @@ function RecordPicker({ data, crate, onToggle, onDone }: { data?: Data; crate: S
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function TemplateSheet({ crate, suggestedName, onLoad }: { crate: number[]; suggestedName: string; onLoad: (name: string, ids: number[]) => void }) {
+  const templates = useTemplates();
+  const [name, setName] = useState(suggestedName);
+  const exists = templates.some((t) => t.name.toLowerCase() === name.trim().toLowerCase());
+  return (
+    <div className="stack">
+      <b style={{ fontSize: 18 }}>Kisten-Vorlagen</b>
+      {crate.length > 0 ? (
+        <div className="card stack" style={{ gap: 8 }}>
+          <span className="sub">Diese Kiste ({crate.length} Platten) merken, um sie für den nächsten Abend wieder zu laden.</span>
+          <input className="input" placeholder="Name, z. B. Freitag Deep" maxLength={40} value={name} onChange={(e) => setName(e.target.value)} />
+          <button
+            className="btn small primary"
+            disabled={!name.trim()}
+            onClick={async () => {
+              await saveTemplate(name, crate);
+              haptic(10);
+              toast(exists ? `„${name.trim()}“ aktualisiert` : `Vorlage „${name.trim()}“ gespeichert`);
+            }}
+          >
+            {exists ? "Vorlage aktualisieren" : "Als Vorlage speichern"}
+          </button>
+        </div>
+      ) : (
+        <span className="sub">Pack eine Kiste, dann kannst du sie hier als Vorlage speichern.</span>
+      )}
+      {templates.length > 0 && (
+        <div className="list">
+          {templates.map((t) => (
+            <div key={t.name} className="row tpl-row">
+              <button className="tpl-main press" onClick={() => onLoad(t.name, t.ids)}>
+                <b>{t.name}</b>
+                <span className="sub">
+                  {t.ids.length} Platten · {new Date(t.savedAt).toLocaleDateString("de-DE", { day: "numeric", month: "short" })}
+                </span>
+              </button>
+              <button
+                className="icon-btn"
+                aria-label={`Vorlage ${t.name} löschen`}
+                onClick={() => {
+                  if (confirm(`Vorlage „${t.name}“ löschen?`)) void deleteTemplate(t.name);
+                }}
+              >
+                <IconX />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {templates.length > 0 && <span className="tiny sub">Antippen packt die Platten zusätzlich in die Kiste.</span>}
     </div>
   );
 }

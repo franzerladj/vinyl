@@ -17,6 +17,7 @@ const Scan = lazy(() => import("./pages/Scan"));
 const Shop = lazy(() => import("./pages/Shop"));
 const Sets = lazy(() => import("./pages/Sets"));
 const SetEditor = lazy(() => import("./pages/SetEditor"));
+const SharedSetPage = lazy(() => import("./pages/SharedSetPage"));
 const Stickers = lazy(() => import("./pages/Stickers"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Friends = lazy(() => import("./pages/Friends"));
@@ -38,6 +39,7 @@ export const routes: RouteObject[] = [
   { path: "scan", element: <Scan /> },
   { path: "shop", element: <Shop /> },
   { path: "sets", element: <Sets /> },
+  { path: "sets/shared", element: <SharedSetPage /> },
   { path: "sets/:id", element: <SetEditor /> },
   { path: "stickers", element: <Stickers /> },
   { path: "settings", element: <Settings /> },
@@ -397,7 +399,16 @@ export default function App() {
   const oauthBack = new URLSearchParams(loc.search);
   if (oauthBack.get("oauth_verifier") && oauthBack.get("oauth_token")) return <LoginFinish token={oauthBack.get("oauth_token")!} verifier={oauthBack.get("oauth_verifier")!} />;
   if (!loaded) return <div className="app" />;
-  if (!me?.username) return <Login me={me} />;
+  if (!me?.username) {
+    // Geteilten Link nach der Anmeldung wieder öffnen
+    if (loc.pathname !== "/")
+      try {
+        sessionStorage.setItem("crate:after", loc.pathname + loc.search + loc.hash);
+      } catch {
+        /* egal */
+      }
+    return <Login me={me} />;
+  }
 
   return (
     <div className="app">

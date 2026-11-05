@@ -9,6 +9,26 @@ export interface TapResult {
   error: number;
   /** Anzahl genutzter Tipps */
   taps: number;
+  /** Tempo der letzten Tipps weicht vom Rest ab: man wird langsamer (-1) oder schneller (+1) */
+  drift: -1 | 0 | 1;
+}
+
+/** Gerade durch (Schlag, Zeit): Schlaglänge und ihr Standardfehler */
+function fit(pts: [number, number][]) {
+  const n = pts.length;
+  const mx = pts.reduce((s, p) => s + p[0], 0) / n;
+  const my = pts.reduce((s, p) => s + p[1], 0) / n;
+  let sxx = 0;
+  let sxy = 0;
+  for (const [x, y] of pts) {
+    sxx += (x - mx) ** 2;
+    sxy += (x - mx) * (y - my);
+  }
+  const period = sxy / sxx;
+  const a = my - period * mx;
+  let sse = 0;
+  for (const [x, y] of pts) sse += (y - (a + period * x)) ** 2;
+  return { period, se: n > 2 ? Math.sqrt(sse / (n - 2) / sxx) : period };
 }
 
 export function estimateTapTempo(times: number[]): TapResult | null {
@@ -53,5 +73,19 @@ export function estimateTapTempo(times: number[]): TapResult | null {
   for (const [x, y] of pts) sse += (y - (a + period * x)) ** 2;
   const sePeriod = n > 2 ? Math.sqrt(sse / (n - 2) / sxx) : period;
   const bpm = 60000 / period;
-  return { bpm, error: (bpm * sePeriod) / period, taps: n };
+  const error = (bpm * sePeriod) / period;
+  // Abdriften erkennen: erste gegen zweite Hälfte. Nur melden, wenn der Unterschied mindestens
+  // 1 BPM beträgt und deutlich (3 Standardfehler) über dem normalen Wackeln liegt.
+  let drift: TapResult["drift"] = 0;
+  if (n >= 20) {
+    const h = Math.floor(n / 2);
+    const f1 = fit(pts.slice(0, h));
+    const f2 = fit(pts.slice(h));
+    const b1 = 60000 / f1.period;
+    const b2 = 60000 / f2.period;
+    const se = Math.hypot((b1 * f1.se) / f1.period, (b2 * f2.se) / f2.period);
+    const d = b2 - b1;
+    if (Math.abs(d) >= 1 && Math.abs(d) > 3 * se) drift = d < 0 ? -1 : 1;
+  }
+  return { bpm, error, taps: n, drift };
 }
