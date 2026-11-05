@@ -1,5 +1,7 @@
 // Digging-Feed: eine Platte pro Bildschirm, senkrecht wischen, Hörprobe läuft automatisch.
 import { useEffect, useRef, useState } from "react";
+import { MenuSheet } from "../components/ui";
+import { DigCoach } from "../components/DigCoach";
 import { useNavigate } from "react-router-dom";
 import { buildQueue, digDetail, likedCards, loadWeights, markSeen, markSkipped, moreLike, recordAction, setLiked, type DigDetail, type DigFilter } from "../lib/dig";
 import { previewUrl } from "../lib/free";
@@ -9,7 +11,7 @@ import { toast } from "../lib/store";
 import { getKV, setKV } from "../lib/db";
 import { ytConsent } from "../lib/theme";
 import { haptic, keepParens } from "../components/bits";
-import { IconBack, IconCart, IconFilter, IconHeart, IconPlay, IconPlus, IconShare, IconSleeves, IconThumb, IconX } from "../components/icons";
+import { IconBack, IconCart, IconFilter, IconHeart, IconPlay, IconPlus, IconShare, IconMore, IconSleeves, IconThumb, IconX } from "../components/icons";
 import { DECADES, decadeLabel, passesPrice, top, type DigCard } from "../../../shared/dig";
 import { parseDuration } from "../../../shared/match";
 
@@ -34,6 +36,7 @@ export default function Dig() {
   const [burst, setBurst] = useState<{ id: number; kind: "like" | "want" } | null>(null);
   const [liked, setLikedIds] = useState<Set<number>>(new Set());
   const [likedOpen, setLikedOpen] = useState(false);
+  const [moreMenu, setMoreMenu] = useState(false);
   const [likedList, setLikedList] = useState<Awaited<ReturnType<typeof likedCards>>>([]);
   useEffect(() => {
     void likedCards().then((l) => {
@@ -353,89 +356,68 @@ export default function Dig() {
                 <div className="dig-swipe" style={drag?.id === c.id ? { transform: `translateX(${drag.dx}px) rotate(${drag.dx / 40}deg)`, transition: "none" } : undefined}>
                   {drag?.id === c.id && drag.dx < 0 && <span className="dig-nope" style={{ opacity: Math.min(1, -drag.dx / 90) }}>Weg</span>}
                   {drag?.id === c.id && drag.dx > 0 && <span className="dig-yes" style={{ opacity: Math.min(1, drag.dx / 90) }}>Mag ich</span>}
-                  <img className="dig-bg" src={c.cover} alt="" />
-                  <div className="dig-shade" />
-                  <div className="dig-stage" onClick={() => onCardTap(c)}>
-                    {i === active && video ? (
-                      <iframe className="dig-video" src={`https://www.youtube-nocookie.com/embed/${video}?autoplay=1&playsinline=1&rel=0`} title={c.title} allow="autoplay; encrypted-media" allowFullScreen />
-                    ) : (
-                      <img className={`dig-cover${i === active && audioState === "playing" ? " playing" : ""}`} src={c.cover} alt="" />
-                    )}
-                    {burst?.id === c.id && (burst.kind === "like" ? <span className="dig-burst like"><IconThumb /></span> : <span className="dig-burst">♥</span>)}
-                  </div>
-                  <div className="dig-info">
-                    <span className="dig-reason">{c.reason}</span>
-                    <button className="dig-title" onClick={() => nav(`/release/${c.id}`, { viewTransition: true })}>
-                      <b>{keepParens(c.title)}</b>
-                      <span>{c.artist}</span>
-                    </button>
-                    <div className="dig-meta">
-                      {[c.label, c.catno, c.year, c.country].filter(Boolean).join(" · ")}
+                  <div className="dig-body">
+                    <div className="dig-stage" onClick={() => onCardTap(c)}>
+                      {i === active && video ? (
+                        <iframe className="dig-video" src={`https://www.youtube-nocookie.com/embed/${video}?autoplay=1&playsinline=1&rel=0`} title={c.title} allow="autoplay; encrypted-media" allowFullScreen />
+                      ) : (
+                        // Hülle mit Platte: beim Abspielen fährt die Platte heraus und dreht sich
+                        <div className={`dig-deck${i === active && audioState === "playing" ? " playing" : ""}`}>
+                          <div className="dig-disc" aria-hidden="true">
+                            <span style={{ backgroundImage: `url("${c.cover}")` }} />
+                          </div>
+                          <img className="dig-cover" src={c.cover} alt="" />
+                        </div>
+                      )}
+                      {burst?.id === c.id && (burst.kind === "like" ? <span className="dig-burst like"><IconThumb /></span> : <span className="dig-burst">♥</span>)}
                     </div>
-                    {(() => {
-                      const dd = detail.get(c.id);
-                      if (!dd || dd.lowest === undefined) return null;
-                      return <div className="dig-price">{dd.lowest != null ? `ab ${money(dd.lowest, dd.currency)} · ${dd.forSale} ${dd.forSale === 1 ? "Angebot" : "Angebote"}` : "gerade kein Angebot"}</div>;
-                    })()}
-                    <div className="dig-tags">
-                      {c.styles.slice(0, 3).map((s) => (
-                        <span key={s}>{s}</span>
-                      ))}
-                      {c.want ? <span>♥ {c.want} wollen sie</span> : null}
-                    </div>
-                    {i === active && (
-                      <div className="dig-sound">
-                        {audioState === "none" ? (
-                          d?.video ? (
-                            <button onClick={() => setVideo(d.video!)}>
-                              <IconPlay /> Video ansehen
-                            </button>
-                          ) : (
-                            <span>Keine Hörprobe</span>
-                          )
-                        ) : (
-                          <button onClick={toggleSound}>
-                            {audioState === "playing" ? "❚❚ Pause" : audioState === "loading" ? "Lädt …" : unlocked ? "▶ Abspielen" : "▶ Tippen zum Hören"}
-                            {d?.tracks[0] && <small> · {d.tracks[0].position} {d.tracks[0].title}</small>}
-                          </button>
-                        )}
-                        {d && d.tracks.length > 0 && (
-                          <button className="dig-link" onClick={() => setSheet(c.id)}>
-                            {d.tracks.length} Tracks
-                          </button>
-                        )}
+                    <div className="dig-info">
+                      <span className="dig-reason">{c.reason}</span>
+                      <button className="dig-title" onClick={() => nav(`/release/${c.id}`, { viewTransition: true })}>
+                        <b>{keepParens(c.title)}</b>
+                        <span>{c.artist}</span>
+                      </button>
+                      <div className="dig-meta">{[c.label, c.catno, c.year, c.country].filter(Boolean).join(" · ")}</div>
+                      {(() => {
+                        const dd = detail.get(c.id);
+                        if (!dd || dd.lowest === undefined) return null;
+                        return <div className="dig-price">{dd.lowest != null ? `ab ${money(dd.lowest, dd.currency)} · ${dd.forSale} ${dd.forSale === 1 ? "Angebot" : "Angebote"}` : "gerade kein Angebot"}</div>;
+                      })()}
+                      <div className="dig-tags">
+                        {c.styles.slice(0, 3).map((st) => (
+                          <span key={st}>{st}</span>
+                        ))}
+                        {c.want ? <span>♥ {c.want} wollen sie</span> : null}
                       </div>
-                    )}
-                  </div>
-                  <div className="dig-rail">
-                    <button className={liked.has(c.id) ? "on like" : ""} onClick={() => like(c)} aria-label="Mag ich" aria-pressed={liked.has(c.id)}>
-                      <IconThumb />
-                      <small>{liked.has(c.id) ? "Gemocht" : "Mag ich"}</small>
-                    </button>
-                    <button className={isWanted ? "on" : ""} onClick={() => want(c)} aria-label="Auf die Wantlist">
-                      <IconHeart />
-                      <small>{isWanted ? "Gemerkt" : "Want"}</small>
-                    </button>
-                    <button onClick={() => collect(c)} aria-label="Zur Sammlung">
-                      <IconPlus />
-                      <small>Hab ich</small>
-                    </button>
-                    <a href={discogsSellUrl(c.id)} target="_blank" rel="noreferrer" aria-label="Angebote">
-                      <IconCart />
-                      <small>Kaufen</small>
-                    </a>
-                    <button onClick={() => more(c)} aria-label="Mehr davon">
-                      <IconSleeves />
-                      <small>Mehr</small>
-                    </button>
-                    <button onClick={() => share(c)} aria-label="Teilen">
-                      <IconShare />
-                      <small>Teilen</small>
-                    </button>
-                    <button onClick={() => skip(c)} aria-label="Nicht mein Ding">
-                      <IconX />
-                      <small>Weg</small>
-                    </button>
+                      {i === active && (
+                        <div className="dig-sound">
+                          {audioState === "none" ? (
+                            d?.video ? (
+                              <button onClick={() => setVideo(d.video!)}>
+                                <IconPlay /> Video ansehen
+                              </button>
+                            ) : (
+                              <span>Keine Hörprobe</span>
+                            )
+                          ) : (
+                            <button onClick={toggleSound}>
+                              {audioState === "playing" ? "❚❚ Pause" : audioState === "loading" ? "Lädt …" : unlocked ? "▶ Abspielen" : "▶ Tippen zum Hören"}
+                              {d?.tracks[0] && <small> · {d.tracks[0].position} {d.tracks[0].title}</small>}
+                            </button>
+                          )}
+                          {d && d.tracks.length > 0 && (
+                            <button className="dig-link" onClick={() => setSheet(c.id)}>
+                              {d.tracks.length} Tracks
+                            </button>
+                          )}
+                          {d?.video && audioState !== "none" && !video && (
+                            <button className="dig-link" onClick={() => setVideo(d.video!)}>
+                              Video
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -444,6 +426,43 @@ export default function Dig() {
         })}
       </div>
 
+      <DigCoach ready={!loading && cards.length > 0} />
+      {current && (
+        <nav className="dig-bar" aria-label="Aktionen">
+          <button onClick={() => skip(current)} aria-label="Weg" data-coach="skip">
+            <IconX />
+            <small>Weg</small>
+          </button>
+          <button onClick={() => more(current)} aria-label="Mehr davon" data-coach="more">
+            <IconSleeves />
+            <small>Mehr davon</small>
+          </button>
+          <button className={`big${liked.has(current.id) ? " on like" : ""}`} onClick={() => like(current)} aria-label="Mag ich" aria-pressed={liked.has(current.id)} data-coach="like">
+            <IconThumb />
+            <small>{liked.has(current.id) ? "Gemocht" : "Mag ich"}</small>
+          </button>
+          <button className={wanted.has(current.id) ? "on" : ""} onClick={() => want(current)} aria-label="Auf die Wantlist" data-coach="want">
+            <IconHeart />
+            <small>{wanted.has(current.id) ? "Gemerkt" : "Want"}</small>
+          </button>
+          <button onClick={() => setMoreMenu(true)} aria-label="Optionen" data-coach="menu">
+            <IconMore />
+            <small>Optionen</small>
+          </button>
+        </nav>
+      )}
+      {current && (
+        <MenuSheet
+          open={moreMenu}
+          onClose={() => setMoreMenu(false)}
+          items={[
+            { label: "Hab ich, in die Sammlung", icon: <IconPlus />, onClick: () => (setMoreMenu(false), void collect(current)) },
+            { label: "Bei Discogs kaufen", icon: <IconCart />, onClick: () => (setMoreMenu(false), window.open(discogsSellUrl(current.id), "_blank", "noopener")) },
+            { label: "Teilen", icon: <IconShare />, onClick: () => (setMoreMenu(false), void share(current)) },
+            { label: "Zur Platten-Seite", icon: <IconPlay />, onClick: () => nav(`/release/${current.id}`, { viewTransition: true }) },
+          ]}
+        />
+      )}
       {likedOpen && (
         <div className="dig-sheet-bg" onClick={() => setLikedOpen(false)}>
           <div className="dig-sheet stack" onClick={(e) => e.stopPropagation()}>
