@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigationType, useRouteError, type RouteObject } from "react-router-dom";
 import { getMe } from "./lib/api";
-import { setState, useStore } from "./lib/store";
+import { setState, toast, useStore } from "./lib/store";
 import { haptic, Jobs, Sheet } from "./components/bits";
 import { Welcome } from "./components/Welcome";
+import { claimDevice } from "./lib/account";
 import { IconHeart, IconHome, IconList, IconRecord, IconSearch } from "./components/icons";
 import Home from "./pages/Home";
 import Login, { LoginFinish } from "./pages/Login";
@@ -344,6 +345,8 @@ export default function App() {
           const name = await resolveIdentity();
           if (name) m = { ...m, username: name };
         }
+        // Anderes Konto als zuletzt auf diesem Gerät: lokale Daten des vorherigen Kontos entfernen
+        if (m.username && (await claimDevice(m.username).catch(() => false))) toast("Neues Konto auf diesem Gerät: die Daten des vorherigen Kontos wurden entfernt.");
         setState({ me: m });
         if (m.username) void startupSync();
         try {

@@ -2,7 +2,7 @@
 import { Hono, type Context } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { readConfig, type Config, type Env } from "./env";
-import { seal, unseal, type Session } from "./session";
+import { seal, SESSION_DAYS, unseal, type Session } from "./session";
 import { authHeaders, authorizeUrl, discogsFetch, DiscogsBusy, getAccessToken, getRequestToken } from "./discogs";
 import { ALL_KINDS, bundle, currentSlot, dueReminders, isPushEndpoint, loadUser, pickWants, notifyUser, saveUser, sendPush, userKey, wantChange, type Message, type PushSub, type Stat, type UserRec, type WatchedWant } from "./push";
 import { oauthHmacHeader, oauthHmacParams } from "./oauthSign";
@@ -47,8 +47,12 @@ const rawSession = (c: C) => unseal<Session>(c.var.cfg.sessionSecret, getCookie(
 /** Nur Sitzungen mit vom Server bei Discogs bestätigtem Namen zählen (alte unbestätigte werden nachgeprüft) */
 const session = async (c: C) => {
   const s = await rawSession(c);
+  if (s?.iat && Date.now() - s.iat > SESSION_DAYS * 86400_000) return null;
   return s && s.username && s.verified !== false ? s : null;
 };
+const SESSION_AGE = SESSION_DAYS * 24 * 60 * 60;
+/** Sitzung frisch versiegeln (neuer Zeitstempel) */
+const setSession = async (c: C, s: Session) => setCookie(c, SESSION, await seal(c.var.cfg.sessionSecret, { ...s, iat: Date.now() }), { ...cookieOpts(c), maxAge: SESSION_AGE });
 
 /** Wer darf welche KI nutzen? Eigener Anthropic-Key auch ohne Anmeldung, Betreiber-KI nur mit bestätigter Sitzung */
 async function aiAccess(c: C): Promise<{ key: string | null; free: boolean } | null> {
@@ -132,7 +136,7 @@ app.post("/api/auth/finish", async (c) => {
   if (!r.ok) return c.json({ message: "Discogs hat den Zugang nicht bestätigt" }, 401);
   const name = ((await r.json()) as { username: string }).username;
   deleteCookie(c, PENDING, { path: "/" });
-  setCookie(c, SESSION, await seal(cfg.sessionSecret, { token, secret, username: name, verified: true }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
+  await setSession(c, { token, secret, username: name, verified: true });
   return c.json({ username: name, verified: true });
 });
 
@@ -146,7 +150,7 @@ app.post("/api/auth/identity", async (c) => {
   if (!r || r.status === 429) return c.json({ busy: true }, 503);
   if (!r.ok) return c.json({ message: "Zugang ungültig, bitte neu anmelden" }, 401);
   const username = ((await r.json()) as { username: string }).username;
-  setCookie(c, SESSION, await seal(cfg.sessionSecret, { ...s, username, verified: true }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
+  await setSession(c, { ...s, username, verified: true });
   return c.json({ username });
 });
 
@@ -162,11 +166,11 @@ app.post("/api/auth/exchange", async (c) => {
     deleteCookie(c, PENDING, { path: "/" });
     if (!r.ok) {
       // Zugang ist da, nur der Name fehlt: Sitzung ohne Namen, der Server prüft ihn gleich über /api/auth/identity nach
-      setCookie(c, SESSION, await seal(cfg.sessionSecret, { ...at, username: "", verified: false }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
+      await setSession(c, { ...at, username: "", verified: false });
       return c.json({ username: null, verified: false });
     }
     const name = ((await r.json()) as { username: string }).username;
-    setCookie(c, SESSION, await seal(cfg.sessionSecret, { ...at, username: name, verified: true }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
+    await setSession(c, { ...at, username: name, verified: true });
     return c.json({ username: name, verified: true });
   } catch (e) {
     return c.json({ busy: e instanceof DiscogsBusy, message: (e as Error).message }, e instanceof DiscogsBusy ? 503 : 400);
@@ -188,7 +192,11 @@ app.get("/api/me", async (c) => {
     lastfm: Boolean(cfg.lastfmKey),
     keyLookup: Boolean(cfg.getSongBpmKey),
   };
-  if (s) return c.json({ username: s.username, features, verified: true });
+  if (s) {
+    // Gleitend verlängern: wer die App nutzt, bleibt angemeldet, ungenutzte Sitzungen laufen ab
+    if (!s.iat || Date.now() - s.iat > 7 * 86400_000) await setSession(c, s);
+    return c.json({ username: s.username, features, verified: true });
+  }
   if (await rawSession(c)) return c.json({ username: null, needIdentity: true, features }, 401);
   if (cfg.discogsPersonalToken) {
     const r = await discogsFetch(cfg, null, "/oauth/identity");

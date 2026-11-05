@@ -7,7 +7,11 @@ export interface Session {
   username: string;
   /** false = Benutzername kam vom Browser und ist noch nicht vom Server bei Discogs bestätigt */
   verified?: boolean;
+  /** Ausgestellt (ms); Sitzungen laufen nach SESSION_DAYS ohne Nutzung ab */
+  iat?: number;
 }
+
+export const SESSION_DAYS = 180;
 
 const enc = new TextEncoder();
 const keyCache = new Map<string, Promise<CryptoKey>>();

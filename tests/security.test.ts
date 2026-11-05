@@ -100,3 +100,15 @@ describe("Profil", () => {
     expect(sanitizeProfile({ links: [], styles: [], plays: "vinyl" }).plays).toBe("vinyl");
   });
 });
+
+describe("Sitzungsdauer", () => {
+  it("lehnt Sitzungen ab, die länger als 180 Tage nicht genutzt wurden", async () => {
+    const old = `crate_session=${await seal(SECRET, { token: "t", secret: "s", username: "franz", verified: true, iat: Date.now() - 181 * 86400_000 })}`;
+    expect((await req("/api/lastfm/tags?artist=a&track=b", { headers: { Cookie: old } })).status).toBe(401);
+  });
+  it("verlängert eine genutzte Sitzung gleitend", async () => {
+    const r = await req("/api/me", { headers: { Cookie: await sessionCookie() } });
+    expect(r.status).toBe(200);
+    expect(r.headers.get("Set-Cookie")).toContain("Max-Age=15552000");
+  });
+});

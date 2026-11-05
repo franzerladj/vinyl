@@ -263,7 +263,9 @@ function Overview() {
               label="Abmelden"
               danger
               onClick={async () => {
-                if (!confirm("Von Discogs abmelden? Deine lokalen Daten bleiben auf diesem Gerät.")) return;
+                if (!confirm("Von Discogs abmelden? Mitteilungen werden auf diesem Gerät ausgeschaltet. Deine Platten, Sets und Notizen bleiben hier, bis sich ein anderes Konto anmeldet.")) return;
+                // Server soll den Discogs-Zugang für Mitteilungen nicht weiter nutzen
+                await import("../lib/push").then((p) => p.disablePush()).catch(() => undefined);
                 await logout();
                 try {
                   localStorage.removeItem("crate_me");
