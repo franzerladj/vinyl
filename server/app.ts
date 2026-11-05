@@ -318,7 +318,9 @@ app.post("/api/ai/vibes", async (c) => {
 
 // ---------- Audio-Daten ----------
 // Nur für Angemeldete: die Routen nutzen Betreiber-Schlüssel und bis zu 45 Unteranfragen je Aufruf
-for (const p of ["/api/audio/*", "/api/lastfm/*"]) {
+// Hörproben bleiben offen: das Audio-Element (vor allem auf dem iPhone) schickt das Cookie nicht
+// zuverlässig mit, und eine Hörprobe kostet nur ein bis zwei Deezer-Anfragen ohne Betreiber-Schlüssel.
+for (const p of ["/api/audio/lookup", "/api/audio/release", "/api/lastfm/*"]) {
   app.use(p, async (c, next) => {
     if (!(await tokenSession(c))) return c.json({ message: "Bitte anmelden" }, 401);
     await next();

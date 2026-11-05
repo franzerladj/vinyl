@@ -69,12 +69,14 @@ describe("Audio und Last.fm nur für Angemeldete", () => {
     for (const [path, init] of [
       ["/api/lastfm/tags?artist=a&track=b", {}],
       ["/api/audio/lookup?artist=a&title=b", {}],
-      ["/api/audio/preview/123", {}],
       ["/api/audio/release", { method: "POST", headers: { "Content-Type": "application/json" }, body: '{"title":"t","tracks":[]}' }],
     ] as const) {
       expect((await req(path, init)).status).toBe(401);
     }
     expect(calls).toHaveLength(0);
+  });
+  it("Hörproben bleiben ohne Cookie abrufbar (Audio-Element)", async () => {
+    expect((await req("/api/audio/preview/123")).status).not.toBe(401);
   });
   it("angemeldet geht es", async () => {
     expect((await req("/api/lastfm/tags?artist=a&track=b", { headers: { Cookie: await sessionCookie() } })).status).toBe(200);
