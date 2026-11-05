@@ -8,7 +8,7 @@ import { claimDevice } from "./lib/account";
 import { IconHeart, IconHome, IconList, IconRecord, IconSearch } from "./components/icons";
 import Home from "./pages/Home";
 import Login, { LoginFinish } from "./pages/Login";
-import { resolveIdentity } from "./lib/auth";
+import { claimIdentity, verifyInBackground } from "./lib/auth";
 // Detailseite direkt laden, damit die Cover-Animation sofort ein Ziel hat
 import ReleasePage from "./pages/Release";
 const Collection = lazy(() => import("./pages/Collection"));
@@ -348,9 +348,11 @@ export default function App() {
     getMe()
       .then(async (m) => {
         // Angemeldet, aber der Name fehlt noch (Discogs war beim Anmelden ausgelastet): direkt nachfragen
-        if (!m.username && (m as { needIdentity?: boolean }).needIdentity) {
-          const name = await resolveIdentity();
-          if (name) m = { ...m, username: name };
+        // Name noch nicht vom Server bestätigt (Discogs bremst ihn gerade): nicht abmelden.
+        // Das Gerät fragt den Namen selbst, der Server bestätigt ihn im Hintergrund.
+        if (m.needIdentity) {
+          if (!m.username) m = { ...m, username: (await claimIdentity()) ?? cached?.username ?? null };
+          verifyInBackground((name) => setState({ me: { ...m, username: name, verified: true, needIdentity: false } }));
         }
         // Anderes Konto als zuletzt auf diesem Gerät: lokale Daten des vorherigen Kontos entfernen
         if (m.username && (await claimDevice(m.username).catch(() => false))) toast("Neues Konto auf diesem Gerät: die Daten des vorherigen Kontos wurden entfernt.");

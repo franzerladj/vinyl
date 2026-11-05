@@ -50,6 +50,16 @@ const session = async (c: C) => {
   if (s?.iat && Date.now() - s.iat > SESSION_DAYS * 86400_000) return null;
   return s && s.username && s.verified !== false ? s : null;
 };
+/**
+ * Gültiger Discogs-Zugang, auch wenn der Name noch nicht bestätigt ist (Discogs bremst den Server oft aus).
+ * Reicht für alles, was nur mit dem eigenen Discogs-Konto arbeitet: Signieren, Proxy, Audio, Last.fm.
+ * Alles, was unter dem Namen gespeichert wird (Profil, Verzeichnis, Mitteilungen), braucht session().
+ */
+const tokenSession = async (c: C) => {
+  const s = await rawSession(c);
+  if (!s?.token || !s.secret || (s.iat && Date.now() - s.iat > SESSION_DAYS * 86400_000)) return null;
+  return s;
+};
 const SESSION_AGE = SESSION_DAYS * 24 * 60 * 60;
 /** Sitzung frisch versiegeln (neuer Zeitstempel) */
 const setSession = async (c: C, s: Session) => setCookie(c, SESSION, await seal(c.var.cfg.sessionSecret, { ...s, iat: Date.now() }), { ...cookieOpts(c), maxAge: SESSION_AGE });
@@ -58,10 +68,11 @@ const setSession = async (c: C, s: Session) => setCookie(c, SESSION, await seal(
 async function aiAccess(c: C): Promise<{ key: string | null; free: boolean } | null> {
   const own = c.req.header("X-Anthropic-Key");
   if (own && own.startsWith("sk-ant-")) return { key: own, free: false };
+  if (!(await tokenSession(c))) return null;
   const s = await session(c);
-  if (!s) return null;
   const { anthropicKey, aiAllowlist, ai } = c.var.cfg;
-  const allowed = Boolean(anthropicKey) && (aiAllowlist.includes("*") || aiAllowlist.includes(s.username.toLowerCase()));
+  // Betreiber-Key nur mit bestätigtem Namen (Allowlist), Workers AI reicht ein gültiger Zugang
+  const allowed = Boolean(s && anthropicKey) && (aiAllowlist.includes("*") || aiAllowlist.includes(s!.username.toLowerCase()));
   return { key: allowed ? anthropicKey : null, free: Boolean(ai) };
 }
 
@@ -132,26 +143,45 @@ app.post("/api/auth/finish", async (c) => {
   if (!token || !secret) return c.json({ message: "Token fehlt" }, 400);
   // Der Name kommt immer vom Server bei Discogs, nie vom Gerät
   const r = await discogsFetch(cfg, { token, secret, username: "" }, "/oauth/identity").catch(() => null);
-  if (!r || r.status === 429) return c.json({ busy: true, message: "Discogs ist gerade ausgelastet" }, 503);
+  deleteCookie(c, PENDING, { path: "/" });
+  if (!r || r.status === 429 || r.status >= 500) {
+    // Discogs bremst gerade den Server: trotzdem anmelden, der Name wird im Hintergrund bestätigt.
+    // Bis dahin geht alles, was nur das eigene Discogs-Konto braucht.
+    await setSession(c, { token, secret, username: "", verified: false });
+    return c.json({ username: null, verified: false });
+  }
   if (!r.ok) return c.json({ message: "Discogs hat den Zugang nicht bestätigt" }, 401);
   const name = ((await r.json()) as { username: string }).username;
-  deleteCookie(c, PENDING, { path: "/" });
   await setSession(c, { token, secret, username: name, verified: true });
   return c.json({ username: name, verified: true });
+});
+
+/**
+ * Vorläufiger Name vom Gerät (das Gerät fragt Discogs selbst, eigene IP). Gilt nur für die Anzeige
+ * und Discogs-Pfade; gespeichert unter dem Namen wird erst nach der Bestätigung durch den Server.
+ */
+app.post("/api/auth/claim", async (c) => {
+  const s = await tokenSession(c);
+  if (!s) return c.json({ message: "nicht angemeldet" }, 401);
+  if (s.verified !== false && s.username) return c.json({ username: s.username, verified: true });
+  const { username } = await c.req.json<{ username: string }>();
+  if (typeof username !== "string" || !/^[\w.\-]{1,40}$/.test(username)) return c.json({ message: "Name ungültig" }, 400);
+  await setSession(c, { ...s, username, verified: false });
+  return c.json({ username, verified: false });
 });
 
 /** Ältere Sitzungen ohne bestätigten Namen: der Server fragt Discogs selbst */
 app.post("/api/auth/identity", async (c) => {
   const cfg = c.var.cfg;
-  const s = await rawSession(c);
+  const s = await tokenSession(c);
   if (!s) return c.json({ message: "nicht angemeldet" }, 401);
-  if (s.verified !== false && s.username) return c.json({ username: s.username });
+  if (s.verified !== false && s.username) return c.json({ username: s.username, verified: true });
   const r = await discogsFetch(cfg, s, "/oauth/identity").catch(() => null);
   if (!r || r.status === 429) return c.json({ busy: true }, 503);
   if (!r.ok) return c.json({ message: "Zugang ungültig, bitte neu anmelden" }, 401);
   const username = ((await r.json()) as { username: string }).username;
   await setSession(c, { ...s, username, verified: true });
-  return c.json({ username });
+  return c.json({ username, verified: true });
 });
 
 /** Rückfall: Austausch über den Server (mit Wiederholungen); bei Überlastung bleibt der Verifier gültig */
@@ -197,7 +227,13 @@ app.get("/api/me", async (c) => {
     if (!s.iat || Date.now() - s.iat > 7 * 86400_000) await setSession(c, s);
     return c.json({ username: s.username, features, verified: true });
   }
-  if (await rawSession(c)) return c.json({ username: null, needIdentity: true, features }, 401);
+  const t = await tokenSession(c);
+  if (t) {
+    // Angemeldet, Name noch nicht vom Server bestätigt: nicht abmelden, sondern weiterarbeiten
+    if (!t.iat || Date.now() - t.iat > 7 * 86400_000) await setSession(c, t);
+    return c.json({ username: t.username || null, features, verified: false, needIdentity: true });
+  }
+  if (getCookie(c, SESSION)) console.warn("auth: Sitzungs-Cookie nicht lesbar oder abgelaufen");
   if (cfg.discogsPersonalToken) {
     const r = await discogsFetch(cfg, null, "/oauth/identity");
     if (r.ok) return c.json({ username: ((await r.json()) as { username: string }).username, features, personalToken: true });
@@ -210,7 +246,7 @@ app.get("/api/me", async (c) => {
 // Der Server liefert nur die HMAC-Signatur für genau diese Anfrage.
 app.post("/api/sign", async (c) => {
   const cfg = c.var.cfg;
-  const s = await session(c);
+  const s = await tokenSession(c);
   if (!s) return c.json({ mode: "proxy" });
   const { method, path } = await c.req.json<{ method: string; path: string }>();
   if (!path || !allowedPath(path) || !["GET", "POST", "PUT", "DELETE"].includes(method)) return c.json({ message: "Pfad nicht erlaubt" }, 403);
@@ -240,7 +276,7 @@ export function allowedPath(path: string): boolean {
 
 app.all("/api/discogs/*", async (c) => {
   const cfg = c.var.cfg;
-  const s = await session(c);
+  const s = await tokenSession(c);
   if (!s && !cfg.discogsPersonalToken) return c.json({ message: "Nicht angemeldet" }, 401);
   const url = new URL(c.req.url);
   const path = url.pathname.replace(/^\/api\/discogs/, "") + url.search;
@@ -283,7 +319,7 @@ app.post("/api/ai/vibes", async (c) => {
 // Nur für Angemeldete: die Routen nutzen Betreiber-Schlüssel und bis zu 45 Unteranfragen je Aufruf
 for (const p of ["/api/audio/*", "/api/lastfm/*"]) {
   app.use(p, async (c, next) => {
-    if (!(await session(c))) return c.json({ message: "Bitte anmelden" }, 401);
+    if (!(await tokenSession(c))) return c.json({ message: "Bitte anmelden" }, 401);
     await next();
   });
 }

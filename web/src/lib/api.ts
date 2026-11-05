@@ -148,6 +148,9 @@ export interface Me {
     keyLookup: boolean;
   };
   personalToken?: boolean;
+  /** false: Name noch nicht vom Server bei Discogs bestätigt (wird im Hintergrund nachgeholt) */
+  verified?: boolean;
+  needIdentity?: boolean;
 }
 
 export const getMe = () => fetch("/api/me", { credentials: "include" }).then((r) => r.json() as Promise<Me>);

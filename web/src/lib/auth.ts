@@ -86,7 +86,8 @@ export async function completeLogin(token: string, verifier: string, onStatus: (
   for (let attempt = 0; attempt < 6; attempt++) {
     try {
       const done = await post<{ username: string | null }>("/api/auth/exchange", { token, verifier });
-      return done.username ? done : { username: await resolveIdentity() };
+      // Ohne bestätigten Namen geht es trotzdem weiter, die App holt ihn im Hintergrund nach
+      return done;
     } catch (e) {
       const err = e as Error & { status?: number; data?: { busy?: boolean } };
       if (!err.data?.busy) throw new Error(err.status === 400 ? "Die Anmeldung ist abgelaufen. Bitte noch einmal starten." : "Discogs hat die Anmeldung abgelehnt. Bitte noch einmal starten.");
@@ -113,4 +114,43 @@ export async function resolveIdentity(): Promise<string | null> {
     }
   }
   return null;
+}
+
+/**
+ * Unbestätigte Sitzung: Den Namen fragt das Gerät selbst bei Discogs (eigene IP, kaum gebremst)
+ * und meldet ihn vorläufig an. Der Server bestätigt ihn später.
+ */
+export async function claimIdentity(): Promise<string | null> {
+  try {
+    const { discogs } = await import("./api");
+    const me = await discogs<{ username: string }>("/oauth/identity");
+    if (!me?.username) return null;
+    await post("/api/auth/claim", { username: me.username });
+    return me.username;
+  } catch {
+    return null;
+  }
+}
+
+let verifying = false;
+/** Im Hintergrund geduldig bestätigen lassen: alle paar Minuten, bis der Server Discogs erreicht */
+export function verifyInBackground(onVerified: (name: string) => void) {
+  if (verifying) return;
+  verifying = true;
+  void (async () => {
+    for (let i = 0; i < 20; i++) {
+      await sleep(i === 0 ? 5000 : Math.min(10 * 60_000, 60_000 * (i + 1)));
+      try {
+        const r = await post<{ username: string; verified?: boolean }>("/api/auth/identity", {});
+        if (r.username) {
+          onVerified(r.username);
+          break;
+        }
+      } catch (e) {
+        // 401: Zugang ungültig, dann hilft nur neu anmelden; sonst weiter warten
+        if ((e as { status?: number }).status === 401) break;
+      }
+    }
+    verifying = false;
+  })();
 }

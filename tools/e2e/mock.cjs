@@ -30,6 +30,7 @@ module.exports = async function install(page) {
     if (p.endsWith("/collection/value")) return json({ minimum: "€412.30", median: "€1,187.65", maximum: "€2,960.00" });
     if (p === "/api/me") return json({ username: "franzerladj", features: { claude: false, freeAi: true, lastfm: true, keyLookup: false, oauth: true } });
     if (p === "/api/sign") return json({ mode: "proxy" });
+    if (p === "/api/discogs/oauth/identity") return json({ id: 1, username: "franzerladj" });
     if (p === "/api/push/status") return json({ available: true, devices: 0, prefs: null });
     if (p === "/api/push/friend-added") return json({ ok: true, status: "wartet" });
     if (p.startsWith("/api/push/")) return json({ ok: true });

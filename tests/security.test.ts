@@ -112,3 +112,37 @@ describe("Sitzungsdauer", () => {
     expect(r.headers.get("Set-Cookie")).toContain("Max-Age=15552000");
   });
 });
+
+describe("Angemeldet bleiben, wenn Discogs den Server bremst", () => {
+  const unverified = async (username = "") => `crate_session=${await seal(SECRET, { token: "t", secret: "s", username, verified: false, iat: Date.now() })}`;
+  const json = { "Content-Type": "application/json", Origin: ORIGIN, "Sec-Fetch-Site": "same-origin" };
+  it("finish meldet trotz 429 an (unbestätigt) statt abzubrechen", async () => {
+    vi.stubGlobal("fetch", async (u: string | URL | Request) => {
+      calls.push(String(u));
+      return new Response("busy", { status: 429 });
+    });
+    const r = await req("/api/auth/finish", { method: "POST", headers: json, body: '{"token":"AT","secret":"ATS"}' });
+    expect(r.status).toBe(200);
+    expect(await r.json()).toEqual({ username: null, verified: false });
+    expect(r.headers.get("Set-Cookie")).toContain("crate_session=");
+  }, 30000);
+  it("/api/me bleibt angemeldet und /api/sign signiert mit dem eigenen Zugang", async () => {
+    const cookie = await unverified("franz");
+    const me = await req("/api/me", { headers: { Cookie: cookie } });
+    expect(me.status).toBe(200);
+    expect(await me.json()).toMatchObject({ username: "franz", verified: false, needIdentity: true });
+    const sign = await req("/api/sign", { method: "POST", headers: { ...json, Cookie: cookie }, body: '{"method":"GET","path":"/oauth/identity"}' });
+    expect((await sign.json()).mode).toBe("direct");
+  });
+  it("vorläufiger Name reicht nicht, um unter dem Namen zu speichern", async () => {
+    const cookie = await unverified("franz");
+    const r = await req("/api/profile/me", { method: "POST", headers: { ...json, Cookie: cookie }, body: '{"links":[],"styles":[],"bio":"x"}' });
+    expect(r.status).toBe(401);
+  });
+  it("claim setzt den vorläufigen Namen nur bei unbestätigten Sitzungen", async () => {
+    const r = await req("/api/auth/claim", { method: "POST", headers: { ...json, Cookie: await unverified() }, body: '{"username":"franz"}' });
+    expect(await r.json()).toEqual({ username: "franz", verified: false });
+    const v = await req("/api/auth/claim", { method: "POST", headers: { ...json, Cookie: await sessionCookie() }, body: '{"username":"jemand"}' });
+    expect(await v.json()).toEqual({ username: "franz", verified: true });
+  });
+});
