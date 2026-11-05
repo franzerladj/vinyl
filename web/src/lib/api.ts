@@ -33,10 +33,29 @@ async function pump() {
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     lastCall = Date.now();
     recent.push(lastCall);
-    await job.run();
+    // Wächter: hängt eine Anfrage, läuft die Warteschlange nach spätestens einer Minute weiter
+    await Promise.race([job.run(), new Promise((r) => setTimeout(r, JOB_WATCHDOG_MS))]);
+    // Discogs meldet, wie viele Anfragen in dieser Minute noch gehen: kurz vor null kurz durchatmen
+    if (remaining != null && remaining <= 2) {
+      const t = Date.now();
+      while (recent.length < LIMIT_PER_MIN) recent.push(t);
+      remaining = null;
+    }
   }
   running = false;
 }
+
+const JOB_WATCHDOG_MS = 60_000;
+/** Eine einzelne Anfrage darf höchstens so lange dauern, dann wird sie abgebrochen und wiederholt */
+const REQUEST_TIMEOUT_MS = 20_000;
+let remaining: number | null = null;
+
+function fetchWithTimeout(url: string, init: RequestInit = {}) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), REQUEST_TIMEOUT_MS);
+  return fetch(url, { ...init, signal: ac.signal }).finally(() => clearTimeout(t));
+}
+const isAbort = (e: unknown) => (e as { name?: string })?.name === "AbortError";
 
 function enqueue<T>(fn: () => Promise<T>, priority: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -52,12 +71,17 @@ export interface DiscogsOptions {
   background?: boolean;
 }
 
-/** Direktweg abschalten, falls der Browser ihn blockiert (z.B. Tracking-Schutz) */
-let direct = true;
+/**
+ * Direktweg nur dann abschalten, wenn der Browser ihn wirklich blockiert (z. B. Tracking-Schutz):
+ * erst nach drei Fehlschlägen am Stück und nur für zwei Minuten. Ein einzelner Netz-Aussetzer
+ * (WLAN-Wechsel, App kurz im Hintergrund) soll nicht dauerhaft auf den gebremsten Server-Weg zwingen.
+ */
+let directFails = 0;
+let directOffUntil = 0;
 
 async function sendDirect(path: string, method: string, body?: string): Promise<Response | null> {
-  if (!direct) return null;
-  const sig = await fetch("/api/sign", {
+  if (Date.now() < directOffUntil) return null;
+  const sig = await fetchWithTimeout("/api/sign", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
@@ -67,32 +91,50 @@ async function sendDirect(path: string, method: string, body?: string): Promise<
   const s = (await sig.json()) as { mode: "direct" | "proxy"; url?: string; authorization?: string };
   if (s.mode !== "direct" || !s.url || !s.authorization) return null;
   try {
-    return await fetch(s.url, {
+    const r = await fetchWithTimeout(s.url, {
       method,
       headers: { Authorization: s.authorization, ...(body ? { "Content-Type": "application/json" } : {}) },
       body,
     });
-  } catch {
-    // Netzwerk- oder CORS-Fehler: ab jetzt über den Server
-    direct = false;
+    directFails = 0;
+    return r;
+  } catch (e) {
+    // Zeitüberschreitung: einfach nochmal versuchen (der Aufrufer wiederholt), nicht abschalten
+    if (isAbort(e)) throw e;
+    if (++directFails >= 3) {
+      directOffUntil = Date.now() + 120_000;
+      directFails = 0;
+    }
     return null;
   }
 }
 
 const sendProxy = (path: string, method: string, body?: string) =>
-  fetch(`/api/discogs${path}`, { method, credentials: "include", headers: body ? { "Content-Type": "application/json" } : undefined, body });
+  fetchWithTimeout(`/api/discogs${path}`, { method, credentials: "include", headers: body ? { "Content-Type": "application/json" } : undefined, body });
 
 export function discogs<T>(path: string, opts: DiscogsOptions = {}): Promise<T> {
   const method = opts.method ?? "GET";
   const body = opts.body ? JSON.stringify(opts.body) : undefined;
   return enqueue(async () => {
     for (let attempt = 0; attempt < 4; attempt++) {
-      const res = (await sendDirect(path, method, body)) ?? (await sendProxy(path, method, body));
+      let res: Response;
+      try {
+        res = (await sendDirect(path, method, body)) ?? (await sendProxy(path, method, body));
+      } catch (e) {
+        // Hängende Anfrage abgebrochen: kurz warten und neu versuchen
+        if (isAbort(e) && attempt < 3 && method === "GET") {
+          await new Promise((r) => setTimeout(r, 1500));
+          continue;
+        }
+        throw isAbort(e) ? new ApiError(408, "Discogs antwortet gerade nicht") : e;
+      }
+      const left = Number(res.headers.get("X-Discogs-Ratelimit-Remaining"));
+      if (Number.isFinite(left) && res.headers.has("X-Discogs-Ratelimit-Remaining")) remaining = left;
       if (res.status === 429) {
         // Fenster als voll markieren und warten
         const t = Date.now();
         while (recent.length < LIMIT_PER_MIN) recent.push(t);
-        await new Promise((r) => setTimeout(r, 12_000 * (attempt + 1)));
+        await new Promise((r) => setTimeout(r, Math.min(30_000, 8_000 * (attempt + 1))));
         continue;
       }
       if (!res.ok) {
