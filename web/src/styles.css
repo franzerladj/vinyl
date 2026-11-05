@@ -989,3 +989,13 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .hint-text { flex: 1; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--text); }
 .hint-x { flex: none; border: 0; border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 700; background: var(--accent); color: #fff; cursor: pointer; white-space: nowrap; }
 .hint-x.ghost { background: var(--surface-2); color: var(--text); }
+
+/* Plattenbörse: Ergebnis auf einen Blick */
+.verdict { display: flex; flex-direction: column; gap: 4px; margin: 14px 0 4px; padding: 16px 18px; border-radius: 18px; background: var(--surface); color: var(--text); animation: rise 0.45s var(--ease) both; }
+.verdict.have { background: #2f8f57; color: #fff; }
+.verdict.want { background: #ff5b14; color: #16120f; }
+.verdict.other { background: #2d5b8c; color: #fff; }
+.verdict-label { word-spacing: 0.12em; font: 900 38px/0.95 var(--font-brand); font-stretch: 62%; font-variation-settings: "wdth" 62; text-transform: uppercase; }
+.verdict-text { font-size: 15px; line-height: 1.4; }
+.verdict-price { font-size: 13px; opacity: 0.85; margin-top: 4px; }
+.label-link { color: inherit; text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }

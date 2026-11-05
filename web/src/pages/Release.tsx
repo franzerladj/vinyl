@@ -106,7 +106,14 @@ export default function ReleasePage() {
       <div className="artist">{rel?.artist ?? preview?.artist ?? ""}</div>
       {rel && (
         <div className="meta">
-          {[rel.labels[0] && `${rel.labels[0].name.replace(/\s\(\d+\)$/, "")} · ${rel.labels[0].catno}`, rel.country, rel.year || null].filter(Boolean).join(" · ")}
+          {rel.labels[0]?.id ? (
+            <Link to={`/label/${rel.labels[0].id}`} viewTransition className="label-link">
+              {rel.labels[0].name.replace(/\s\(\d+\)$/, "")}
+            </Link>
+          ) : (
+            rel.labels[0]?.name.replace(/\s\(\d+\)$/, "")
+          )}
+          {[rel.labels[0] && ` · ${rel.labels[0].catno}`, rel.country && ` · ${rel.country}`, rel.year ? ` · ${rel.year}` : null].filter(Boolean).join("")}
         </div>
       )}
       {rel && <div className="tiny" style={{ marginTop: 4 }}>{formatLine(rel)}</div>}

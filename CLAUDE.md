@@ -37,6 +37,8 @@ Wichtige Eigenheiten:
 - Kisten-Vorlagen: KV `crateTemplates` (`web/src/lib/crateTemplates.ts`). Set-Verlauf: `web/src/lib/setHistory.ts`. Cue-Punkte: `TrackMeta.cueIn/cueOut`.
 - Teilen-Karten (Story 1080×1920): `web/src/lib/shareCard.ts`, Discogs-Bilder über `/api/img` (CORS).
 - Vinylhead-Daten (`shared/vinyl.ts`): Zustand nach Goldmine aus den Discogs-Sammlungsfeldern 1 (Platte), 2 (Hülle), 3 (Notiz), Schreiben per `setCondition` in `sync.ts`. Pressung (Matrix/Runout, Schnitt, Presswerk) aus `identifiers`/`companies` des Releases, ältere Einträge werden beim Öffnen still nachgeladen.
+- Plattenbörse: nach dem Suchen auf `/scan` zeigt `Verdict` groß „Hast du schon“, „Auf deiner Wantlist“, „Andere Pressung“ (gleicher Master) oder „Neu für dich“ mit Discogs-Preis.
+- Label-Vollständigkeit: `shared/labels.ts` (`labelCompletion`, je Katalognummer auf Vinyl, andere Pressung zählt), `web/src/lib/labels.ts` (`/labels/{id}/releases`, max. 5 Seiten, KV `label:<id>` 7 Tage), Seiten `/labels` und `/label/:id`, Link vom Label auf der Platten-Seite.
 - Sammlungswert (`shared/value.ts`, `web/src/lib/value.ts`): Gesamtwert direkt von Discogs (`/users/{u}/collection/value`, Min/Median/Max aus Verkäufen, eine Anfrage, KV `collValue`, alle 12 h). Einzelwert je Platte: Preisempfehlung für den eigenen Zustand, sonst VG+, sonst günstigstes Angebot. Blatt und Sortierung „Wert“ in `Collection.tsx`.
 - Mithören (`shared/listen.ts`, `web/src/lib/listen.ts`, `web/src/components/Listen.tsx`): Mikrofon ohne Sprachfilter, alle 4 s Auswertung der letzten 60 s im Worker, sicher erst bei drei gleichen Ergebnissen (ab 30 s). Nichts verlässt das Gerät. Braucht `microphone=(self)` in `web/public/_headers`. YouTube-Ton direkt abgreifen geht nicht (Player gesperrt, Download gegen die YouTube-Bedingungen). Lange Aufnahmen werden über 8/16/32 Schläge nachgemessen (±0,1 BPM).
 - Sicherheit (Audit run-1, Regressionstests in `tests/security.test.ts`): Middleware in `server/app.ts` lehnt schreibende `/api`-Anfragen von fremden Seiten ab (`crossSite`: Sec-Fetch-Site/Origin), KI nur mit bestätigter Sitzung oder eigenem `sk-ant-`-Key (`aiAccess`), `/api/audio/*` und `/api/lastfm/*` nur angemeldet, Signier-Pfade über `allowedPath` (keine Punkt-Segmente, kein `%2F`/`%2E`/Backslash). Kontowechsel: `web/src/lib/account.ts` (`claimDevice`, KV `owner`) leert beim Wechsel alle Tabellen außer `releases`, den eigenen Key und das Push-Abo. Abmelden schaltet Mitteilungen aus. Sitzungen tragen `iat`, laufen nach 180 Tagen ohne Nutzung ab und werden über `/api/me` gleitend verlängert. CSP nur frame-ancestors/base-uri/object-src/form-action (Script-Regeln würden Tesseract und Kamera ungetestet gefährden). Offen: serverseitiger Widerruf einzelner Sitzungen.
@@ -74,6 +76,8 @@ node tools/e2e/grade.cjs    # Zustand bewerten, Pressung anzeigen
 node tools/e2e/value.cjs    # Wert der Sammlung, wertvollste Platten, Sortierung nach Wert (dauert ~5 Min.)
 node tools/e2e/switch.cjs   # Kontowechsel: lokale Daten des vorherigen Kontos werden entfernt
 node tools/e2e/welcome.cjs  # Begrüßung, Einmal-Hinweis
+node tools/e2e/fair.cjs     # Plattenbörse: Hast du schon / Wantlist
+node tools/e2e/labels.cjs   # Label vervollständigen
 node tools/e2e/listen.cjs   # Mithören mit simuliertem Mikrofon (124 BPM, Am)
 node tools/brand/logo.cjs   # Icons aus dem Logo neu erzeugen
 node tools/e2e/sharecard.cjs # Teilen-Karten (Profil, Set) als PNG erzeugen

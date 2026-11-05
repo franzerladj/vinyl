@@ -16,6 +16,8 @@ const Wantlist = lazy(() => import("./pages/Wantlist"));
 const Search = lazy(() => import("./pages/Search"));
 const Scan = lazy(() => import("./pages/Scan"));
 const Shop = lazy(() => import("./pages/Shop"));
+const LabelPage = lazy(() => import("./pages/LabelPage"));
+const LabelsIndex = lazy(() => import("./pages/LabelPage").then((m) => ({ default: m.LabelsIndex })));
 const Sets = lazy(() => import("./pages/Sets"));
 const SetEditor = lazy(() => import("./pages/SetEditor"));
 const SharedSetPage = lazy(() => import("./pages/SharedSetPage"));
@@ -39,6 +41,8 @@ export const routes: RouteObject[] = [
   { path: "release/:id", element: <ReleasePage /> },
   { path: "scan", element: <Scan /> },
   { path: "shop", element: <Shop /> },
+  { path: "label/:id", element: <LabelPage /> },
+  { path: "labels", element: <LabelsIndex /> },
   { path: "sets", element: <Sets /> },
   { path: "sets/shared", element: <SharedSetPage /> },
   { path: "sets/:id", element: <SetEditor /> },

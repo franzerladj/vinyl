@@ -5,7 +5,7 @@ import { db, type Release, type TrackMeta } from "../lib/db";
 import { autoPipeline, fetchMissingDetails } from "../lib/sync";
 import { toast } from "../lib/store";
 import { CAMELOT_COLORS, Cover, Empty, KeyBadge, markHero, RecordRow, Sheet, SkeletonRows, useDebounced } from "../components/bits";
-import { IconCamera, IconCart, IconGrid, IconMore, IconRows, IconSearch, IconSync, IconTag } from "../components/icons";
+import { IconCamera, IconCart, IconRecord, IconGrid, IconMore, IconRows, IconSearch, IconSync, IconTag } from "../components/icons";
 import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
 import { matchesQuery } from "../../../shared/textSearch";
 import { gradeRank, shortGrade } from "../../../shared/vinyl";
@@ -359,6 +359,7 @@ export default function Collection() {
         items={[
           { label: "Platte hinzufügen", icon: <IconCamera />, onClick: () => nav("/scan", { viewTransition: true }) },
           { label: "Wert der Sammlung", icon: <IconCart />, onClick: () => setSheet("value") },
+          { label: "Labels vervollständigen", icon: <IconRecord />, onClick: () => nav("/labels", { viewTransition: true }) },
           { label: "Beschriften (Einleger & Sticker)", icon: <IconTag />, onClick: () => nav("/stickers", { viewTransition: true }) },
           { label: "Alles abgleichen & ergänzen", icon: <IconSync />, onClick: () => autoPipeline({ force: true }).then(() => toast("Alles synchron und analysiert"), (e) => toast(e.message)) },
           { label: "Fehlende Tracklists laden", icon: <IconRows />, onClick: () => fetchMissingDetails("collection").catch((e) => toast(e.message)) },

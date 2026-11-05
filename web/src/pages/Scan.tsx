@@ -5,7 +5,8 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { api, canRecognize, discogs } from "../lib/api";
 import { ocrImage } from "../lib/free";
 import { decodeBarcodeImage, startLiveScan, type LiveScan } from "../lib/barcode";
-import { addToCollection, addWant } from "../lib/sync";
+import { addToCollection, addWant, fetchMarketStats } from "../lib/sync";
+import { money } from "../lib/format";
 import { db } from "../lib/db";
 import { toast, useStore } from "../lib/store";
 import type { SearchResult } from "../lib/types";
@@ -300,6 +301,7 @@ export default function Scan() {
           </form>
         )}
 
+        {results && results.length > 0 && owned && wanted && <Verdict results={results} owned={owned} wanted={wanted} />}
         {results && (
           <>
             <h2>{results.length ? (results.length === 1 ? "Gefunden" : "Welche Pressung ist es?") : "Nichts gefunden"}</h2>
@@ -345,5 +347,48 @@ export default function Scan() {
         )}
       </div>
     </>
+  );
+}
+
+/** Plattenbörse: auf einen Blick, ob man die Platte schon hat, sucht oder was sie kostet */
+function Verdict({ results, owned, wanted }: { results: SearchResult[]; owned: Set<number>; wanted: Set<number> }) {
+  const ownedMasters = useLiveQuery(async () => {
+    const rels = await db.releases.bulkGet([...owned]);
+    return new Map(rels.filter((r) => r?.masterId).map((r) => [r!.masterId!, r!]));
+  }, [owned]);
+  const exact = results.find((r) => owned.has(r.id));
+  const want = results.find((r) => wanted.has(r.id));
+  const sibling = !exact ? results.find((r) => r.master_id && ownedMasters?.has(r.master_id)) : undefined;
+  const top = exact ?? want ?? results[0];
+  const kind = exact ? "have" : want ? "want" : sibling ? "other" : "new";
+  useEffect(() => {
+    fetchMarketStats([top.id]).catch(() => undefined);
+    haptic(kind === "have" ? 20 : 10);
+  }, [top.id, kind]);
+  const stat = useLiveQuery(() => db.marketStats.get(top.id), [top.id]);
+  const target = useLiveQuery(async () => (await db.wantMeta.get(top.id))?.targetPrice ?? null, [top.id]);
+  const label = { have: "Hast du schon", want: "Auf deiner Wantlist", other: "Andere Pressung in deiner Kiste", new: "Neu für dich" }[kind];
+  const text =
+    kind === "have"
+      ? results.length > 1 && exact !== results[0]
+        ? "Eine der gefundenen Pressungen steht in deiner Sammlung."
+        : "Genau diese Pressung steht in deiner Sammlung."
+      : kind === "want"
+        ? target
+          ? `Dein Wunschpreis: ${money(target, stat?.currency)}`
+          : "Die suchst du. Preis vergleichen und zuschlagen."
+        : kind === "other"
+          ? `Du hast „${ownedMasters!.get(sibling!.master_id!)!.title}“ in einer anderen Pressung. Katalognummer vergleichen.`
+          : top.community
+            ? `${top.community.want} wollen sie, ${top.community.have} haben sie.`
+            : "Noch nicht in deiner Sammlung oder Wantlist.";
+  return (
+    <div className={`verdict ${kind}`} role="status" aria-live="polite">
+      <span className="verdict-label">{label}</span>
+      <span className="verdict-text">{text}</span>
+      <span className="verdict-price mono">
+        {stat === undefined ? "Preis wird geladen …" : stat?.lowest != null ? `Discogs ab ${money(stat.lowest, stat.currency)} · ${stat.numForSale} Angebote` : "Gerade kein Angebot auf Discogs"}
+      </span>
+    </div>
   );
 }
