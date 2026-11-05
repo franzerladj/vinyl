@@ -36,6 +36,8 @@ Wichtige Eigenheiten:
 - Schriften selbst gehostet (`@fontsource-variable/*`), YouTube erst nach Antippen (DSGVO). Die Frage „Videos künftig gleich laden?“ kommt beim ersten angetippten Video (`VideoFacade` in `Release.tsx`), nicht beim Start.
 - Führung: Begrüßung in vier Schritten nach dem ersten Login (`web/src/components/Welcome.tsx`, localStorage `crate:welcome:<name>`), Einmal-Hinweise mit `<Hint id>` (localStorage `crate:hint:<id>`). Browser-Tests überspringen die Begrüßung, außer `WELCOME=1` (`tools/e2e/welcome.cjs`).
 - Sets teilen: das ganze Set steckt im Link (`/sets/shared#…`, `shared/setShare.ts`), nichts auf dem Server. Empfänger sieht, welche Platten er hat, und übernimmt die spielbaren Tracks. Nach dem Login führt `crate:after` (sessionStorage) zum Link zurück.
+- Gig in den Kalender: `shared/ics.ts` (`buildIcs` nach RFC 5545 mit Falten, Ende nach Mitternacht am Folgetag, Erinnerung 3 h vorher; Links für Google und Outlook im Web), Route `/api/ics` (angemeldet, liefert `text/calendar`), `CalendarSheet` im Set-Editor. Set hat `start`/`end`/`calendarAt`. Beim ersten Speichern eines künftigen Gigs wird der Kalender angeboten.
+- Slogan: „Aus der Kiste auf den Teller.“ (Login und Startbildschirm).
 - Kisten-Vorlagen: KV `crateTemplates` (`web/src/lib/crateTemplates.ts`). Set-Verlauf: `web/src/lib/setHistory.ts`. Cue-Punkte: `TrackMeta.cueIn/cueOut`.
 - Teilen-Karten (Story 1080×1920): `web/src/lib/shareCard.ts`, Discogs-Bilder über `/api/img` (CORS).
 - Vinylhead-Daten (`shared/vinyl.ts`): Zustand nach Goldmine aus den Discogs-Sammlungsfeldern 1 (Platte), 2 (Hülle), 3 (Notiz), Schreiben per `setCondition` in `sync.ts`. Pressung (Matrix/Runout, Schnitt, Presswerk) aus `identifiers`/`companies` des Releases, ältere Einträge werden beim Öffnen still nachgeladen.
@@ -88,6 +90,7 @@ node tools/e2e/stylus.cjs   # Nadel-Stunden
 node tools/e2e/like.cjs     # Digging: Mag ich, Liste, keine Wantlist
 node tools/e2e/year.cjs     # Jahresrückblick und Story-Karte
 node tools/e2e/repress.cjs  # Repress-Alarm auf der Wantlist
+node tools/e2e/gigcal.cjs   # Gig: Zeiten, Kalender-Angebot, Google-Link
 node tools/e2e/listen.cjs   # Mithören mit simuliertem Mikrofon (124 BPM, Am)
 node tools/brand/logo.cjs   # Icons aus dem Logo neu erzeugen
 node tools/e2e/sharecard.cjs # Teilen-Karten (Profil, Set) als PNG erzeugen

@@ -10,6 +10,7 @@ import { recognizeRecord, recognizeRecordFree, tagVibes, tagVibesFree, type Vibe
 import { fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
 import { lastfmTags } from "./lastfm";
 import { profileEmpty, sanitizeProfile, type CrateProfile } from "../shared/profile";
+import { buildIcs } from "../shared/ics";
 
 type C = Context<{ Bindings: Env; Variables: { cfg: Config } }>;
 
@@ -670,6 +671,19 @@ app.get("/api/profile/:u", async (c) => {
 // ---------- Bilder für Teilen-Karten ----------
 // Discogs-Cover haben keine CORS-Freigabe; zum Zeichnen auf ein Canvas reicht der Server sie durch.
 // Nur Discogs-Bildserver, damit das kein offener Proxy ist.
+/** Gig als .ics: iPhone und Mac öffnen „Zum Kalender hinzufügen“, Android und Outlook laden die Datei */
+app.get("/api/ics", async (c) => {
+  if (!(await tokenSession(c))) return c.text("Bitte anmelden", 401);
+  const q = (k: string, max: number) => (c.req.query(k) ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").slice(0, max);
+  const date = q("d", 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return c.text("Datum fehlt", 400);
+  const time = (k: string) => (/^\d{1,2}:\d{2}$/.test(q(k, 5)) ? q(k, 5) : undefined);
+  const uid = /^[\w.@-]{1,80}$/.test(q("u", 80)) ? q("u", 80) : `gig-${date}@crate`;
+  const ics = buildIcs({ uid, title: q("t", 120) || "Gig", date, start: time("s"), end: time("e"), location: q("l", 160) || undefined, description: q("n", 1500) || undefined, alarmMinutes: Number(q("a", 4)) || undefined });
+  const name = (q("t", 60) || "gig").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "gig";
+  return new Response(ics, { headers: { "Content-Type": "text/calendar; charset=utf-8", "Content-Disposition": `attachment; filename="${name}.ics"`, "Cache-Control": "no-store" } });
+});
+
 app.get("/api/img", async (c) => {
   const u = c.req.query("u") ?? "";
   let url: URL;

@@ -21,6 +21,8 @@ import { matchesQuery } from "../../../shared/textSearch";
 import { bpmDelta, keyDistance, parseKey } from "../../../shared/music";
 import { parseDuration } from "../../../shared/match";
 import { Hint } from "../components/Welcome";
+import { CalendarSheet } from "../components/CalendarSheet";
+import type { GigEvent } from "../../../shared/ics";
 
 const CURVES: [Curve, string, string][] = [
   ["warmup", "Warm-up", "ruhig starten, langsam steigern"],
@@ -65,6 +67,19 @@ export default function SetEditor() {
     if (!isNew) db.sets.get(Number(id)).then((s) => s && setSet({ crateIds: [], mixNotes: {}, ...s }));
   }, [id, isNew]);
 
+  const [calOpen, setCalOpen] = useState(false);
+  const gigEvent: GigEvent | null = set.date
+    ? {
+        uid: `set-${set.id ?? "neu"}-${set.createdAt}@crate`,
+        title: set.venue ? `${set.name || "Gig"} · ${set.venue}` : set.name || "Gig",
+        date: set.date,
+        start: set.start,
+        end: set.end,
+        location: set.venue,
+        description: [`Set in Crate: ${set.trackIds.length} Tracks${set.crateIds?.length ? `, ${set.crateIds.length} Platten in der Kiste` : ""}`, set.notes, set.id ? `${location.origin}/sets/${set.id}` : ""].filter(Boolean).join("\n"),
+        alarmMinutes: 180,
+      }
+    : null;
   const update = (patch: Partial<DJSet>) => {
     setSet((s) => ({ ...s, ...patch }));
     setDirty(true);
@@ -152,6 +167,8 @@ export default function SetEditor() {
   const save = async () => {
     const s = { ...set, name: set.name || `Set ${new Date().toLocaleDateString("de-DE")}` };
     const newId = await db.sets.put(s);
+    // Neuer Gig mit Datum: gleich anbieten, ihn in den Kalender einzutragen
+    if (s.date && !s.calendarAt && s.date >= new Date().toISOString().slice(0, 10)) setTimeout(() => setCalOpen(true), 350);
     void import("../lib/push").then((p) => p.syncPushData());
     toast("Set gespeichert");
     setDirty(false);
@@ -213,6 +230,17 @@ export default function SetEditor() {
   return (
     <>
       <audio ref={audio} onEnded={() => setPlaying(null)} onPause={() => setPlaying(null)} />
+      <CalendarSheet
+        open={calOpen}
+        onClose={() => setCalOpen(false)}
+        event={gigEvent}
+        onDone={() => {
+          setCalOpen(false);
+          const at = Date.now();
+          setSet((x) => ({ ...x, calendarAt: at }));
+          if (set.id) void db.sets.update(set.id, { calendarAt: at });
+        }}
+      />
       <NavBar
         title={set.name || (isNew ? "Neues Set" : "Set")}
         backTo="/sets"
@@ -229,6 +257,21 @@ export default function SetEditor() {
           <input className="input" type="date" value={set.date ?? ""} onChange={(e) => update({ date: e.target.value })} />
           <input className="input" placeholder="Location" value={set.venue ?? ""} onChange={(e) => update({ venue: e.target.value })} />
         </div>
+        {set.date && (
+          <div className="gig-times">
+            <label className="pe-field" style={{ padding: 0 }}>
+              <span>Beginn</span>
+              <input className="input" type="time" value={set.start ?? ""} onChange={(e) => update({ start: e.target.value || undefined })} />
+            </label>
+            <label className="pe-field" style={{ padding: 0 }}>
+              <span>Ende</span>
+              <input className="input" type="time" value={set.end ?? ""} onChange={(e) => update({ end: e.target.value || undefined })} />
+            </label>
+            <button className="btn tinted gig-cal" onClick={() => setCalOpen(true)}>
+              {set.calendarAt ? "Kalender ✓" : "In den Kalender"}
+            </button>
+          </div>
+        )}
         <div className="chips">
           {CURVES.map(([c, l, d]) => (
             <button key={c} className={`chip ${set.curve === c ? "on" : ""}`} onClick={() => update({ curve: c })} title={d}>

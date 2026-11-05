@@ -21,7 +21,7 @@ export default function Login({ me }: { me: Me | null }) {
           <LogoMark size={168} animate />
         </div>
         <Wordmark className="login-word" />
-        <p className="login-claim">Für Leute, die Platten auflegen.</p>
+        <p className="login-claim">Aus der Kiste auf den Teller.</p>
         <ol className="side-list">
           {SIDES.map(([pos, t, d], i) => (
             <li key={pos} style={{ animation: `rise .6s var(--ease) ${0.45 + i * 0.07}s both` }}>

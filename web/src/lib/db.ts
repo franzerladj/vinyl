@@ -92,6 +92,11 @@ export interface DJSet {
   id?: number;
   name: string;
   date?: string;
+  /** Beginn und Ende (HH:MM) für den Kalender */
+  start?: string;
+  end?: string;
+  /** Wann zuletzt in einen Kalender übernommen */
+  calendarAt?: number;
   venue?: string;
   curve: string;
   trackIds: string[];
