@@ -14,7 +14,7 @@ Mobile Web-App (PWA) für Vinyl-DJs auf Basis von Discogs. Besitzer: Franz Krali
 - Startbildschirm: steht als HTML/CSS direkt in `web/index.html` (`#splash`, erscheint vor dem JavaScript), `main.tsx` blendet ihn nach 1,4 s aus (in derselben Sitzung nach 0,3 s), Schriftzug erst wenn die Markenschrift geladen ist. Im Inline-CSS keine `font`-Kurzform mit Prozent-Breite (der Minifier macht sie ungültig).
 - Animationen nur über `transform`/`opacity` (120 Hz): keine Übergänge auf width/height/left/box-shadow/filter, Skeleton pulsiert über Deckkraft, Seitenwechsel dunkelt über Deckkraft ab. Der kleine Titel der Werkzeugleiste gleicht seine Höhe mit negativem Abstand aus (kein Springen).
 - UI-Anspruch: wirkt wie eine große native iOS-App (Apple-Design, Motion, Haptik). Änderungen immer im Handy-Viewport (Playwright, „iPhone 13“) prüfen, hell und dunkel, und mit `tools/e2e/wrap.cjs` auf 320 px gegenprüfen.
-- Umbrüche: Silbentrennung nur in Fließtext, nie in Labels, Fragen, Titeln oder Knöpfen. Kurze Labels statt Trennung.
+- Umbrüche: Silbentrennung nur in Fließtext, nie in Labels, Fragen, Titeln oder Knöpfen. Kurze Labels statt Trennung. Klammern in Titeln brechen als Ganzes um (`keepParens` in `bits.tsx`, Klasse `.nobr`; auf Teilen-Karten in `wrap()`), Klammern über 40 Zeichen dürfen brechen.
 
 ## Aufbau
 

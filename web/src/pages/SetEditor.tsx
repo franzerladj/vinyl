@@ -11,7 +11,7 @@ import { encodeSet } from "../../../shared/setShare";
 import { playedHistory, playedText, type PlayedAt } from "../lib/setHistory";
 import { toast, username } from "../lib/store";
 import { deleteTemplate, saveTemplate, stillOwned, useTemplates } from "../lib/crateTemplates";
-import { Cover, haptic, Seg, Sheet } from "../components/bits";
+import { Cover, haptic, Seg, Sheet, keepParens } from "../components/bits";
 import { IconPlay, IconPlus, IconX } from "../components/icons";
 import { TrackLine } from "./Sets";
 import { previewUrl } from "../lib/free";
@@ -646,7 +646,7 @@ function NextPanel(p: {
             </button>
             <div className="next-main" onClick={() => p.onPick(s.id)} role="button">
               <b>
-                <span className="sub">{t.position}</span> {t.title}
+                <span className="sub">{t.position}</span> {keepParens(t.title)}
               </b>
               <span className="sub next-sub">
                 {t.artist}
@@ -978,7 +978,7 @@ function LiveMode({ tracks, rels, notes, played, onPlayed, onClose }: { tracks: 
       <div className="live-now">
         <Cover src={r?.cover || r?.thumb} className="cover live-cover" />
         <small>Läuft</small>
-        <h2>{cur.title}</h2>
+        <h2>{keepParens(cur.title)}</h2>
         <span className="sub">
           {cur.artist} · {r?.title} · {cur.position}
         </span>

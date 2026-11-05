@@ -90,7 +90,13 @@ function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement | null, 
 
 /** Text auf Breite umbrechen, höchstens `max` Zeilen, letzte mit … */
 function wrap(ctx: CanvasRenderingContext2D, text: string, width: number, max: number): string[] {
-  const words = text.replace(/\s+/g, " ").trim().split(" ");
+  // Kurze Klammern bleiben ein Wort: „(Extended Mix)“ rutscht als Ganzes in die nächste Zeile
+  const words = (text.replace(/\s+/g, " ").trim().match(/\([^()]{0,38}\)|\[[^[\]]{0,38}\]|[^\s]+/g) ?? []).reduce<string[]>((acc, w) => {
+    // Satzzeichen direkt hinter der Klammer bleiben dran
+    if (acc.length && /^[,.;:!?]+$/.test(w)) acc[acc.length - 1] += w;
+    else acc.push(w);
+    return acc;
+  }, []);
   const lines: string[] = [];
   let cur = "";
   for (const w of words) {
@@ -446,6 +452,102 @@ export async function renderSetCard(s: SetCardInput): Promise<Blob> {
   ctx.fillStyle = ACCENT;
   ctx.letterSpacing = "4px";
   ctx.fillText("KURATIERT MIT CRATE", W / 2, H - 90);
+  ctx.letterSpacing = "0px";
+  return toBlob(c);
+}
+
+export interface YearCardInput {
+  year: number;
+  username: string;
+  added: number;
+  sets: number;
+  hours: number;
+  covers: (string | undefined)[];
+  mostPlayed: { title: string; artist: string; n: number }[];
+  label?: string;
+  style?: string;
+}
+
+/** Jahresrückblick als Story: Jahr groß, drei Zahlen, Cover-Fächer, meistgespielt */
+export async function renderYearCard(p: YearCardInput): Promise<Blob> {
+  await fonts();
+  const covers = (await Promise.all(p.covers.slice(0, 5).map((u) => loadImg(u)))).filter(Boolean);
+  const { c, ctx } = canvas();
+  backdrop(ctx, null);
+  wordmark(ctx, 150, "Crate");
+  ctx.textAlign = "center";
+  ctx.font = `800 30px ${BODY}`;
+  ctx.fillStyle = ACCENT;
+  ctx.letterSpacing = "8px";
+  ctx.fillText("DEIN JAHR AUF PLATTE", W / 2, 270);
+  ctx.letterSpacing = "0px";
+  condensed(ctx, true);
+  ctx.font = `900 ${stretch()}330px ${HEAD}`;
+  ctx.fillStyle = "#f3ede2";
+  ctx.fillText(String(p.year), W / 2, 560);
+  // Drei Zahlen
+  const stats: [string, string][] = [
+    [String(p.added), p.added === 1 ? "NEUE PLATTE" : "NEUE PLATTEN"],
+    [String(p.sets), p.sets === 1 ? "SET" : "SETS"],
+    [String(p.hours), p.hours === 1 ? "STUNDE" : "STUNDEN"],
+  ];
+  const colW = (W - 160) / 3;
+  stats.forEach(([n, l], i) => {
+    const x = 80 + colW * i + colW / 2;
+    ctx.font = `900 ${stretch()}150px ${HEAD}`;
+    ctx.fillStyle = i === 0 ? ACCENT : "#f3ede2";
+    ctx.fillText(n, x, 760);
+    condensed(ctx, false);
+    ctx.font = `700 26px ${BODY}`;
+    ctx.fillStyle = "rgba(243,237,226,0.7)";
+    ctx.letterSpacing = "3px";
+    ctx.fillText(l, x, 810);
+    ctx.letterSpacing = "0px";
+    condensed(ctx, true);
+  });
+  condensed(ctx, false);
+  // Cover-Fächer der Neuzugänge
+  const size = 210;
+  if (covers.length) {
+    const n = covers.length;
+    const step = Math.min(160, (W - 160 - size) / Math.max(1, n - 1));
+    const x0 = (W - (size + step * (n - 1))) / 2;
+    covers.forEach((img, i) => {
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.5)";
+      ctx.shadowBlur = 36;
+      drawCover(ctx, img, x0 + i * step, 880 + Math.abs(i - (n - 1) / 2) * 16, size, 14);
+      ctx.restore();
+    });
+  }
+  let y = covers.length ? 1210 : 950;
+  if (p.mostPlayed.length) {
+    ctx.font = `800 26px ${BODY}`;
+    ctx.fillStyle = ACCENT;
+    ctx.letterSpacing = "6px";
+    ctx.fillText("AM HÄUFIGSTEN GESPIELT", W / 2, y);
+    ctx.letterSpacing = "0px";
+    y += 64;
+    for (const m of p.mostPlayed.slice(0, 3)) {
+      ctx.font = `700 40px ${BODY}`;
+      ctx.fillStyle = "#fff";
+      ctx.fillText(fit(ctx, m.title, W - 200), W / 2, y);
+      ctx.font = `500 28px ${BODY}`;
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.fillText(fit(ctx, `${m.artist} · ${m.n}× gespielt`, W - 200), W / 2, y + 40);
+      y += 100;
+    }
+  }
+  const facts = [p.label && `Label des Jahres: ${p.label}`, p.style && `Style: ${p.style}`].filter(Boolean).join("   ·   ");
+  if (facts) {
+    ctx.font = `600 32px ${BODY}`;
+    ctx.fillStyle = "rgba(243,237,226,0.85)";
+    ctx.fillText(fit(ctx, facts, W - 160), W / 2, H - 170);
+  }
+  ctx.font = `800 26px ${BODY}`;
+  ctx.fillStyle = ACCENT;
+  ctx.letterSpacing = "4px";
+  ctx.fillText(`@${p.username.toUpperCase()} · MIT CRATE`, W / 2, H - 100);
   ctx.letterSpacing = "0px";
   return toBlob(c);
 }

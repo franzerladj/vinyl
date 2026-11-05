@@ -4,7 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, type Release, type TrackMeta } from "../lib/db";
 import { autoPipeline, fetchMissingDetails } from "../lib/sync";
 import { toast } from "../lib/store";
-import { CAMELOT_COLORS, Cover, Empty, KeyBadge, markHero, RecordRow, Sheet, SkeletonRows, useDebounced } from "../components/bits";
+import { CAMELOT_COLORS, Cover, Empty, KeyBadge, markHero, RecordRow, Sheet, SkeletonRows, useDebounced, keepParens } from "../components/bits";
 import { IconCamera, IconCart, IconRecord, IconGrid, IconMore, IconRows, IconSearch, IconSync, IconTag } from "../components/icons";
 import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
 import { matchesQuery } from "../../../shared/textSearch";
@@ -329,7 +329,7 @@ export default function Collection() {
             render={({ r }: Item) => (
               <Link key={r.id} to={`/release/${r.id}`} viewTransition state={{ preview: { thumb: r.thumb, cover: r.cover, title: r.title, artist: r.artist } }} onClick={(e) => markHero(e.currentTarget)} className="press">
                 {r.cover || r.thumb ? <Cover src={r.cover || r.thumb} /> : <div className="cover ph">{letterOf(r.artist)}</div>}
-                <div className="cap-t">{r.title}</div>
+                <div className="cap-t">{keepParens(r.title)}</div>
                 <div className="cap-a">{r.artist}</div>
               </Link>
             )}

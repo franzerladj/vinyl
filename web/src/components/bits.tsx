@@ -449,3 +449,20 @@ export function Avatar({ src, name, size = 52 }: { src?: string; name: string; s
   );
 }
 
+
+/**
+ * Titel umbrechen, ohne eine Klammer zu zerreißen: „Titel (Extended Mix)“ bricht vor der Klammer,
+ * nicht mitten darin. Sehr lange Klammern (über 40 Zeichen) dürfen weiter brechen, sonst liefen sie über.
+ */
+export function keepParens(text: string | null | undefined): React.ReactNode {
+  if (!text || !/[([]/.test(text)) return text ?? "";
+  return text.split(/(\([^()]*\)|\[[^[\]]*\])/).map((part, i) =>
+    /^[([]/.test(part) && part.length <= 40 ? (
+      <span key={i} className="nobr">
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
+}

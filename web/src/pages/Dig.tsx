@@ -8,7 +8,7 @@ import { discogsSellUrl, money } from "../lib/format";
 import { toast } from "../lib/store";
 import { getKV, setKV } from "../lib/db";
 import { ytConsent } from "../lib/theme";
-import { haptic } from "../components/bits";
+import { haptic, keepParens } from "../components/bits";
 import { IconBack, IconCart, IconFilter, IconHeart, IconPlay, IconPlus, IconShare, IconSleeves, IconX } from "../components/icons";
 import { DECADES, decadeLabel, passesPrice, top, type DigCard } from "../../../shared/dig";
 import { parseDuration } from "../../../shared/match";
@@ -328,7 +328,7 @@ export default function Dig() {
                   <div className="dig-info">
                     <span className="dig-reason">{c.reason}</span>
                     <button className="dig-title" onClick={() => nav(`/release/${c.id}`, { viewTransition: true })}>
-                      <b>{c.title}</b>
+                      <b>{keepParens(c.title)}</b>
                       <span>{c.artist}</span>
                     </button>
                     <div className="dig-meta">

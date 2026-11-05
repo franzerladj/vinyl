@@ -1018,3 +1018,5 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .list > :nth-child(9) { animation-delay: 0.2s; }
 .list > :nth-child(10) { animation-delay: 0.225s; }
 @media (prefers-reduced-motion: reduce) { .list > * { animation: none !important; } }
+/* Klammern in Titeln als Ganzes umbrechen */
+.nobr { white-space: nowrap; }

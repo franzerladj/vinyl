@@ -8,7 +8,7 @@ import { GRADE_HINT, MEDIA_GRADES, SLEEVE_GRADES, pressingInfo, shortGrade } fro
 import type { CollectionItem } from "../lib/db";
 import { discogsReleaseUrl, discogsSellUrl, formatLine, money, sideOf } from "../lib/format";
 import { toast, useStore } from "../lib/store";
-import { Avatar, Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, Sparkline, TapTempo, type Preview } from "../components/bits";
+import { Avatar, Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, Sparkline, TapTempo, type Preview, keepParens } from "../components/bits";
 import { loadPriceInfo, setTargetPrice } from "../lib/prices";
 import { friendsFor, lendRecord, messageUrl } from "../lib/friends";
 import { MenuSheet } from "../components/ui";
@@ -102,7 +102,7 @@ export default function ReleasePage() {
         <Cover src={coverSrc} className="cover lg" style={{ viewTransitionName: "hero-cover" }} />
         <ToneArm down={playing} />
       </div>
-      <h1>{rel?.title ?? preview?.title ?? ""}</h1>
+      <h1>{keepParens(rel?.title ?? preview?.title ?? "")}</h1>
       <div className="artist">{rel?.artist ?? preview?.artist ?? ""}</div>
       {rel && (
         <div className="meta">
@@ -334,7 +334,7 @@ export default function ReleasePage() {
                 <tr key={t.position + i} onClick={() => m && openTrack(m, t)} style={{ cursor: "pointer", background: edit?.id === m?.id ? "var(--accent-soft)" : undefined }}>
                   <td className="pos" style={{ color: edit?.id === m?.id ? "var(--accent)" : undefined }}>{edit?.id === m?.id && playing ? "♪" : t.position}</td>
                   <td>
-                    <div style={{ fontWeight: 600 }}>{t.title}</div>
+                    <div style={{ fontWeight: 600 }}>{keepParens(t.title)}</div>
                     <div className="sub" style={{ fontSize: 13 }}>
                       {[m?.artist !== rel.artist ? m?.artist : "", t.duration, m?.moods?.slice(0, 3).join(", ")].filter(Boolean).join(" · ")}
                     </div>
@@ -610,7 +610,7 @@ function TrackEdit({
         <div className="sub">
           {t.position} · {t.artist}
         </div>
-        <b style={{ fontSize: 18 }}>{t.title}</b>
+        <b style={{ fontSize: 18 }}>{keepParens(t.title)}</b>
       </div>
       {media?.type === "yt" && (
         <iframe
@@ -793,7 +793,7 @@ function ListenSide({ tracks, hintsFor, onSave }: { tracks: TrackMeta[]; hintsFo
         ))}
       </div>
       <div>
-        <b>{t.title}</b>
+        <b>{keepParens(t.title)}</b>
         <div className="sub">
           {t.position} · {[t.bpm && `${Math.round(t.bpm)} BPM`, t.key].filter(Boolean).join(" · ") || "noch ohne BPM und Key"}
         </div>
