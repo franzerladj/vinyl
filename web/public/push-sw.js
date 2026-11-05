@@ -34,12 +34,19 @@ self.addEventListener("notificationclick", (event) => {
   );
 });
 
-// Abo vom Browser erneuert: neue Adresse beim Server hinterlegen
+// Abo vom Browser erneuert: neue Adresse beim Server hinterlegen, alte entfernen.
+// Der öffentliche Schlüssel muss mit, sonst lehnt Chrome das neue Abo ab (gleicher Wert wie shared/pushKey.ts).
+const VAPID_PUBLIC_KEY = "BEUsn7IPKab_31GQjjQWGI_PWG0EbMuL2KXdfnbjx1VBeMa-b5_85WOxbMYyMSNV1Egb5skuKFnUx3tJXdjwByA";
+const keyBytes = (b64) => Uint8Array.from(atob(b64.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64.length + 3) % 4)), (c) => c.charCodeAt(0));
 self.addEventListener("pushsubscriptionchange", (event) => {
+  const post = (path, body) => fetch(path, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   event.waitUntil(
     self.registration.pushManager
-      .subscribe(event.oldSubscription ? event.oldSubscription.options : { userVisibleOnly: true })
-      .then((sub) => fetch("/api/push/subscribe", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ subscription: sub.toJSON() }) }))
+      .subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) })
+      .then(async (sub) => {
+        await post("/api/push/subscribe", { subscription: sub.toJSON() });
+        if (event.oldSubscription) await post("/api/push/unsubscribe", { endpoint: event.oldSubscription.endpoint });
+      })
       .catch(() => undefined),
   );
 });

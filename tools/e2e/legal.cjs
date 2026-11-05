@@ -20,6 +20,7 @@ const install = require("./mock.cjs");
   const errors = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await install(page);
+  await page.addInitScript(() => localStorage.setItem("crate:yt", "no"));
   await page.goto("http://localhost:8787/release/5");
   await page.waitForTimeout(2500);
   console.log("facade", await page.locator(".video-facade").count(), "iframes", await page.locator("iframe").count());

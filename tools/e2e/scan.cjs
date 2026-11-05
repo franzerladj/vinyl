@@ -9,6 +9,7 @@ const install = require("./mock.cjs");
   const searches = [];
   page.on("request", (r) => r.url().includes("database/search") && searches.push(decodeURIComponent(r.url().split("?")[1])));
   await install(page);
+  await page.addInitScript(() => localStorage.setItem("crate:yt", "no"));
   await page.goto("http://localhost:8787/scan");
   await page.waitForTimeout(1500);
   await page.screenshot({ path: __dirname + "/scan1.png" });

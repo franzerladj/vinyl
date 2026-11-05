@@ -4,7 +4,7 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { readConfig, type Config, type Env } from "./env";
 import { seal, unseal, type Session } from "./session";
 import { authHeaders, authorizeUrl, discogsFetch, DiscogsBusy, getAccessToken, getRequestToken } from "./discogs";
-import { bundle, currentSlot, dueReminders, loadUser, pickWants, notifyUser, saveUser, sendPush, userKey, wantChange, type Message, type PushSub, type Stat, type UserRec, type WatchedWant } from "./push";
+import { ALL_KINDS, bundle, currentSlot, dueReminders, isPushEndpoint, loadUser, pickWants, notifyUser, saveUser, sendPush, userKey, wantChange, type Message, type PushSub, type Stat, type UserRec, type WatchedWant } from "./push";
 import { oauthHmacHeader, oauthHmacParams } from "./oauthSign";
 import { recognizeRecord, recognizeRecordFree, tagVibes, tagVibesFree, type VibeInput } from "./ai";
 import { fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
@@ -23,7 +23,12 @@ app.use("/api/*", async (c, next) => {
 });
 
 const cookieOpts = (c: C) => ({ httpOnly: true, secure: c.var.cfg.appUrl.startsWith("https://"), sameSite: "Lax" as const, path: "/" });
-const session = (c: C) => unseal<Session>(c.var.cfg.sessionSecret, getCookie(c, SESSION));
+const rawSession = (c: C) => unseal<Session>(c.var.cfg.sessionSecret, getCookie(c, SESSION));
+/** Nur Sitzungen mit vom Server bei Discogs bestätigtem Namen zählen (alte unbestätigte werden nachgeprüft) */
+const session = async (c: C) => {
+  const s = await rawSession(c);
+  return s && s.username && s.verified !== false ? s : null;
+};
 
 /** Wer darf Claude nutzen? Eigener Key im Header oder Discogs-Name auf der Allowlist */
 async function claudeKey(c: C): Promise<string | null> {
@@ -100,31 +105,29 @@ app.post("/api/auth/sign-access", async (c) => {
 /** Schritt 3: Access-Token übernehmen. Der Server prüft den Namen bei Discogs, wenn das gerade geht. */
 app.post("/api/auth/finish", async (c) => {
   const cfg = c.var.cfg;
-  const { token, secret, username } = await c.req.json<{ token: string; secret: string; username?: string }>();
+  const { token, secret } = await c.req.json<{ token: string; secret: string }>();
   if (!token || !secret) return c.json({ message: "Token fehlt" }, 400);
-  let name = "";
-  let verified = false;
+  // Der Name kommt immer vom Server bei Discogs, nie vom Gerät
   const r = await discogsFetch(cfg, { token, secret, username: "" }, "/oauth/identity").catch(() => null);
-  if (r?.ok) {
-    name = ((await r.json()) as { username: string }).username;
-    verified = true;
-  } else if (r && r.status !== 429) {
-    return c.json({ message: "Discogs hat den Zugang nicht bestätigt" }, 401);
-  } else name = (username ?? "").trim();
+  if (!r || r.status === 429) return c.json({ busy: true, message: "Discogs ist gerade ausgelastet" }, 503);
+  if (!r.ok) return c.json({ message: "Discogs hat den Zugang nicht bestätigt" }, 401);
+  const name = ((await r.json()) as { username: string }).username;
   deleteCookie(c, PENDING, { path: "/" });
-  setCookie(c, SESSION, await seal(cfg.sessionSecret, { token, secret, username: name, verified }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
-  return c.json({ username: name || null, verified });
+  setCookie(c, SESSION, await seal(cfg.sessionSecret, { token, secret, username: name, verified: true }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
+  return c.json({ username: name, verified: true });
 });
 
-/** Benutzername nachreichen, wenn der Server ihn beim Anmelden nicht abfragen konnte */
+/** Ältere Sitzungen ohne bestätigten Namen: der Server fragt Discogs selbst */
 app.post("/api/auth/identity", async (c) => {
   const cfg = c.var.cfg;
-  const s = await session(c);
+  const s = await rawSession(c);
   if (!s) return c.json({ message: "nicht angemeldet" }, 401);
   if (s.verified !== false && s.username) return c.json({ username: s.username });
-  const { username } = await c.req.json<{ username: string }>();
-  if (!/^[\w.\-]{2,40}$/.test(username ?? "")) return c.json({ message: "ungültig" }, 400);
-  setCookie(c, SESSION, await seal(cfg.sessionSecret, { ...s, username, verified: false }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
+  const r = await discogsFetch(cfg, s, "/oauth/identity").catch(() => null);
+  if (!r || r.status === 429) return c.json({ busy: true }, 503);
+  if (!r.ok) return c.json({ message: "Zugang ungültig, bitte neu anmelden" }, 401);
+  const username = ((await r.json()) as { username: string }).username;
+  setCookie(c, SESSION, await seal(cfg.sessionSecret, { ...s, username, verified: true }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
   return c.json({ username });
 });
 
@@ -137,11 +140,15 @@ app.post("/api/auth/exchange", async (c) => {
   try {
     const at = await getAccessToken(cfg, pending.token, pending.secret, verifier);
     const r = await discogsFetch(cfg, { token: at.token, secret: at.secret, username: "" }, "/oauth/identity");
-    const ok = r.ok;
-    const name = ok ? ((await r.json()) as { username: string }).username : "";
     deleteCookie(c, PENDING, { path: "/" });
-    setCookie(c, SESSION, await seal(cfg.sessionSecret, { ...at, username: name, verified: ok }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
-    return c.json({ username: name || null, verified: ok });
+    if (!r.ok) {
+      // Zugang ist da, nur der Name fehlt: Sitzung ohne Namen, der Server prüft ihn gleich über /api/auth/identity nach
+      setCookie(c, SESSION, await seal(cfg.sessionSecret, { ...at, username: "", verified: false }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
+      return c.json({ username: null, verified: false });
+    }
+    const name = ((await r.json()) as { username: string }).username;
+    setCookie(c, SESSION, await seal(cfg.sessionSecret, { ...at, username: name, verified: true }), { ...cookieOpts(c), maxAge: 60 * 60 * 24 * 365 });
+    return c.json({ username: name, verified: true });
   } catch (e) {
     return c.json({ busy: e instanceof DiscogsBusy, message: (e as Error).message }, e instanceof DiscogsBusy ? 503 : 400);
   }
@@ -162,8 +169,8 @@ app.get("/api/me", async (c) => {
     lastfm: Boolean(cfg.lastfmKey),
     keyLookup: Boolean(cfg.getSongBpmKey),
   };
-  if (s?.username) return c.json({ username: s.username, features, verified: s.verified !== false });
-  if (s) return c.json({ username: null, needIdentity: true, features }, 401);
+  if (s) return c.json({ username: s.username, features, verified: true });
+  if (await rawSession(c)) return c.json({ username: null, needIdentity: true, features }, 401);
   if (cfg.discogsPersonalToken) {
     const r = await discogsFetch(cfg, null, "/oauth/identity");
     if (r.ok) return c.json({ username: ((await r.json()) as { username: string }).username, features, personalToken: true });
@@ -208,6 +215,7 @@ app.all("/api/discogs/*", async (c) => {
 
 // ---------- Erkennung & Vibes ----------
 app.post("/api/ai/recognize", async (c) => {
+  if (!(await session(c)) && !c.req.header("X-Anthropic-Key")) return c.json({ message: "Bitte anmelden" }, 401);
   const { image, mediaType } = await c.req.json<{ image: string; mediaType: "image/jpeg" | "image/png" | "image/webp" }>();
   if (!image || image.length > 7_000_000) return c.json({ message: "Bild fehlt oder ist zu groß" }, 400);
   const key = await claudeKey(c);
@@ -217,6 +225,7 @@ app.post("/api/ai/recognize", async (c) => {
 });
 
 app.post("/api/ai/vibes", async (c) => {
+  if (!(await session(c)) && !c.req.header("X-Anthropic-Key")) return c.json({ message: "Bitte anmelden" }, 401);
   const { items } = await c.req.json<{ items: VibeInput[] }>();
   const list = (items ?? []).slice(0, 60);
   const key = await claudeKey(c);
@@ -253,6 +262,12 @@ app.onError((err, c) => {
 });
 
 // ---------- Push-Mitteilungen ----------
+/** Nur bekannte Arten mit Ja/Nein übernehmen */
+const cleanPrefs = (p: unknown): Partial<UserRec["prefs"]> => {
+  const out: Partial<UserRec["prefs"]> = {};
+  if (p && typeof p === "object") for (const k of ALL_KINDS) if (typeof (p as Record<string, unknown>)[k] === "boolean") out[k] = (p as Record<string, boolean>)[k];
+  return out;
+};
 const emptyRec = (sess: string): UserRec => ({ subs: [], prefs: { friends: true, wants: true, lent: true, sets: true, sellers: true }, sess, wants: [], lent: [], sets: [], cursor: 0, sent: {}, updatedAt: Date.now() });
 
 /** Gerät für Mitteilungen anmelden. Merkt sich den Discogs-Zugang (versiegelt), damit der Zeitplan Wants prüfen kann. */
@@ -261,11 +276,11 @@ app.post("/api/push/subscribe", async (c) => {
   const s = await session(c);
   if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
   const { subscription, prefs } = await c.req.json<{ subscription: PushSub; prefs?: Partial<UserRec["prefs"]> }>();
-  if (!subscription?.endpoint?.startsWith("https://") || !subscription.keys?.p256dh || !subscription.keys?.auth) return c.json({ message: "ungültiges Abo" }, 400);
+  if (!subscription?.endpoint || !isPushEndpoint(subscription.endpoint) || typeof subscription.keys?.p256dh !== "string" || typeof subscription.keys?.auth !== "string") return c.json({ message: "ungültiges Abo" }, 400);
   const rec = (await loadUser(cfg.kv, s.username)) ?? emptyRec("");
   rec.sess = await seal(cfg.sessionSecret, { token: s.token, secret: s.secret, username: s.username });
   rec.subs = [...rec.subs.filter((x) => x.endpoint !== subscription.endpoint), { endpoint: subscription.endpoint, keys: subscription.keys, addedAt: Date.now() }].slice(-5);
-  if (prefs) rec.prefs = { ...rec.prefs, ...prefs };
+  if (prefs) rec.prefs = { ...rec.prefs, ...cleanPrefs(prefs) };
   await saveUser(cfg.kv, s.username, rec);
   // Liegen gebliebene Freundschaftsanfragen nachreichen
   const pending = JSON.parse((await cfg.kv.get(`pending:${s.username.toLowerCase()}`)) ?? "[]") as string[];
@@ -309,7 +324,7 @@ app.post("/api/push/prefs", async (c) => {
   if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
   const rec = await loadUser(cfg.kv, s.username);
   if (!rec) return c.json({ message: "Mitteilungen sind aus" }, 404);
-  rec.prefs = { ...rec.prefs, ...(await c.req.json<Partial<UserRec["prefs"]>>()) };
+  rec.prefs = { ...rec.prefs, ...cleanPrefs(await c.req.json()) };
   await saveUser(cfg.kv, s.username, rec);
   return c.json({ prefs: rec.prefs });
 });
@@ -322,9 +337,12 @@ app.post("/api/push/sync", async (c) => {
   const rec = await loadUser(cfg.kv, s.username);
   if (!rec) return c.json({ ok: false });
   const body = await c.req.json<{ wants?: WatchedWant[]; lent?: UserRec["lent"]; sets?: UserRec["sets"]; currency?: string }>();
+  if (body.wants && !Array.isArray(body.wants)) return c.json({ message: "ungültig" }, 400);
+  if (body.lent && !Array.isArray(body.lent)) return c.json({ message: "ungültig" }, 400);
+  if (body.sets && !Array.isArray(body.sets)) return c.json({ message: "ungültig" }, 400);
   if (body.wants) {
     const old = new Map(rec.wants.map((w) => [w.id, w]));
-    rec.wants = body.wants.slice(0, 500).map((w) => ({ id: Number(w.id), t: String(w.t).slice(0, 120), a: String(w.a).slice(0, 80), target: w.target ?? null, n: old.get(Number(w.id))?.n ?? null, low: old.get(Number(w.id))?.low ?? null }));
+    rec.wants = body.wants.slice(0, 500).map((w) => ({ id: Number(w.id), t: String(w.t).slice(0, 120), a: String(w.a).slice(0, 80), target: Number.isFinite(Number(w.target)) && Number(w.target) > 0 ? Number(w.target) : null, n: old.get(Number(w.id))?.n ?? null, low: old.get(Number(w.id))?.low ?? null }));
   }
   if (body.lent) rec.lent = body.lent.slice(0, 200).map((l) => ({ id: Number(l.id), t: String(l.t).slice(0, 120), to: String(l.to).slice(0, 60), at: Number(l.at) }));
   if (body.sets) rec.sets = body.sets.slice(0, 100).filter((x) => /^\d{4}-\d\d-\d\d$/.test(x.date)).map((x) => ({ id: Number(x.id), name: String(x.name).slice(0, 80), date: x.date }));
@@ -384,6 +402,7 @@ app.post("/api/push/users", async (c) => {
 async function runUser(cfg: Config, u: string, budget: number) {
   const rec = await loadUser(cfg.kv, u);
   if (!rec?.subs.length) return { u, skipped: true };
+  const startSubs = new Set(rec.subs.map((x) => x.endpoint));
   let changed = false;
   for (const d of dueReminders(rec)) {
     budget -= rec.subs.length;
@@ -421,7 +440,17 @@ async function runUser(cfg: Config, u: string, budget: number) {
       delete rec.sent[k];
       changed = true;
     }
-  if (changed) await saveUser(cfg.kv, u, rec);
+  if (changed) {
+    // Kurz vor dem Speichern neu lesen: Geräte, die während der Runde dazukamen, nicht überschreiben
+    const fresh = await loadUser(cfg.kv, u);
+    if (fresh) {
+      const removed = new Set([...startSubs].filter((e) => !rec.subs.some((x) => x.endpoint === e)));
+      rec.subs = fresh.subs.filter((x) => !removed.has(x.endpoint));
+      rec.prefs = fresh.prefs;
+      rec.sess = fresh.sess;
+    }
+    await saveUser(cfg.kv, u, rec);
+  }
   return { u, checked, sent: msgs.length };
 }
 
@@ -451,6 +480,21 @@ interface DirEntry {
   location?: string;
   records?: number;
 }
+/**
+ * Suchwörter eines Nutzers aus Echtname (Verzeichnis) und DJ-Name (Profil) gemeinsam neu aufbauen.
+ * Die aktuellen Wörter stehen unter dirk:<name>, damit nichts doppelt gelöscht oder vergessen wird.
+ */
+async function rebuildNameKeys(cfg: Config, u: string) {
+  const [dir, prof, prev] = await Promise.all([cfg.kv.get(`dir:${u}`), cfg.kv.get(`prof:${u}`), cfg.kv.get(`dirk:${u}`)]);
+  const old = JSON.parse(prev ?? "[]") as string[];
+  const names = dir ? [(JSON.parse(dir) as DirEntry).name ?? "", prof ? ((JSON.parse(prof) as CrateProfile).djName ?? "") : ""] : [];
+  const parts = [...new Set(names.flatMap((n) => norm(n).split(" ").slice(0, 4)).filter((x) => x.length > 1))];
+  for (const p of old) if (!parts.includes(p)) await cfg.kv.delete(`dirn:${p}:${u}`);
+  for (const p of parts) if (!old.includes(p)) await cfg.kv.put(`dirn:${p}:${u}`, u);
+  if (parts.length) await cfg.kv.put(`dirk:${u}`, JSON.stringify(parts));
+  else await cfg.kv.delete(`dirk:${u}`);
+}
+
 const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 
 app.post("/api/dir/me", async (c) => {
@@ -459,17 +503,15 @@ app.post("/api/dir/me", async (c) => {
   if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
   const b = await c.req.json<{ visible: boolean } & Omit<DirEntry, "username">>();
   const u = s.username.toLowerCase();
-  const old = JSON.parse((await cfg.kv.get(`dir:${u}`)) ?? "null") as DirEntry | null;
-  // Alte Namensschlüssel entfernen
-  if (old?.name) for (const part of norm(old.name).split(" ")) if (part) await cfg.kv.delete(`dirn:${part}:${u}`);
   if (!b.visible) {
     await cfg.kv.delete(`dir:${u}`);
+    await rebuildNameKeys(cfg, u);
     return c.json({ visible: false });
   }
-  const e: DirEntry = { username: s.username, name: b.name?.slice(0, 80) || undefined, avatar: b.avatar?.startsWith("https://") ? b.avatar.slice(0, 300) : undefined, location: b.location?.slice(0, 80) || undefined, records: Number(b.records) || undefined };
+  const e: DirEntry = { username: s.username, name: b.name?.slice(0, 80) || undefined, avatar: /^https:\/\/(i|st|img)\.discogs\.com\//.test(b.avatar ?? "") ? b.avatar!.slice(0, 300) : undefined, location: b.location?.slice(0, 80) || undefined, records: Number(b.records) || undefined };
   await cfg.kv.put(`dir:${u}`, JSON.stringify(e));
-  // Vor- und Nachname einzeln suchbar machen
-  if (e.name) for (const part of norm(e.name).split(" ").slice(0, 4)) if (part.length > 1) await cfg.kv.put(`dirn:${part}:${u}`, u);
+  // Vor- und Nachname (und DJ-Name aus dem Profil) einzeln suchbar machen
+  await rebuildNameKeys(cfg, u);
   return c.json({ visible: true });
 });
 
@@ -520,12 +562,10 @@ app.post("/api/profile/me", async (c) => {
   const p = { ...sanitizeProfile(await c.req.json()), updatedAt: Date.now() };
   const empty = !p.djName && !p.bio && !p.location && !p.links.length && !p.styles.length && !p.spotlight;
   const u = s.username.toLowerCase();
-  const old = JSON.parse((await cfg.kv.get(profKey(u))) ?? "null") as CrateProfile | null;
   if (empty) await cfg.kv.delete(profKey(u));
   else await cfg.kv.put(profKey(u), JSON.stringify(p));
   // DJ-Name in der Suche findbar machen (nur wer im Verzeichnis ist)
-  if (old?.djName && old.djName !== p.djName) for (const part of norm(old.djName).split(" ")) if (part.length > 1) await cfg.kv.delete(`dirn:${part}:${u}`);
-  if (p.djName && (await cfg.kv.get(`dir:${u}`))) for (const part of norm(p.djName).split(" ").slice(0, 4)) if (part.length > 1) await cfg.kv.put(`dirn:${part}:${u}`, u);
+  await rebuildNameKeys(cfg, u);
   return c.json({ profile: empty ? null : p });
 });
 

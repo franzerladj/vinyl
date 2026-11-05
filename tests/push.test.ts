@@ -65,3 +65,27 @@ describe("Auswahl der Wants pro Runde", () => {
     for (let i = 10; i < 59; i++) expect(seen.get(i) ?? 0).toBeGreaterThanOrEqual(1);
   });
 });
+
+describe("Sicherheit und Erinnerungen", () => {
+  it("nimmt nur echte Push-Dienste an", async () => {
+    const { isPushEndpoint } = await import("../server/push");
+    expect(isPushEndpoint("https://fcm.googleapis.com/fcm/send/abc")).toBe(true);
+    expect(isPushEndpoint("https://web.push.apple.com/QK")).toBe(true);
+    expect(isPushEndpoint("https://updates.push.services.mozilla.com/wpush/v2/x")).toBe(true);
+    expect(isPushEndpoint("https://evil.example/collect")).toBe(false);
+    expect(isPushEndpoint("http://fcm.googleapis.com/x")).toBe(false);
+  });
+  it("erinnert bei spät eingetragenem Verleih nur einmal mit der richtigen Dauer", async () => {
+    const { dueReminders } = await import("../server/push");
+    const now = Date.parse("2026-11-20T12:00:00Z");
+    const rec = { lent: [{ id: 1, t: "X", to: "kumpel", at: now - 75 * 86_400_000 }], sets: [], sent: {} } as never;
+    const d = dueReminders(rec, now);
+    expect(d).toHaveLength(1);
+    expect(d[0].msg.body).toContain("seit 10 Wochen");
+  });
+  it("Sitzungen ohne echtes Geheimnis gibt es nicht", async () => {
+    const { seal, unseal } = await import("../server/session");
+    await expect(seal("", { a: 1 })).rejects.toThrow();
+    expect(await unseal("", "irgendwas")).toBeNull();
+  });
+});

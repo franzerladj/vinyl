@@ -6,6 +6,7 @@ const install = require("./mock.cjs");
   const page = await ctx.newPage();
   const errors = []; page.on("pageerror", (e) => errors.push(e.message));
   await install(page);
+  await page.addInitScript(() => localStorage.setItem("crate:yt", "no"));
   await page.goto("http://localhost:8787/");
   await page.waitForSelector("text=45 Platten");
   await page.goto("http://localhost:8787/friends?add=kumpel");

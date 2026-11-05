@@ -14,8 +14,11 @@ export default {
         const r = await fetch(`${env.APP_URL}/api/push/users`, { method: "POST", headers });
         if (!r.ok) return console.log("push/users", r.status);
         const { users } = (await r.json()) as { users: string[] };
-        // Worker dürfen ~50 Unteranfragen: höchstens 45 Nutzer pro Runde, 6 gleichzeitig
-        const list = users.slice(0, 45);
+        // Worker dürfen ~50 Unteranfragen: höchstens 45 Nutzer pro Runde, 6 gleichzeitig.
+        // Bei mehr Nutzern reihum weiterschieben, damit alle drankommen.
+        const slot = Math.floor(Date.now() / (10 * 60_000));
+        const start = users.length > 45 ? (slot * 45) % users.length : 0;
+        const list = users.length > 45 ? Array.from({ length: 45 }, (_, k) => users[(start + k) % users.length]) : users;
         let i = 0;
         const worker = async () => {
           while (i < list.length) {

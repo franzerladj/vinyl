@@ -178,9 +178,10 @@ export function buildSetlist(tracks: SetTrack[], opts: SetlistOptions): string[]
         const trial = [...best.slice(0, i), cand, ...best.slice(i + 1)];
         const c = evaluate(trial);
         if (c + 1e-9 < bestCost) {
+          inSet.delete(best[i].id);
+          inSet.add(cand.id);
           best = trial;
           bestCost = c;
-          inSet.delete(best[i].id);
           changed = true;
         }
       }

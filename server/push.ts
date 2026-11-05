@@ -161,7 +161,11 @@ export async function notifyUser(kv: KV, cfg: PushConfig, u: string, rec: UserRe
     if (r !== "gone") keep.push(s);
     if (r === "ok") sent++;
   }
-  if (keep.length !== rec.subs.length) await saveUser(kv, u, { ...rec, subs: keep });
+  if (keep.length !== rec.subs.length) {
+    // Im selben Objekt ändern, damit ein späteres Speichern die toten Abos nicht zurückholt
+    rec.subs = keep;
+    await saveUser(kv, u, rec);
+  }
   return sent;
 }
 
@@ -192,12 +196,11 @@ export function dueReminders(rec: UserRec, now = Date.now()): { key: string; kin
   const out: { key: string; kind: PushKind; msg: Message }[] = [];
   for (const l of rec.lent) {
     const weeks = (now - l.at) / (7 * 86_400_000);
-    for (const w of [3, 6, 10]) {
-      const key = `lent-${l.id}-${w}`;
-      if (weeks >= w && !rec.sent[key]) {
-        out.push({ key, kind: "lent", msg: { title: "Verliehene Platte", body: `${l.t} ist seit ${w} Wochen bei ${l.to}.`, url: `/release/${l.id}`, tag: `lent-${l.id}` } });
-        break;
-      }
+    // Nur die höchste erreichte Stufe melden (wer erst nach 10 Wochen einträgt, bekommt nicht 3 Meldungen)
+    const reached = [10, 6, 3].find((w) => weeks >= w);
+    if (reached) {
+      const key = `lent-${l.id}-${reached}`;
+      if (!rec.sent[key]) out.push({ key, kind: "lent", msg: { title: "Verliehene Platte", body: `${l.t} ist seit ${reached} Wochen bei ${l.to}.`, url: `/release/${l.id}`, tag: `lent-${l.id}` } });
     }
   }
   const today = new Date(now).toISOString().slice(0, 10);
@@ -236,3 +239,13 @@ export function pickWants(wants: WatchedWant[], slot: number, hotN = 20, normalN
 
 export const SLOT_MINUTES = 10;
 export const currentSlot = (now = Date.now()) => Math.floor(now / (SLOT_MINUTES * 60_000));
+
+/** Nur echte Push-Dienste als Ziel zulassen (sonst könnte man den Server beliebige Adressen anfragen lassen) */
+export function isPushEndpoint(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" && /(^|\.)(fcm\.googleapis\.com|googleapis\.com|push\.apple\.com|push\.services\.mozilla\.com|notify\.windows\.com)$/.test(u.hostname);
+  } catch {
+    return false;
+  }
+}

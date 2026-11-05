@@ -125,29 +125,38 @@ export async function scanSeller(seller: string, maxPages = 50): Promise<number>
   try {
     let page = 1;
     let pages = 1;
-    // Alte Angebote dieses Händlers verwerfen, sie könnten verkauft sein
-    await db.listings.where("seller").equals(seller).delete();
+    // Erst alle Seiten sammeln, dann in einem Rutsch ersetzen: bricht die Suche ab, bleiben die alten Angebote stehen
+    const all: Listing[] = [];
     do {
       const d = await discogs<InvPage>(`/users/${encodeURIComponent(seller)}/inventory?per_page=100&page=${page}&status=For%20Sale`, { background: true });
       pages = Math.min(d.pagination.pages, maxPages);
-      const hits: Listing[] = d.listings
-        .filter((l) => wants.has(l.release.id))
-        .map((l) => ({
-          listingId: String(l.id),
-          releaseId: l.release.id,
-          seller: l.seller.username,
-          price: l.price.value,
-          condition: l.condition,
-          sleeveCondition: l.sleeve_condition,
-          shipsFrom: l.ships_from,
-          sellerRating: l.seller.stats?.rating ? Number(l.seller.stats.rating) : null,
-          title: l.release.description,
-        }));
-      found += hits.length;
-      if (hits.length) await db.listings.bulkPut(hits.map((h) => ({ ...h, importedAt: Date.now() })));
+      for (const l of d.listings)
+        if (wants.has(l.release.id))
+          all.push({
+            listingId: String(l.id),
+            releaseId: l.release.id,
+            seller: l.seller.username,
+            price: l.price.value,
+            condition: l.condition,
+            sleeveCondition: l.sleeve_condition,
+            shipsFrom: l.ships_from,
+            sellerRating: l.seller.stats?.rating ? Number(l.seller.stats.rating) : null,
+            title: l.release.description,
+          });
       jobUpdate(job, { done: page, total: pages });
       page++;
     } while (page <= pages);
+    found = all.length;
+    const now = Date.now();
+    await db.transaction("rw", db.listings, async () => {
+      // Groß-/Kleinschreibung des Namens kann abweichen: alle Schreibweisen ersetzen
+      const lower = seller.toLowerCase();
+      const oldKeys = (await db.listings.toArray()).filter((l) => l.seller.toLowerCase() === lower).map((l) => l.listingId);
+      const keep = new Map((await db.listings.bulkGet(oldKeys)).filter(Boolean).map((l) => [l!.listingId, l!.importedAt]));
+      await db.listings.bulkDelete(oldKeys);
+      // Schon bekannte Angebote behalten ihr altes Datum, damit sie nicht als „neu“ gemeldet werden
+      await db.listings.bulkPut(all.map((h) => ({ ...h, importedAt: keep.get(h.listingId) ?? now })));
+    });
     const old = await db.sellers.get(seller);
     await db.sellers.put({ name: seller, favorite: old?.favorite ?? true, addedAt: old?.addedAt ?? Date.now(), lastScan: Date.now(), lastHits: found });
   } finally {

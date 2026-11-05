@@ -10,6 +10,7 @@ const install = require("./mock.cjs");
   const wants = [];
   page.on("request", (r) => r.url().includes("/wants/") && r.method() === "PUT" && wants.push(r.url()));
   await install(page);
+  await page.addInitScript(() => localStorage.setItem("crate:yt", "no"));
   await page.goto("http://localhost:8787/");
   await page.waitForSelector("text=45 Platten");
   await page.screenshot({ path: __dirname + "/dig0-home.png" });

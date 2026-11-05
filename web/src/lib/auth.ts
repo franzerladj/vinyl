@@ -65,10 +65,21 @@ export async function completeLogin(token: string, verifier: string, onStatus: (
   }
 
   if (at) {
-    onStatus("Fast fertig …");
-    const done = await post<{ username: string | null }>("/api/auth/finish", at);
-    if (done.username) return done;
-    return { username: await resolveIdentity() };
+    // Der Server bestätigt den Namen selbst bei Discogs. Ist Discogs ausgelastet, geduldig wiederholen.
+    for (let attempt = 0; attempt < 8; attempt++) {
+      onStatus(attempt ? onStatusWait(attempt) : "Fast fertig …");
+      try {
+        return await post<{ username: string | null }>("/api/auth/finish", at);
+      } catch (e) {
+        const err = e as Error & { data?: { busy?: boolean } };
+        if (!err.data?.busy) throw new Error("Discogs hat die Anmeldung abgelehnt. Bitte noch einmal starten.");
+        for (let s = 4 + attempt * 3; s > 0; s--) {
+          onStatus(`Discogs ist gerade ausgelastet. Neuer Versuch in ${s} s …`);
+          await sleep(1000);
+        }
+      }
+    }
+    throw new Error("Discogs ist gerade sehr ausgelastet. Bitte in ein paar Minuten noch einmal anmelden.");
   }
 
   // 2. Rückfall über den Server, mit geduldigen Wiederholungen (der Verifier bleibt gültig)
@@ -89,17 +100,17 @@ export async function completeLogin(token: string, verifier: string, onStatus: (
   throw new Error("Discogs ist gerade sehr ausgelastet. Bitte in ein paar Minuten noch einmal anmelden.");
 }
 
-/** Benutzernamen direkt bei Discogs abfragen, wenn der Server es gerade nicht konnte */
+const onStatusWait = (n: number) => `Noch einen Moment (Versuch ${n + 1}) …`;
+
+/** Ältere Sitzung ohne bestätigten Namen: der Server fragt Discogs (mit Wiederholungen) */
 export async function resolveIdentity(): Promise<string | null> {
-  try {
-    const s = await post<{ mode: string; url?: string; authorization?: string }>("/api/sign", { method: "GET", path: "/oauth/identity" });
-    if (s.mode !== "direct" || !s.url) return null;
-    const r = await fetch(s.url, { headers: { Authorization: s.authorization! } });
-    if (!r.ok) return null;
-    const { username } = (await r.json()) as { username: string };
-    await post("/api/auth/identity", { username });
-    return username;
-  } catch {
-    return null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      return (await post<{ username: string }>("/api/auth/identity", {})).username;
+    } catch (e) {
+      if (!(e as { data?: { busy?: boolean } }).data?.busy) return null;
+      await sleep(3000 * (attempt + 1));
+    }
   }
+  return null;
 }

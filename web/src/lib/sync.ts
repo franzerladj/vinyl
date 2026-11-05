@@ -305,11 +305,15 @@ export async function removeWant(id: number) {
 
 export async function addToCollection(id: number, folderId = 1) {
   const res = await discogs<{ instance_id: number }>(`/users/${u()}/collection/folders/${folderId}/releases/${id}`, { method: "POST" });
-  const rel = await fetchRelease(id);
+  // Sofort lokal eintragen: scheitert danach das Nachladen, tippt man sonst nochmal und hat die Platte doppelt bei Discogs
   await db.collection.put({ instanceId: res.instance_id, releaseId: id, folderId, dateAdded: new Date().toISOString(), rating: 0 });
   // Neue Platte braucht einen Sticker
   const meta = await db.recordMeta.get(id);
   await db.recordMeta.put({ ...meta, releaseId: id, stickerPrintedAt: null });
+  const rel = await fetchRelease(id).catch((e) => {
+    console.warn("Details der neuen Platte", e);
+    return null;
+  });
   // und gleich ihre Tracks analysieren (im Hintergrund)
   void (async () => {
     const ids = (await db.tracks.where("releaseId").equals(id).toArray()).map((t) => t.id);

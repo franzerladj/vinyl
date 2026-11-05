@@ -13,7 +13,9 @@ const enc = new TextEncoder();
 const keyCache = new Map<string, Promise<CryptoKey>>();
 
 function getKey(secret: string) {
-  const s = secret || "dev-only-insecure-secret";
+  // Ohne echtes Geheimnis keine Sitzungen: sonst ließen sich Cookies mit einem bekannten Schlüssel fälschen
+  if (!secret || secret.length < 32) throw new Error("SESSION_SECRET fehlt oder ist kürzer als 32 Zeichen");
+  const s = secret;
   let k = keyCache.get(s);
   if (!k) {
     k = crypto.subtle.digest("SHA-256", enc.encode(s)).then((h) => crypto.subtle.importKey("raw", h, "AES-GCM", false, ["encrypt", "decrypt"]));
