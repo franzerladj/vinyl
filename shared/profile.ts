@@ -165,7 +165,7 @@ export function sanitizeProfile(p: Partial<CrateProfile> & { links?: (ProfileLin
     styles: [...new Set((p.styles ?? []).map((s) => clean(s, 30)).filter(Boolean))].slice(0, 6),
     spotlight,
     setup: sanitizeSetup(p.setup),
-    plays: p.plays && p.plays in PLAY_LABEL ? p.plays : undefined,
+    plays: typeof p.plays === "string" && Object.hasOwn(PLAY_LABEL, p.plays) ? p.plays : undefined,
   };
 }
 

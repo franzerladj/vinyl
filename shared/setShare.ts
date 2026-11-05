@@ -62,7 +62,7 @@ export function encodeSet(s: SharedSet): string {
 }
 
 const str = (x: unknown, n: number) => (typeof x === "string" ? x.slice(0, n) : "");
-const id = (x: unknown) => (typeof x === "number" && Number.isInteger(x) && x > 0 ? x : 0);
+const id = (x: unknown) => (typeof x === "number" && Number.isSafeInteger(x) && x > 0 ? x : 0);
 
 /** Liest einen geteilten Link. Gibt null bei kaputten oder fremden Daten. */
 export function decodeSet(code: string): SharedSet | null {

@@ -244,7 +244,7 @@ export const currentSlot = (now = Date.now()) => Math.floor(now / (SLOT_MINUTES 
 export function isPushEndpoint(url: string): boolean {
   try {
     const u = new URL(url);
-    return u.protocol === "https:" && /(^|\.)(fcm\.googleapis\.com|googleapis\.com|push\.apple\.com|push\.services\.mozilla\.com|notify\.windows\.com)$/.test(u.hostname);
+    return u.protocol === "https:" && /^(fcm\.googleapis\.com|android\.googleapis\.com|web\.push\.apple\.com|[a-z0-9-]+\.push\.services\.mozilla\.com|[a-z0-9-]+\.notify\.windows\.com)$/.test(u.hostname);
   } catch {
     return false;
   }

@@ -19,8 +19,28 @@ const PENDING = "crate_oauth";
 
 app.use("/api/*", async (c, next) => {
   c.set("cfg", readConfig(c.env ?? {}, c.req.url));
+  // Schreibende Anfragen nur von der eigenen Seite (Schutz gegen Login-CSRF und fremde Formulare).
+  // Server-zu-Server-Aufrufe (Zeitplan-Worker) schicken weder Origin noch Sec-Fetch-Site.
+  if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method) && crossSite(c.req.header("Sec-Fetch-Site"), c.req.header("Origin"), [new URL(c.req.url).origin, c.var.cfg.appUrl])) {
+    return c.json({ message: "Anfrage von fremder Seite abgelehnt" }, 403);
+  }
   await next();
 });
+
+/** Kommt die Anfrage von einer fremden Seite? */
+export function crossSite(fetchSite: string | undefined, origin: string | undefined, own: string[]): boolean {
+  if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") return true;
+  if (origin && !own.includes(origin)) return true;
+  return false;
+}
+
+/** Vergleich in konstanter Zeit (für das Zeitplan-Geheimnis) */
+function sameSecret(a: string | undefined, b: string): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  let d = 0;
+  for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return d === 0;
+}
 
 const cookieOpts = (c: C) => ({ httpOnly: true, secure: c.var.cfg.appUrl.startsWith("https://"), sameSite: "Lax" as const, path: "/" });
 const rawSession = (c: C) => unseal<Session>(c.var.cfg.sessionSecret, getCookie(c, SESSION));
@@ -30,16 +50,15 @@ const session = async (c: C) => {
   return s && s.username && s.verified !== false ? s : null;
 };
 
-/** Wer darf Claude nutzen? Eigener Key im Header oder Discogs-Name auf der Allowlist */
-async function claudeKey(c: C): Promise<string | null> {
+/** Wer darf welche KI nutzen? Eigener Anthropic-Key auch ohne Anmeldung, Betreiber-KI nur mit bestätigter Sitzung */
+async function aiAccess(c: C): Promise<{ key: string | null; free: boolean } | null> {
   const own = c.req.header("X-Anthropic-Key");
-  if (own && own.startsWith("sk-ant-")) return own;
-  const { anthropicKey, aiAllowlist } = c.var.cfg;
-  if (!anthropicKey || aiAllowlist.length === 0) return null;
-  if (aiAllowlist.includes("*")) return anthropicKey;
+  if (own && own.startsWith("sk-ant-")) return { key: own, free: false };
   const s = await session(c);
-  // Nur bestätigte Benutzernamen (sonst könnte jemand einen fremden Namen angeben)
-  return s && s.verified !== false && aiAllowlist.includes(s.username.toLowerCase()) ? anthropicKey : null;
+  if (!s) return null;
+  const { anthropicKey, aiAllowlist, ai } = c.var.cfg;
+  const allowed = Boolean(anthropicKey) && (aiAllowlist.includes("*") || aiAllowlist.includes(s.username.toLowerCase()));
+  return { key: allowed ? anthropicKey : null, free: Boolean(ai) };
 }
 
 // ---------- Auth ----------
@@ -164,7 +183,7 @@ app.get("/api/me", async (c) => {
   const s = await session(c);
   const features = {
     oauth: Boolean(cfg.discogsKey),
-    claude: Boolean(await claudeKey(c)),
+    claude: Boolean((await aiAccess(c))?.key),
     freeAi: Boolean(cfg.ai),
     lastfm: Boolean(cfg.lastfmKey),
     keyLookup: Boolean(cfg.getSongBpmKey),
@@ -186,7 +205,7 @@ app.post("/api/sign", async (c) => {
   const s = await session(c);
   if (!s) return c.json({ mode: "proxy" });
   const { method, path } = await c.req.json<{ method: string; path: string }>();
-  if (!path || !ALLOWED.test(path) || !["GET", "POST", "PUT", "DELETE"].includes(method)) return c.json({ message: "Pfad nicht erlaubt" }, 403);
+  if (!path || !allowedPath(path) || !["GET", "POST", "PUT", "DELETE"].includes(method)) return c.json({ message: "Pfad nicht erlaubt" }, 403);
   const url = `https://api.discogs.com${path}`;
   const authorization = await oauthHmacHeader({ method, url, consumerKey: cfg.discogsKey, consumerSecret: cfg.discogsSecret, token: s.token, tokenSecret: s.secret });
   return c.json({ mode: "direct", url, authorization });
@@ -195,14 +214,32 @@ app.post("/api/sign", async (c) => {
 // ---------- Discogs-Proxy (Rückfallebene) ----------
 const ALLOWED = /^\/(users|database|releases|masters|artists|labels|marketplace\/(stats|price_suggestions|listings)|oauth\/identity)(\/|$|\?)/;
 
+/** Pfad erst so lesen, wie Discogs ihn sieht: keine Punkt-Segmente, kein Backslash, kein kodierter Schrägstrich oder Punkt */
+export function allowedPath(path: string): boolean {
+  const q = path.indexOf("?");
+  const pathPart = q < 0 ? path : path.slice(0, q);
+  if (!pathPart.startsWith("/") || /\\|%2f|%2e|%5c/i.test(pathPart)) return false;
+  let u: URL;
+  try {
+    u = new URL(`https://api.discogs.com${pathPart}`);
+  } catch {
+    return false;
+  }
+  // Normalisierung (z. B. /users/../) darf den Pfad nicht verändern
+  if (u.host !== "api.discogs.com" || u.pathname !== pathPart) return false;
+  return ALLOWED.test(path);
+}
+
 app.all("/api/discogs/*", async (c) => {
   const cfg = c.var.cfg;
   const s = await session(c);
   if (!s && !cfg.discogsPersonalToken) return c.json({ message: "Nicht angemeldet" }, 401);
   const url = new URL(c.req.url);
   const path = url.pathname.replace(/^\/api\/discogs/, "") + url.search;
-  if (!ALLOWED.test(path)) return c.json({ message: "Pfad nicht erlaubt" }, 403);
   const method = c.req.method;
+  if (!allowedPath(path)) return c.json({ message: "Pfad nicht erlaubt" }, 403);
+  // Persönlicher Token (nur lokal gedacht): ohne Anmeldung nur lesen
+  if (!s && method !== "GET") return c.json({ message: "Nicht angemeldet" }, 401);
   const body = ["POST", "PUT"].includes(method) ? await c.req.text() : undefined;
   const r = await discogsFetch(cfg, s, path, { method, body: body || undefined });
   const headers = new Headers({ "Content-Type": r.headers.get("Content-Type") ?? "application/json" });
@@ -215,26 +252,34 @@ app.all("/api/discogs/*", async (c) => {
 
 // ---------- Erkennung & Vibes ----------
 app.post("/api/ai/recognize", async (c) => {
-  if (!(await session(c)) && !c.req.header("X-Anthropic-Key")) return c.json({ message: "Bitte anmelden" }, 401);
+  const access = await aiAccess(c);
+  if (!access) return c.json({ message: "Bitte anmelden" }, 401);
   const { image, mediaType } = await c.req.json<{ image: string; mediaType: "image/jpeg" | "image/png" | "image/webp" }>();
   if (!image || image.length > 7_000_000) return c.json({ message: "Bild fehlt oder ist zu groß" }, 400);
-  const key = await claudeKey(c);
-  if (key) return c.json({ ...(await recognizeRecord(key, image, mediaType ?? "image/jpeg")), engine: "claude" });
-  if (c.var.cfg.ai) return c.json({ ...(await recognizeRecordFree(c.var.cfg.ai, image, mediaType ?? "image/jpeg")), engine: "workers-ai" });
+  if (access.key) return c.json({ ...(await recognizeRecord(access.key, image, mediaType ?? "image/jpeg")), engine: "claude" });
+  if (access.free && c.var.cfg.ai) return c.json({ ...(await recognizeRecordFree(c.var.cfg.ai, image, mediaType ?? "image/jpeg")), engine: "workers-ai" });
   return c.json({ message: "Keine Bilderkennung auf dem Server eingerichtet" }, 501);
 });
 
 app.post("/api/ai/vibes", async (c) => {
-  if (!(await session(c)) && !c.req.header("X-Anthropic-Key")) return c.json({ message: "Bitte anmelden" }, 401);
+  const access = await aiAccess(c);
+  if (!access) return c.json({ message: "Bitte anmelden" }, 401);
   const { items } = await c.req.json<{ items: VibeInput[] }>();
   const list = (items ?? []).slice(0, 60);
-  const key = await claudeKey(c);
-  if (key) return c.json({ items: await tagVibes(key, list), engine: "claude" });
-  if (c.var.cfg.ai) return c.json({ items: await tagVibesFree(c.var.cfg.ai, list.slice(0, 25)), engine: "workers-ai" });
+  if (access.key) return c.json({ items: await tagVibes(access.key, list), engine: "claude" });
+  if (access.free && c.var.cfg.ai) return c.json({ items: await tagVibesFree(c.var.cfg.ai, list.slice(0, 25)), engine: "workers-ai" });
   return c.json({ message: "Keine KI auf dem Server eingerichtet" }, 501);
 });
 
 // ---------- Audio-Daten ----------
+// Nur für Angemeldete: die Routen nutzen Betreiber-Schlüssel und bis zu 45 Unteranfragen je Aufruf
+for (const p of ["/api/audio/*", "/api/lastfm/*"]) {
+  app.use(p, async (c, next) => {
+    if (!(await session(c))) return c.json({ message: "Bitte anmelden" }, 401);
+    await next();
+  });
+}
+
 app.get("/api/audio/lookup", async (c) => {
   const title = c.req.query("title") ?? "";
   if (!title) return c.json({ message: "title fehlt" }, 400);
@@ -387,7 +432,7 @@ app.post("/api/push/test", async (c) => {
 /** Für den Zeitplan-Worker: alle Nutzer mit Mitteilungen (er ruft dann für jeden /api/push/run?u= auf) */
 app.post("/api/push/users", async (c) => {
   const cfg = c.var.cfg;
-  if (!cfg.cronSecret || c.req.header("X-Cron-Secret") !== cfg.cronSecret) return c.json({ message: "nein" }, 403);
+  if (!sameSecret(c.req.header("X-Cron-Secret"), cfg.cronSecret)) return c.json({ message: "nein" }, 403);
   const users: string[] = [];
   let cursor: string | undefined;
   do {
@@ -460,7 +505,7 @@ async function runUser(cfg: Config, u: string, budget: number) {
  */
 app.post("/api/push/run", async (c) => {
   const cfg = c.var.cfg;
-  if (!cfg.cronSecret || c.req.header("X-Cron-Secret") !== cfg.cronSecret) return c.json({ message: "nein" }, 403);
+  if (!sameSecret(c.req.header("X-Cron-Secret"), cfg.cronSecret)) return c.json({ message: "nein" }, 403);
   const u = c.req.query("u");
   if (u) return c.json(await runUser(cfg, u, 45));
   // Ohne Nutzer: alle nacheinander mit geteiltem Budget (Rückfall für alte Worker)
@@ -589,8 +634,8 @@ app.get("/api/img", async (c) => {
   } catch {
     return c.text("ungültig", 400);
   }
-  if (url.protocol !== "https:" || !/^(i|st|img)\.discogs\.com$/.test(url.hostname)) return c.text("nicht erlaubt", 403);
-  const r = await fetch(url.toString(), { headers: { "User-Agent": c.var.cfg.userAgent } });
+  if (url.protocol !== "https:" || url.port || url.username || !/^(i|st|img)\.discogs\.com$/.test(url.hostname)) return c.text("nicht erlaubt", 403);
+  const r = await fetch(url.toString(), { headers: { "User-Agent": c.var.cfg.userAgent }, redirect: "manual" });
   const type = r.headers.get("Content-Type") ?? "";
   if (!r.ok || !type.startsWith("image/")) return c.text("Bild nicht ladbar", 502);
   return new Response(r.body, { headers: { "Content-Type": type, "Cache-Control": "public, max-age=604800", "Access-Control-Allow-Origin": "*" } });
