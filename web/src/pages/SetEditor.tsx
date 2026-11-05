@@ -7,6 +7,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV, type DJSet, type Release, type TrackMeta } from "../lib/db";
 import { ShareCardSheet } from "../components/ShareCard";
 import { renderSetCard } from "../lib/shareCard";
+import { playedHistory, playedText, type PlayedAt } from "../lib/setHistory";
 import { toast } from "../lib/store";
 import { Cover, haptic, Seg, Sheet } from "../components/bits";
 import { IconPlay, IconPlus, IconX } from "../components/icons";
@@ -50,6 +51,8 @@ export default function SetEditor() {
   const [playing, setPlaying] = useState<string | null>(null);
   const [shareMenu, setShareMenu] = useState(false);
   const [card, setCard] = useState(false);
+  const allSets = useLiveQuery(() => db.sets.toArray(), [], []);
+  const history = useMemo(() => playedHistory(allSets, set.id), [allSets, set.id]);
   const djName = useLiveQuery(async () => (await getKV<{ djName?: string } | null>("crateProfile:me", null))?.djName ?? (await getKV<{ name?: string } | null>("myProfile", null))?.name);
   const audio = useRef<HTMLAudioElement>(null);
 
@@ -298,6 +301,8 @@ export default function SetEditor() {
               onPick={(tid) => insertTrack(tid, set.trackIds.length)}
               onPreview={togglePreview}
               playing={playing}
+              history={history}
+              venue={set.venue}
             />
           </>
         ) : (
@@ -341,6 +346,8 @@ export default function SetEditor() {
             }}
             onPreview={togglePreview}
             playing={playing}
+            history={history}
+            venue={set.venue}
             search
           />
         )}
@@ -542,6 +549,8 @@ function NextPanel(p: {
   onPick: (tid: string) => void;
   onPreview: (t: TrackMeta) => void;
   playing: string | null;
+  history?: Map<string, PlayedAt[]>;
+  venue?: string;
   search?: boolean;
 }) {
   const [q, setQ] = useState("");
@@ -598,6 +607,13 @@ function NextPanel(p: {
                     </i>
                   ))}
                 {stars ? <i className="info">★ {stars}</i> : null}
+                {(() => {
+                  // Schon gespielt? An derselben Location in den letzten 10 Wochen als Warnung
+                  const h = p.history?.get(t.id)?.[0];
+                  if (!h) return null;
+                  const recentHere = p.venue && h.venue && h.venue.toLowerCase() === p.venue.toLowerCase() && Date.now() - new Date(h.date).getTime() < 70 * 86_400_000;
+                  return <i className={recentHere ? "warn" : "info"}>gespielt {playedText(h)}</i>;
+                })()}
               </span>
             </div>
             <button className="next-add" onClick={() => p.onPick(s.id)} aria-label="Ins Set">
@@ -857,6 +873,7 @@ function LiveMode({ tracks, rels, notes, played, onPlayed, onClose }: { tracks: 
           {cur.bpm ? <b>{Math.round(cur.bpm)} BPM</b> : null}
           {cur.key ? <b>{cur.key}</b> : null}
         </div>
+        {cur.cueOut && <p className="live-cue">Raus: {cur.cueOut}</p>}
       </div>
       <div className="live-next">
         {next ? (
@@ -873,6 +890,7 @@ function LiveMode({ tracks, rels, notes, played, onPlayed, onClose }: { tracks: 
                 </span>
               </div>
             </div>
+            {next.cueIn && <p className="live-cue">Rein: {next.cueIn}</p>}
             {notes[next.id] && <p className="live-note">„{notes[next.id]}“</p>}
           </>
         ) : (

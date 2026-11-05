@@ -853,3 +853,4 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .app:has(.live) .nav, .app:has(.live) .topbar, .app:has(.live) .jobs, .app:has(.live) .navbar { display: none; }
 .share-preview { display: grid; place-items: center; min-height: 320px; }
 .share-preview img { height: min(56dvh, 520px); aspect-ratio: 9 / 16; border-radius: 18px; box-shadow: var(--shadow); object-fit: cover; }
+.live-cue { margin: 4px 0 0; font-size: 15px; font-weight: 600; color: var(--text-2); }

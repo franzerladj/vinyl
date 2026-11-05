@@ -12,6 +12,7 @@ import { friendsFor, lendRecord, messageUrl } from "../lib/friends";
 import { MenuSheet } from "../components/ui";
 import { previewUrl } from "../lib/free";
 import { ytConsent } from "../lib/theme";
+import { playedHistory, playedText } from "../lib/setHistory";
 import { matchVideo, parseDuration, youtubeId } from "../../../shared/match";
 import { IconBack, IconCart, IconExternal, IconShare, IconHeart, IconPlay, IconPlus, IconPrint, IconSparkle } from "../components/icons";
 
@@ -449,6 +450,9 @@ function TrackEdit({
   const [moods, setMoods] = useState((t.moods ?? []).join(", "));
   const [stars, setStars] = useState(t.stars ?? 0);
   const [notes, setNotes] = useState(t.notes ?? "");
+  const [cueIn, setCueIn] = useState(t.cueIn ?? "");
+  const [cueOut, setCueOut] = useState(t.cueOut ?? "");
+  const history = useLiveQuery(async () => playedHistory(await db.sets.toArray()).get(t.id) ?? [], [t.id], []);
   const [pickVideo, setPickVideo] = useState(false);
   const yt = videos.filter((v) => youtubeId(v.uri));
   return (
@@ -530,6 +534,21 @@ function TrackEdit({
           </button>
         ))}
       </div>
+      <div className="grid2">
+        <label className="field">
+          Rein (Cue)
+          <input className="input" maxLength={60} value={cueIn} onChange={(e) => setCueIn(e.target.value)} placeholder="z. B. Intro 32 Takte" />
+        </label>
+        <label className="field">
+          Raus (Cue)
+          <input className="input" maxLength={60} value={cueOut} onChange={(e) => setCueOut(e.target.value)} placeholder="z. B. ab 5:40" />
+        </label>
+      </div>
+      {history.length > 0 && (
+        <div className="sub">
+          Zuletzt gespielt: {history.slice(0, 3).map((h) => playedText(h)).join(", ")}
+        </div>
+      )}
       <label className="field">
         Notiz (z.B. „guter Opener“, „passt zu …“)
         <textarea className="input" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -544,6 +563,8 @@ function TrackEdit({
             moods: moods.split(",").map((s) => s.trim()).filter(Boolean),
             stars,
             notes,
+            cueIn: cueIn.trim() || undefined,
+            cueOut: cueOut.trim() || undefined,
             bpmSource: bpm !== String(t.bpm ?? "") ? "manuell" : t.bpmSource,
             keySource: key.trim() !== (t.key ?? "") ? "manuell" : t.keySource,
             vibeSource: energy !== (t.energy ?? 5) || moods !== (t.moods ?? []).join(", ") ? "manuell" : t.vibeSource,

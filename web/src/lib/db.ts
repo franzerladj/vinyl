@@ -63,6 +63,9 @@ export interface TrackMeta {
   /** Fehlgeschlagene Analyse-Versuche (nach 3 wird aufgegeben) */
   analyzeTries?: number;
   lookedUpAt?: number;
+  /** Cue-Punkte zum Mixen: wie reinkommen (z. B. „Intro 32 Takte“) und wie raus (z. B. „ab 5:40“) */
+  cueIn?: string;
+  cueOut?: string;
 }
 
 export interface RecordMeta {
