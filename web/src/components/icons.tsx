@@ -47,3 +47,4 @@ export const IconCoin = P("M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM15 9.5c-.5-1-1.
 export const IconBolt = P("M13 2L4 14h7l-1 8 9-12h-7z");
 export const IconSheet = P("M4 4h16v16H4zM4 10h16M4 15h16M10 4v16");
 export const IconUser = P("M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0");
+export const IconMic = P("M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3zM5 11a7 7 0 0 0 14 0M12 18v3M8 21h8");

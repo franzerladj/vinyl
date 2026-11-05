@@ -9,3 +9,4 @@ tools/e2e/*.png
 tools/e2e/*.pdf
 tools/e2e/*.jpg
 tools/e2e/wrap/
+tools/e2e/*.wav

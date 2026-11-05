@@ -58,7 +58,7 @@ let seq = 0;
 const pending = new Map<number, (r: AudioAnalysis | null) => void>();
 
 /** Rechnet die Analyse in einem Web Worker; ohne Worker-Unterstützung auf dem Hauptthread */
-function analyzeOffThread(samples: Float32Array, sr: number, hints: AnalysisHints = {}): Promise<AudioAnalysis | null> {
+export function analyzeOffThread(samples: Float32Array, sr: number, hints: AnalysisHints = {}): Promise<AudioAnalysis | null> {
   if (!workerBroken && !worker) {
     try {
       worker = new Worker(new URL("./analysis.worker.ts", import.meta.url), { type: "module" });

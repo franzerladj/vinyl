@@ -16,7 +16,9 @@ import { previewUrl } from "../lib/free";
 import { ytConsent } from "../lib/theme";
 import { playedHistory, playedText } from "../lib/setHistory";
 import { matchVideo, parseDuration, youtubeId } from "../../../shared/match";
-import { IconBack, IconCart, IconExternal, IconShare, IconHeart, IconPlay, IconPlus, IconPrint, IconWave } from "../components/icons";
+import { IconBack, IconCart, IconExternal, IconShare, IconHeart, IconPlay, IconPlus, IconMic, IconPrint, IconWave } from "../components/icons";
+import { Listen } from "../components/Listen";
+import { estimateBpm } from "../../../shared/vibes";
 
 export default function ReleasePage() {
   const id = Number(useParams().id);
@@ -29,6 +31,7 @@ export default function ReleasePage() {
   const [playing, setPlaying] = useState(false);
   const [media, setMedia] = useState<Media | null>(null);
   const [lendSheet, setLendSheet] = useState(false);
+  const [listenSide, setListenSide] = useState(false);
   const [grading, setGrading] = useState<{ item: CollectionItem; which: "media" | "sleeve" } | null>(null);
   const copies = useLiveQuery(() => db.collection.where("releaseId").equals(id).toArray(), [id], [] as CollectionItem[]);
   const buddies = useLiveQuery(() => friendsFor(id), [id]);
@@ -108,6 +111,8 @@ export default function ReleasePage() {
   const tl = realTracks(rel.tracklist);
   let lastSide = "";
 
+  /** Erwartetes Tempo aus den anderen Tracks oder den Styles: verhindert Halb-/Doppel-Fehler beim Messen */
+  const hintsFor = (t?: TrackMeta | null) => ({ expectedBpm: estimateBpm(rel.styles ?? [], tracks.filter((x) => x.id !== t?.id && x.bpm).map((x) => x.bpm!)) });
   const setMeta = (patch: Record<string, unknown>) => db.recordMeta.put({ ...meta, releaseId: id, ...patch });
   const saveTrack = (t: TrackMeta, patch: Partial<TrackMeta>) => db.tracks.update(t.id, patch);
   /** Track antippen: passendes YouTube-Video starten, sonst die Deezer-Hörprobe (direkt in der Tipp-Geste, damit Browser das Abspielen erlauben) */
@@ -274,9 +279,8 @@ export default function ReleasePage() {
           </>
         )}
 
-        <div className="row" style={{ marginTop: 22 }}>
-          <h2 style={{ margin: 0 }}>Tracks</h2>
-          <span className="spacer" />
+        <h2 style={{ margin: "22px 0 0" }}>Tracks</h2>
+        <div className="track-tools">
           <button
             className="btn small tinted"
             onClick={async () => {
@@ -291,7 +295,10 @@ export default function ReleasePage() {
               }
             }}
           >
-            <IconWave /> BPM & Key messen
+            <IconWave /> Hörproben messen
+          </button>
+          <button className="btn small tinted" onClick={() => (haptic(), setListenSide(true))}>
+            <IconMic /> Mithören
           </button>
         </div>
         <table className="tracks">
@@ -508,10 +515,25 @@ export default function ReleasePage() {
         ]}
       />
       <audio ref={audioRef} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onError={() => media?.type === "deezer" && setMedia({ type: "none" })} hidden />
+      <Sheet open={listenSide} onClose={() => setListenSide(false)}>
+        {listenSide && (
+          <ListenSide
+            tracks={tl.map((t, i) => tm.get(trackId(id, t.position, i))).filter((m): m is TrackMeta => !!m)}
+            hintsFor={hintsFor}
+            onSave={(t, bpm, key) =>
+              saveTrack(t, {
+                ...(bpm ? { bpm, bpmSource: "Mithören" } : {}),
+                ...(key ? { key, keySource: "Mithören" } : {}),
+              })
+            }
+          />
+        )}
+      </Sheet>
       <Sheet open={!!edit} onClose={closeTrack}>
         {edit && (
           <TrackEdit
             t={edit}
+            hints={hintsFor(edit)}
             media={media}
             playing={playing}
             videos={rel.videos ?? []}
@@ -538,6 +560,7 @@ type Media = { type: "yt"; id: string; title: string } | { type: "deezer" } | { 
 
 function TrackEdit({
   t,
+  hints,
   media,
   playing,
   videos,
@@ -546,6 +569,7 @@ function TrackEdit({
   onSave,
 }: {
   t: TrackMeta;
+  hints: { expectedBpm: number | null };
   media: Media | null;
   playing: boolean;
   videos: { uri: string; title: string }[];
@@ -563,6 +587,7 @@ function TrackEdit({
   const [cueOut, setCueOut] = useState(t.cueOut ?? "");
   const history = useLiveQuery(async () => playedHistory(await db.sets.toArray()).get(t.id) ?? [], [t.id], []);
   const [pickVideo, setPickVideo] = useState(false);
+  const [heard, setHeard] = useState<{ bpm: string; key: string } | null>(null);
   const yt = videos.filter((v) => youtubeId(v.uri));
   return (
     <div className="stack">
@@ -627,6 +652,16 @@ function TrackEdit({
         </label>
       </div>
       <TapTempo onBpm={(b) => setBpm(String(b))} />
+      <Listen
+        hints={hints}
+        onTake={(b, k) => {
+          const h = { bpm: b ? String(b) : bpm, key: k ?? key };
+          setBpm(h.bpm);
+          setKey(h.key);
+          setHeard(h);
+          toast("Werte eingetragen. Zum Behalten speichern.");
+        }}
+      />
       <label className="field">
         Energie: {energy}/10
         <input type="range" min={1} max={10} value={energy} onChange={(e) => setEnergy(Number(e.target.value))} />
@@ -674,8 +709,8 @@ function TrackEdit({
             notes,
             cueIn: cueIn.trim() || undefined,
             cueOut: cueOut.trim() || undefined,
-            bpmSource: bpm !== String(t.bpm ?? "") ? "manuell" : t.bpmSource,
-            keySource: key.trim() !== (t.key ?? "") ? "manuell" : t.keySource,
+            bpmSource: bpm === String(t.bpm ?? "") ? t.bpmSource : heard && bpm === heard.bpm ? "Mithören" : "manuell",
+            keySource: key.trim() === (t.key ?? "") ? t.keySource : heard && key === heard.key ? "Mithören" : "manuell",
             vibeSource: energy !== (t.energy ?? 5) || moods !== (t.moods ?? []).join(", ") ? "manuell" : t.vibeSource,
           })
         }
@@ -700,5 +735,47 @@ function VideoFacade({ id, title }: { id: string; title: string }) {
       <span className="video-title">{title}</span>
       <span className="tiny">Lädt das Video von YouTube</span>
     </button>
+  );
+}
+
+/** Eine ganze Seite durchhören: Track wählen, mithören, speichern, weiter zum nächsten */
+function ListenSide({ tracks, hintsFor, onSave }: { tracks: TrackMeta[]; hintsFor: (t: TrackMeta) => { expectedBpm: number | null }; onSave: (t: TrackMeta, bpm: number | null, key: string | null) => Promise<unknown> }) {
+  const firstOpen = tracks.find((t) => !t.bpm || !t.key) ?? tracks[0];
+  const [cur, setCur] = useState<string | undefined>(firstOpen?.id);
+  const [done, setDone] = useState<Set<string>>(new Set());
+  const t = tracks.find((x) => x.id === cur);
+  if (!t) return <Empty title="Keine Tracks">Für diese Platte ist noch keine Tracklist geladen.</Empty>;
+  return (
+    <div className="stack">
+      <div>
+        <b style={{ fontSize: 18 }}>Mithören</b>
+        <div className="sub">Spiel den Track ab und tipp auf Mithören. Nach dem Speichern geht es mit dem nächsten weiter.</div>
+      </div>
+      <div className="listen-picks" role="radiogroup" aria-label="Track">
+        {tracks.map((x) => (
+          <button key={x.id} role="radio" aria-checked={x.id === cur} className={`chip mono${x.id === cur ? " on" : ""}${done.has(x.id) ? " done" : ""}`} onClick={() => (haptic(5), setCur(x.id))}>
+            {x.position}
+          </button>
+        ))}
+      </div>
+      <div>
+        <b>{t.title}</b>
+        <div className="sub">
+          {t.position} · {[t.bpm && `${Math.round(t.bpm)} BPM`, t.key].filter(Boolean).join(" · ") || "noch ohne BPM und Key"}
+        </div>
+      </div>
+      <Listen
+        key={t.id}
+        hints={hintsFor(t)}
+        takeLabel="Speichern & weiter"
+        onTake={(bpm, key) => {
+          void onSave(t, bpm, key).then(() => toast(`${t.position} gespeichert`));
+          setDone((d) => new Set(d).add(t.id));
+          const i = tracks.indexOf(t);
+          const next = tracks.slice(i + 1).find((x) => !done.has(x.id));
+          if (next) setCur(next.id);
+        }}
+      />
+    </div>
   );
 }

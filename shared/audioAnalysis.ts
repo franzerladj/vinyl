@@ -286,6 +286,39 @@ export function estimateTempo(flux: number[], lowFlux: number[], fps: number, ex
       fine = l;
     }
   }
+  // Lange Aufnahmen (Mithören): über weit entfernte Schläge (8, 16, 32 Schläge) nachmessen.
+  // Je größer der Abstand, desto feiner die Auflösung, ±0,05 BPM statt ±0,2.
+  if (n > fps * 15) {
+    const cache = new Map<number, number>();
+    const acAt = (L: number) => {
+      let v = cache.get(L);
+      if (v == null) {
+        let s = 0;
+        for (let i = 0; i + L < n; i++) s += env[i] * env[i + L];
+        v = s / (n - L);
+        cache.set(L, v);
+      }
+      return v;
+    };
+    const atFar = (l: number) => {
+      const i = Math.floor(l);
+      return acAt(i) + (acAt(i + 1) - acAt(i)) * (l - i);
+    };
+    for (const k of [8, 16, 32]) {
+      if (k * fine > n * 0.6) break;
+      // Innerhalb eines halben Frames auf dem k-fachen Lag suchen
+      let bestL = fine;
+      let bv = -Infinity;
+      for (let l = fine - 0.5 / k * 2; l <= fine + 0.5 / k * 2; l += 0.02 / k) {
+        const v = atFar(k * l) + 0.5 * atFar((k / 2) * l);
+        if (v > bv) {
+          bv = v;
+          bestL = l;
+        }
+      }
+      fine = bestL;
+    }
+  }
   const bpm = Math.round(((60 * fps) / fine) * 10) / 10;
   // Sicherheit: Wie deutlich sticht der Kammwert gegenüber allen anderen Lags heraus?
   const vals: number[] = [];
