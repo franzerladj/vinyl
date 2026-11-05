@@ -37,6 +37,12 @@ export default function ReleasePage() {
   const buddies = useLiveQuery(() => friendsFor(id), [id]);
   const friendNames = useLiveQuery(async () => (await db.friends.toArray()).map((f) => f.username), [], [] as string[]);
   const audioRef = useRef<HTMLAudioElement>(null);
+  // Nadel setzt auf: kurzes Klopfen, wenn der Tonarm die Platte erreicht
+  useEffect(() => {
+    if (!playing) return;
+    const t = setTimeout(() => haptic(12), 520);
+    return () => clearTimeout(t);
+  }, [playing]);
 
   const rel = useLiveQuery(() => db.releases.get(id), [id]);
   const tracks = useLiveQuery(() => db.tracks.where("releaseId").equals(id).toArray(), [id], []);
@@ -66,7 +72,6 @@ export default function ReleasePage() {
 
   const top = (
     <div className="stage">
-      {coverSrc && <div className="stage-bg" style={{ backgroundImage: `url("${coverSrc}")` }} />}
       <div className="stage-top">
         <button className="icon-btn" data-back onClick={back} aria-label="Zurück">
           <IconBack />
@@ -94,6 +99,7 @@ export default function ReleasePage() {
           {coverSrc && <div className="label" style={{ backgroundImage: `url("${coverSrc}")` }} />}
         </div>
         <Cover src={coverSrc} className="cover lg" style={{ viewTransitionName: "hero-cover" }} />
+        <ToneArm down={playing} />
       </div>
       <h1>{rel?.title ?? preview?.title ?? ""}</h1>
       <div className="artist">{rel?.artist ?? preview?.artist ?? ""}</div>
@@ -777,5 +783,20 @@ function ListenSide({ tracks, hintsFor, onSave }: { tracks: TrackMeta[]; hintsFo
         }}
       />
     </div>
+  );
+}
+
+/** Tonarm über dem sichtbaren Teil der Platte: ruht daneben, schwenkt beim Abspielen ein und setzt auf */
+function ToneArm({ down }: { down: boolean }) {
+  return (
+    <svg className={`tonearm${down ? " down" : ""}`} viewBox="0 0 60 260" aria-hidden="true">
+      {/* Lager mit Gegengewicht */}
+      <circle cx="30" cy="30" r="22" className="ta-base" />
+      <rect x="21" y="2" width="18" height="22" rx="4" className="ta-weight" />
+      <circle cx="30" cy="30" r="7" className="ta-pivot" />
+      {/* Rohr mit Knick zum Headshell */}
+      <path d="M30 30 L30 196 L18 226" className="ta-tube" />
+      <rect x="4" y="220" width="22" height="34" rx="3" transform="rotate(24 15 237)" className="ta-head" />
+    </svg>
   );
 }

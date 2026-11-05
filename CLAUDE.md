@@ -9,7 +9,7 @@ Mobile Web-App (PWA) für Vinyl-DJs auf Basis von Discogs. Besitzer: Franz Krali
 - Commit-Nachrichten auf Deutsch, beschreibend. Keine Modellnamen in Commits oder Code.
 - Nie Secrets committen oder Franz bitten, Schlüssel in den Chat zu kopieren.
 - Nicht anfassen: das alte Cloudflare-Projekt `vinyl-wantlist`.
-- Marke: Logo „Die Kiste“ (Plattenkiste mit gezogener Platte), Quelle `tools/brand/logo.cjs` (erzeugt alle Icons), Komponente `web/src/components/Logo.tsx`. Farben Orange `#ff5b14`, Tinte `#16120f`, Papier `#e9dfcc`. Große Titel in Archivo schmal (wdth 62, 900, Versalien), Katalognummern/Matrix/Zustand in JetBrains Mono.
+- Marke: Logo „Die Kiste“ (Plattenkiste mit gezogener Platte), Quelle `tools/brand/logo.cjs` (erzeugt alle Icons), Komponente `web/src/components/Logo.tsx`. Farben Orange `#ff5b14`, Tinte `#16120f`, Papier `#e9dfcc`. Flächen warm statt Apple-Grau: dunkel auf Tinte (`--bg #16120f`), hell auf Papier (`--bg #efe8dc`, Karten `#fffdf8`). Platten-Seite: Tonarm (`ToneArm` in `Release.tsx`) schwenkt beim Abspielen ein, kein Weichzeichner-Hintergrund. Große Titel in Archivo schmal (wdth 62, 900, Versalien), Katalognummern/Matrix/Zustand in JetBrains Mono.
 - Darf nicht nach KI aussehen: keine Farbverläufe, kein Leuchten, keine Weichzeichner-Wolken, kein Funkel-Symbol, keine Wörter wie „KI“ oder „analysieren“ in der Oberfläche. Lieber Begriffe aus dem Plattenladen (Kiste, Pressung, Zustand, Seite A/B).
 - UI-Anspruch: wirkt wie eine große native iOS-App (Apple-Design, Motion, Haptik). Änderungen immer im Handy-Viewport (Playwright, „iPhone 13“) prüfen, hell und dunkel, und mit `tools/e2e/wrap.cjs` auf 320 px gegenprüfen.
 - Umbrüche: Silbentrennung nur in Fließtext, nie in Labels, Fragen, Titeln oder Knöpfen. Kurze Labels statt Trennung.
@@ -74,6 +74,7 @@ node tools/e2e/value.cjs    # Wert der Sammlung, wertvollste Platten, Sortierung
 node tools/e2e/listen.cjs   # Mithören mit simuliertem Mikrofon (124 BPM, Am)
 node tools/brand/logo.cjs   # Icons aus dem Logo neu erzeugen
 node tools/e2e/sharecard.cjs # Teilen-Karten (Profil, Set) als PNG erzeugen
+node tools/e2e/look.cjs <ordner>  # Bilder der wichtigsten Seiten hell/dunkel (Vorher/Nachher)
 node tools/e2e/wrap.cjs     # Umbruch-Audit aller Seiten (320/375/390 px, hell/dunkel; SHOTS=1 für Screenshots)
 ```
 
