@@ -36,6 +36,7 @@ Wichtige Eigenheiten:
 - Kisten-Vorlagen: KV `crateTemplates` (`web/src/lib/crateTemplates.ts`). Set-Verlauf: `web/src/lib/setHistory.ts`. Cue-Punkte: `TrackMeta.cueIn/cueOut`.
 - Teilen-Karten (Story 1080×1920): `web/src/lib/shareCard.ts`, Discogs-Bilder über `/api/img` (CORS).
 - Vinylhead-Daten (`shared/vinyl.ts`): Zustand nach Goldmine aus den Discogs-Sammlungsfeldern 1 (Platte), 2 (Hülle), 3 (Notiz), Schreiben per `setCondition` in `sync.ts`. Pressung (Matrix/Runout, Schnitt, Presswerk) aus `identifiers`/`companies` des Releases, ältere Einträge werden beim Öffnen still nachgeladen.
+- Sammlungswert (`shared/value.ts`, `web/src/lib/value.ts`): Gesamtwert direkt von Discogs (`/users/{u}/collection/value`, Min/Median/Max aus Verkäufen, eine Anfrage, KV `collValue`, alle 12 h). Einzelwert je Platte: Preisempfehlung für den eigenen Zustand, sonst VG+, sonst günstigstes Angebot. Blatt und Sortierung „Wert“ in `Collection.tsx`.
 - Mithören (`shared/listen.ts`, `web/src/lib/listen.ts`, `web/src/components/Listen.tsx`): Mikrofon ohne Sprachfilter, alle 4 s Auswertung der letzten 60 s im Worker, sicher erst bei drei gleichen Ergebnissen (ab 30 s). Nichts verlässt das Gerät. Braucht `microphone=(self)` in `web/public/_headers`. YouTube-Ton direkt abgreifen geht nicht (Player gesperrt, Download gegen die YouTube-Bedingungen). Lange Aufnahmen werden über 8/16/32 Schläge nachgemessen (±0,1 BPM).
 - Tap-Tempo (`shared/tap.ts`): Regression über alle Tipps, erkennt Abdriften. Der Ring blinkt erst nach dem Tippen, sonst folgt man dem Blinken statt der Musik.
 - Push-Mitteilungen: `server/push.ts` (VAPID + aes128gcm selbst gebaut, getestet in `tests/push.test.ts`), Routen `/api/push/*` in `server/app.ts`, Client `web/src/lib/push.ts`, Service Worker `web/public/push-sw.js` (per `importScripts`). Speicher: KV-Binding `PUSH` (Namespace `crate-push`). Zeitplan: Worker `crate-cron` (`workers/cron/`, alle 10 Minuten; holt `/api/push/users` und ruft pro Nutzer `/api/push/run?u=` mit `X-Cron-Secret`, je eigener Aufruf mit ~45 Unteranfragen). Wants ohne Angebot oder mit Wunschpreis werden bevorzugt geprüft (`pickWants`), KV nur bei Änderungen beschreiben (Schreib-Kontingent). Öffentlicher VAPID-Schlüssel in `shared/pushKey.ts`, privater als Secret `VAPID_PRIVATE_JWK`. Server-Daten nur für Nutzer mit eingeschalteten Mitteilungen, beim Ausschalten gelöscht. iPhone: nur als Home-Bildschirm-App.
@@ -68,6 +69,7 @@ node tools/e2e/history.cjs  # Set-Verlauf: „gespielt vor … im …“ bei Vor
 node tools/e2e/share.cjs    # Kisten-Vorlagen, Set per Link teilen und übernehmen
 node tools/e2e/feed.cjs     # Feed: Filter Jahrzehnt/Preis, Wischen nach links
 node tools/e2e/grade.cjs    # Zustand bewerten, Pressung anzeigen
+node tools/e2e/value.cjs    # Wert der Sammlung, wertvollste Platten, Sortierung nach Wert (dauert ~5 Min.)
 node tools/e2e/listen.cjs   # Mithören mit simuliertem Mikrofon (124 BPM, Am)
 node tools/brand/logo.cjs   # Icons aus dem Logo neu erzeugen
 node tools/e2e/sharecard.cjs # Teilen-Karten (Profil, Set) als PNG erzeugen

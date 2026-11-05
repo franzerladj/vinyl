@@ -952,3 +952,11 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .rider dt { font: 600 11px/1.6 "JetBrains Mono Variable", ui-monospace, monospace; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); padding-top: 1px; }
 .rider dd { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.35; min-width: 0; overflow-wrap: anywhere; hyphens: manual; -webkit-hyphens: manual; }
 .pe-field input[list]::-webkit-calendar-picker-indicator { display: none !important; }
+
+/* Wert der Sammlung */
+.value-line { all: unset; cursor: pointer; display: inline-block; margin-top: 2px; font-size: 14px; color: var(--text-2); -webkit-tap-highlight-color: transparent; }
+.value-line b { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+.value-head { display: flex; flex-direction: column; gap: 4px; }
+.value-big { font: 900 56px/0.95 var(--font-brand); font-stretch: 62%; font-variation-settings: "wdth" 62; letter-spacing: -0.01em; text-transform: uppercase; font-variant-numeric: tabular-nums; }
+.value-head .tiny { margin: 6px 0 0; }
+.value-rec > b { font-size: 14px; white-space: nowrap; flex: none; }

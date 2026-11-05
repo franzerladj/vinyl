@@ -25,6 +25,7 @@ module.exports = async function install(page) {
     const url = new URL(route.request().url()); const p = url.pathname;
     const json = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
     if (p === "/api/discogs/users/franzerladj") return json({ username: "franzerladj", name: "Franz Kralik", location: "Bayreuth", avatar_url: "https://i.pravatar.cc/200?img=33" });
+    if (p.endsWith("/collection/value")) return json({ minimum: "€412.30", median: "€1,187.65", maximum: "€2,960.00" });
     if (p === "/api/me") return json({ username: "franzerladj", features: { claude: false, freeAi: true, lastfm: true, keyLookup: false, oauth: true } });
     if (p === "/api/sign") return json({ mode: "proxy" });
     if (p === "/api/push/status") return json({ available: true, devices: 0, prefs: null });

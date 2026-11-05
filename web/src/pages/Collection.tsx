@@ -5,11 +5,15 @@ import { db, type Release, type TrackMeta } from "../lib/db";
 import { autoPipeline, fetchMissingDetails } from "../lib/sync";
 import { toast } from "../lib/store";
 import { CAMELOT_COLORS, Cover, Empty, KeyBadge, markHero, RecordRow, Sheet, SkeletonRows, useDebounced } from "../components/bits";
-import { IconCamera, IconGrid, IconMore, IconRows, IconSearch, IconSync, IconTag } from "../components/icons";
+import { IconCamera, IconCart, IconGrid, IconMore, IconRows, IconSearch, IconSync, IconTag } from "../components/icons";
 import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
 import { matchesQuery } from "../../../shared/textSearch";
 import { gradeRank, shortGrade } from "../../../shared/vinyl";
 import { keyDistance, parseKey } from "../../../shared/music";
+import { roughly } from "../../../shared/value";
+import { money } from "../lib/format";
+import { cachedCollectionValue, recordValues, refreshCollectionValue } from "../lib/value";
+import { refreshPrices, suggestionsState } from "../lib/prices";
 
 const SORTS: SortOption[] = [
   { id: "added", label: "Hinzugefügt", dirs: ["Neueste zuerst", "Älteste zuerst"], defaultDir: "desc" },
@@ -19,6 +23,7 @@ const SORTS: SortOption[] = [
   { id: "year", label: "Erscheinungsjahr", dirs: ["Neueste zuerst", "Älteste zuerst"], defaultDir: "desc" },
   { id: "bpm", label: "Tempo", dirs: ["Schnell – langsam", "Langsam – schnell"], defaultDir: "asc" },
   { id: "condition", label: "Zustand", dirs: ["Beste zuerst", "Schwächste zuerst"], defaultDir: "desc" },
+  { id: "value", label: "Wert", dirs: ["Wertvollste zuerst", "Günstigste zuerst"], defaultDir: "desc" },
   { id: "rating", label: "Deine Bewertung", dirs: ["Beste zuerst", "Schwächste zuerst"], defaultDir: "desc" },
   { id: "shelf", label: "Regalplatz", dirs: ["Z – A", "A – Z"], defaultDir: "asc" },
 ];
@@ -67,7 +72,13 @@ export default function Collection() {
   const [sort, setSort] = usePersisted<SortState>("coll-sort", { id: "added", dir: "desc" });
   const [view, setView] = usePersisted<{ v: "list" | "grid" }>("coll-view", { v: "list" });
   const [f, setF] = usePersisted<Filters>("coll-filter", NO_FILTERS);
-  const [sheet, setSheet] = useState<"sort" | "filter" | "more" | null>(null);
+  const [sheet, setSheet] = useState<"sort" | "filter" | "more" | "value" | null>(null);
+  // Wert: Gesamtwert von Discogs, Einzelwerte aus geladenen Preisen
+  const total = useLiveQuery(() => cachedCollectionValue(), []);
+  const values = useLiveQuery(() => recordValues(), [], new Map() as Awaited<ReturnType<typeof recordValues>>);
+  useEffect(() => {
+    refreshCollectionValue().catch(() => undefined);
+  }, []);
   // Sprung aus der DJ-Übersicht: Filter aus der Adresse übernehmen (ersetzt den alten Filter)
   const [params, setParams] = useSearchParams();
   useEffect(() => {
@@ -148,6 +159,7 @@ export default function Collection() {
       bpm: (a, b) => (avgBpm(a.tracks) || 999) - (avgBpm(b.tracks) || 999),
       rating: (a, b) => a.rating - b.rating,
       condition: (a, b) => gradeRank(a.media) - gradeRank(b.media),
+      value: (a, b) => (values.get(a.r.id)?.value ?? 0) - (values.get(b.r.id)?.value ?? 0),
       shelf: (a, b) => (a.meta?.shelf || "~").localeCompare(b.meta?.shelf || "~", "de", { numeric: true }),
     };
     const cmp = by[sort.id] ?? by.added;
@@ -161,13 +173,17 @@ export default function Collection() {
         const ea = !a.media, eb = !b.media;
         if (ea !== eb) return ea ? 1 : -1;
       }
+      if (sort.id === "value") {
+        const ea = !values.has(a.r.id), eb = !values.has(b.r.id);
+        if (ea !== eb) return ea ? 1 : -1;
+      }
       if (sort.id === "shelf") {
         const ea = !a.meta?.shelf, eb = !b.meta?.shelf;
         if (ea !== eb) return ea ? 1 : -1;
       }
       return cmp(a, b) * dir;
     });
-  }, [data, dq, f, sort]);
+  }, [data, dq, f, sort, values]);
 
   type Item = (typeof list)[0];
   const sectionKey: ((x: Item) => string) | null = useMemo(() => {
@@ -191,12 +207,17 @@ export default function Collection() {
         return (x: Item) => (x.rating ? "★".repeat(x.rating) : "Ohne Bewertung");
       case "condition":
         return (x: Item) => x.media ?? "Nicht bewertet";
+      case "value":
+        return (x: Item) => {
+          const v = values.get(x.r.id)?.value;
+          return v == null ? "Ohne Preis" : v >= 100 ? "Ab 100" : v >= 50 ? "50 bis 100" : v >= 20 ? "20 bis 50" : "Unter 20";
+        };
       case "shelf":
         return (x: Item) => x.meta?.shelf || "Ohne Regalplatz";
       default:
         return (x: Item) => (x.added ? new Date(x.added).toLocaleDateString("de-DE", { month: "long", year: "numeric" }) : "Unbekannt");
     }
-  }, [sort.id]);
+  }, [sort.id, values]);
   const sections = useMemo(() => sectionsOf(list, sectionKey), [list, sectionKey]);
   const letters = sort.id === "artist" || sort.id === "title" ? sections.map(([k]) => k) : [];
 
@@ -227,6 +248,11 @@ export default function Collection() {
         <div>
           <h1>Sammlung</h1>
           <div className="sub">{data ? `${data.length} Platten · ${totalTracks} Tracks` : " "}</div>
+          {total && total.median > 0 && (
+            <button className="value-line press" onClick={() => setSheet("value")}>
+              Wert ca. <b>{money(roughly(total.median), total.currency).replace(/,00(?=\s|$)/, "")}</b> ›
+            </button>
+          )}
         </div>
         <div className="row" style={{ gap: 4 }}>
           <button className="icon-btn round" onClick={() => setView({ v: view.v === "list" ? "grid" : "list" })} aria-label={view.v === "list" ? "Cover-Ansicht" : "Listen-Ansicht"}>
@@ -286,6 +312,7 @@ export default function Collection() {
                       ))}
                     </div>
                     {(media || sleeve) && <span className="grade-tag mono">{[media ?? "–", sleeve ?? "–"].join("/")}</span>}
+                    {sort.id === "value" && values.get(r.id) && <span className="tiny mono">{money(values.get(r.id)!.value, values.get(r.id)!.currency)}</span>}
                     {sort.id === "rating" && rating > 0 && <span className="tiny" style={{ color: "var(--accent)" }}>{"★".repeat(rating)}</span>}
                     {meta?.shelf && sort.id !== "shelf" && <span className="tiny">{meta.shelf}</span>}
                     {meta?.lentTo && <span className="badge accent">bei {meta.lentTo}</span>}
@@ -331,11 +358,15 @@ export default function Collection() {
         onClose={() => setSheet(null)}
         items={[
           { label: "Platte hinzufügen", icon: <IconCamera />, onClick: () => nav("/scan", { viewTransition: true }) },
+          { label: "Wert der Sammlung", icon: <IconCart />, onClick: () => setSheet("value") },
           { label: "Beschriften (Einleger & Sticker)", icon: <IconTag />, onClick: () => nav("/stickers", { viewTransition: true }) },
           { label: "Alles abgleichen & ergänzen", icon: <IconSync />, onClick: () => autoPipeline({ force: true }).then(() => toast("Alles synchron und analysiert"), (e) => toast(e.message)) },
           { label: "Fehlende Tracklists laden", icon: <IconRows />, onClick: () => fetchMissingDetails("collection").catch((e) => toast(e.message)) },
         ]}
       />
+      <Sheet open={sheet === "value"} onClose={() => setSheet(null)}>
+        {sheet === "value" && <ValueSheet total={total ?? null} values={values} count={data?.length ?? 0} onSort={() => (setSort({ id: "value", dir: "desc" }), setSheet(null))} />}
+      </Sheet>
       <Sheet open={sheet === "filter"} onClose={() => setSheet(null)}>
         <div className="sheet-title">
           <h3>Filter</h3>
@@ -416,3 +447,98 @@ export default function Collection() {
 
 const toggle = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
+
+const BASIS: Record<string, string> = { grade: "nach deinem Zustand", vgplus: "Richtwert VG+", lowest: "günstigstes Angebot" };
+
+/** Wert der Sammlung: Gesamtwert von Discogs, wertvollste Platten, Einzelwerte nachladen */
+function ValueSheet({ total, values, count, onSort }: { total: Awaited<ReturnType<typeof cachedCollectionValue>>; values: Awaited<ReturnType<typeof recordValues>>; count: number; onSort: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const sugg = useLiveQuery(() => suggestionsState(), [], "unknown");
+  const top = useLiveQuery(async () => {
+    const best = [...values.entries()].sort((a, b) => b[1].value - a[1].value).slice(0, 10);
+    const rels = await db.releases.bulkGet(best.map(([id]) => id));
+    return best.map(([id, v], i) => ({ id, v, r: rels[i] })).filter((x) => x.r);
+  }, [values], []);
+  const fmt = (v: number, c = total?.currency ?? "EUR") => money(roughly(v), c).replace(/,00(?=\s|$)/, "");
+  const missing = count - values.size;
+  const loadAll = async () => {
+    setBusy(true);
+    try {
+      const coll = await db.collection.toArray();
+      const ids = [...new Set(coll.map((c) => c.releaseId))];
+      const have = new Set(values.keys());
+      const todo = [...ids.filter((id) => !have.has(id)), ...ids.filter((id) => have.has(id))];
+      toast("Preise werden im Hintergrund geladen");
+      await refreshPrices(todo, { maxAgeHours: 24 * 7, background: true });
+      await refreshCollectionValue(true).catch(() => undefined);
+      toast("Einzelwerte geladen");
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const minutes = Math.max(1, Math.ceil((missing * (sugg === "needs-seller-settings" ? 1 : 2)) / 40));
+  return (
+    <div className="stack">
+      <div className="value-head">
+        <span className="eyebrow">Wert der Sammlung</span>
+        {total && total.median > 0 ? (
+          <>
+            <b className="value-big">{fmt(total.median)}</b>
+            <span className="sub">
+              Spanne {fmt(total.min)} bis {fmt(total.max)}
+            </span>
+          </>
+        ) : (
+          <b className="value-big">–</b>
+        )}
+        <p className="tiny">
+          Discogs rechnet mit dem, was deine Platten zuletzt wirklich gekostet haben (Median der Verkäufe). Platten ohne Verkäufe zählen nicht mit. Das ist ein Richtwert, kein Ankaufspreis.
+        </p>
+      </div>
+
+      {top.length > 0 && (
+        <>
+          <div className="row">
+            <h3 style={{ margin: 0 }}>Die wertvollsten</h3>
+            <span className="spacer" />
+            <button className="text-btn" onClick={onSort}>
+              Alle nach Wert
+            </button>
+          </div>
+          <div className="list">
+            {top.map(({ id, v, r }, i) => (
+              <Link key={id} to={`/release/${id}`} viewTransition className="rec value-rec" style={{ color: "inherit" }}>
+                <span className="shared-num">{i + 1}</span>
+                <Cover src={r!.thumb} />
+                <div className="rec-main">
+                  <div className="rec-title">{r!.title}</div>
+                  <div className="rec-artist">{r!.artist}</div>
+                  <div className="rec-meta">
+                    <span>{BASIS[v.basis]}</span>
+                  </div>
+                </div>
+                <b className="mono">{money(v.value, v.currency)}</b>
+              </Link>
+            ))}
+          </div>
+        </>
+      )}
+
+      <div className="card stack" style={{ gap: 8 }}>
+        <b>{missing > 0 ? `Einzelwerte für ${values.size} von ${count} Platten` : "Alle Platten haben einen Einzelwert"}</b>
+        <span className="sub">
+          {sugg === "needs-seller-settings"
+            ? "Für Preise nach Zustand musst du bei Discogs einmal die Verkäufer-Einstellungen ausfüllen. Bis dahin nimmt Crate das günstigste Angebot."
+            : "Crate nimmt die Discogs-Preisempfehlung für den Zustand, den du eingetragen hast. Ohne Zustand gilt VG+."}
+        </span>
+        {missing > 0 && (
+          <button className="btn tinted" disabled={busy} onClick={loadAll}>
+            {busy ? "Lädt im Hintergrund …" : `Fehlende laden (etwa ${minutes} Min.)`}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
