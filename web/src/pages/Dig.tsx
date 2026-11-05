@@ -9,7 +9,7 @@ import { toast } from "../lib/store";
 import { getKV, setKV } from "../lib/db";
 import { ytConsent } from "../lib/theme";
 import { haptic } from "../components/bits";
-import { IconBack, IconCart, IconFilter, IconHeart, IconPlay, IconPlus, IconShare, IconSparkle, IconX } from "../components/icons";
+import { IconBack, IconCart, IconFilter, IconHeart, IconPlay, IconPlus, IconShare, IconSleeves, IconX } from "../components/icons";
 import { DECADES, decadeLabel, passesPrice, top, type DigCard } from "../../../shared/dig";
 import { parseDuration } from "../../../shared/match";
 
@@ -383,7 +383,7 @@ export default function Dig() {
                       <small>Kaufen</small>
                     </a>
                     <button onClick={() => more(c)} aria-label="Mehr davon">
-                      <IconSparkle />
+                      <IconSleeves />
                       <small>Mehr</small>
                     </button>
                     <button onClick={() => share(c)} aria-label="Teilen">

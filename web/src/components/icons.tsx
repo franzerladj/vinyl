@@ -24,7 +24,8 @@ export const IconPlay = P("M7 4l13 8-13 8z");
 export const IconChevron = P("M9 6l6 6-6 6");
 export const IconShare = P("M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6");
 export const IconPrint = P("M7 9V3h10v6M7 17H5a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2M7 14h10v7H7z");
-export const IconSparkle = P("M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z");
+/** Zwei Hüllen hintereinander: „mehr davon“ */
+export const IconSleeves = P("M8 3h12v12H8zM4 7v13a1 1 0 0 0 1 1h12M14 9m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0");
 export const IconWave = P("M2 12h2M6 8v8M10 5v14M14 9v6M18 7v10M22 12h-2");
 export const IconCheck = P("M5 12l5 5L20 7");
 export const IconExternal = P("M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5");

@@ -181,7 +181,7 @@ export default function Home() {
               </span>
               <span>
                 <b>Jetzt diggen</b>
-                <small>Neue Platten passend zu deiner Kiste, mit Hörprobe</small>
+                <small>Neues aus deinen Labels und Styles, mit Hörprobe</small>
               </span>
               <span className="go">
                 <IconPlay />
@@ -226,21 +226,21 @@ export default function Home() {
 
             <div className="grid2" style={{ marginTop: 10 }}>
               <Link to="/scan" viewTransition className="widget">
-                <div className="ico" style={{ background: "linear-gradient(135deg,#ff9a3c,#ff5e1a)" }}>
+                <div className="ico" style={{ background: "#ff5b14" }}>
                   <IconCamera />
                 </div>
                 <b>Platte scannen</b>
                 <span className="sub">Foto, Barcode oder Katalognr.</span>
               </Link>
               <Link to="/shop" viewTransition className="widget">
-                <div className="ico" style={{ background: "linear-gradient(135deg,#3ee07a,#16a34a)" }}>
+                <div className="ico" style={{ background: "#2f8f57" }}>
                   <IconCart />
                 </div>
                 <b>Versand sparen</b>
                 <span className="sub">{stats?.listings ? `${stats.listings} Angebote geladen` : "Händler-Optimierer"}</span>
               </Link>
               <Link to="/stickers" viewTransition className="widget">
-                <div className="ico" style={{ background: "linear-gradient(135deg,#c084fc,#7c3aed)" }}>
+                <div className="ico" style={{ background: "#c2410c" }}>
                   <IconTag />
                 </div>
                 {stats?.noSticker ? <span className="badge accent count">{stats.noSticker} neu</span> : null}
@@ -248,12 +248,12 @@ export default function Home() {
                 <span className="sub">{stats?.noSticker ? `${stats.noSticker} Platten warten` : "Alles beschriftet"}</span>
               </Link>
               <Link to={stats?.nextSet ? `/sets/${stats.nextSet.id}` : "/sets/new"} viewTransition className="widget">
-                <div className="ico" style={{ background: "linear-gradient(135deg,#60a5fa,#2563eb)" }}>
+                <div className="ico" style={{ background: "#2d5b8c" }}>
                   <IconList />
                 </div>
                 <b>{stats?.nextSet ? stats.nextSet.name : "Set planen"}</b>
                 <span className="sub">
-                  {stats?.nextSet ? `${new Date(stats.nextSet.date!).toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "short" })} · ${stats.nextSet.trackIds.length} Tracks` : "Nach BPM, Key und Vibe"}
+                  {stats?.nextSet ? `${new Date(stats.nextSet.date!).toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "short" })} · ${stats.nextSet.trackIds.length} Tracks` : "Aus deiner Kiste"}
                 </span>
               </Link>
             </div>

@@ -3,7 +3,9 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { api } from "../lib/api";
 import { db, realTracks, trackId, type TrackMeta } from "../lib/db";
-import { addToCollection, addWant, fetchMarketStats, fetchRelease, lookupAudioFor, removeWant, tagVibes } from "../lib/sync";
+import { addToCollection, addWant, fetchMarketStats, fetchRelease, lookupAudioFor, removeWant, setCondition, tagVibes } from "../lib/sync";
+import { GRADE_HINT, MEDIA_GRADES, SLEEVE_GRADES, pressingInfo, shortGrade } from "../../../shared/vinyl";
+import type { CollectionItem } from "../lib/db";
 import { discogsReleaseUrl, discogsSellUrl, formatLine, money, sideOf } from "../lib/format";
 import { toast, useStore } from "../lib/store";
 import { Avatar, Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, Sparkline, TapTempo, type Preview } from "../components/bits";
@@ -14,7 +16,7 @@ import { previewUrl } from "../lib/free";
 import { ytConsent } from "../lib/theme";
 import { playedHistory, playedText } from "../lib/setHistory";
 import { matchVideo, parseDuration, youtubeId } from "../../../shared/match";
-import { IconBack, IconCart, IconExternal, IconShare, IconHeart, IconPlay, IconPlus, IconPrint, IconSparkle } from "../components/icons";
+import { IconBack, IconCart, IconExternal, IconShare, IconHeart, IconPlay, IconPlus, IconPrint, IconWave } from "../components/icons";
 
 export default function ReleasePage() {
   const id = Number(useParams().id);
@@ -27,6 +29,8 @@ export default function ReleasePage() {
   const [playing, setPlaying] = useState(false);
   const [media, setMedia] = useState<Media | null>(null);
   const [lendSheet, setLendSheet] = useState(false);
+  const [grading, setGrading] = useState<{ item: CollectionItem; which: "media" | "sleeve" } | null>(null);
+  const copies = useLiveQuery(() => db.collection.where("releaseId").equals(id).toArray(), [id], [] as CollectionItem[]);
   const buddies = useLiveQuery(() => friendsFor(id), [id]);
   const friendNames = useLiveQuery(async () => (await db.friends.toArray()).map((f) => f.username), [], [] as string[]);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -42,6 +46,8 @@ export default function ReleasePage() {
 
   useEffect(() => {
     db.releases.get(id).then((r) => {
+      // Ältere Einträge ohne Pressungsdaten still nachladen
+      if (r?.detailFetchedAt && r.identifiers === undefined) return void fetchRelease(id, true).catch(() => undefined);
       if (r?.detailFetchedAt) return;
       setLoading(true);
       fetchRelease(id)
@@ -279,13 +285,13 @@ export default function ReleasePage() {
                 const ids = tracks.map((t) => t.id);
                 await lookupAudioFor(ids);
                 await tagVibes(ids, { audio: true });
-                toast("BPM, Key und Vibes ergänzt");
+                toast("BPM, Key und Stimmung ergänzt");
               } catch (e) {
                 toast((e as Error).message);
               }
             }}
           >
-            <IconSparkle /> Analysieren
+            <IconWave /> BPM & Key messen
           </button>
         </div>
         <table className="tracks">
@@ -332,6 +338,27 @@ export default function ReleasePage() {
           <>
             <h2>In deiner Kiste</h2>
             <div className="group">
+              {copies.map((c, i) => (
+                <div key={c.instanceId} className="group-row grade-row">
+                  <span style={{ width: 92 }} className="sub">
+                    Zustand{copies.length > 1 ? ` ${i + 1}` : ""}
+                  </span>
+                  <button className="grade-pill" onClick={() => setGrading({ item: c, which: "media" })}>
+                    <small>Platte</small>
+                    <b>{shortGrade(c.media) ?? "–"}</b>
+                  </button>
+                  <button className="grade-pill" onClick={() => setGrading({ item: c, which: "sleeve" })}>
+                    <small>Hülle</small>
+                    <b>{shortGrade(c.sleeve) ?? "–"}</b>
+                  </button>
+                </div>
+              ))}
+              {copies.some((c) => c.note) && (
+                <div className="group-row">
+                  <span style={{ width: 92 }} className="sub">Notiz</span>
+                  <span style={{ whiteSpace: "pre-line" }}>{copies.map((c) => c.note).filter(Boolean).join("\n")}</span>
+                </div>
+              )}
               <label className="group-row">
                 <span style={{ width: 92 }} className="sub">Regalplatz</span>
                 <input
@@ -369,6 +396,52 @@ export default function ReleasePage() {
           </>
         )}
 
+        {(() => {
+          const p = pressingInfo(rel.identifiers, rel.companies);
+          if (!p.matrix.length && !p.cut.length && !p.pressed.length && !p.barcode) return null;
+          return (
+            <>
+              <h2>Pressung</h2>
+              <div className="group pressing">
+                {p.matrix.length > 0 && (
+                  <div className="group-row">
+                    <span className="sub">Matrix</span>
+                    <span className="mono">
+                      {p.matrix.map((m) => (
+                        <span key={m}>{m}</span>
+                      ))}
+                    </span>
+                  </div>
+                )}
+                {p.cut.length > 0 && (
+                  <div className="group-row">
+                    <span className="sub">Geschnitten</span>
+                    <span>{p.cut.join(", ")}</span>
+                  </div>
+                )}
+                {p.pressed.length > 0 && (
+                  <div className="group-row">
+                    <span className="sub">Gepresst</span>
+                    <span>{p.pressed.join(", ")}</span>
+                  </div>
+                )}
+                {p.other.map((o) => (
+                  <div key={o.role + o.name} className="group-row">
+                    <span className="sub">{o.role}</span>
+                    <span>{o.name}</span>
+                  </div>
+                ))}
+                {p.barcode && (
+                  <div className="group-row">
+                    <span className="sub">Barcode</span>
+                    <span className="mono">{p.barcode}</span>
+                  </div>
+                )}
+              </div>
+            </>
+          );
+        })()}
+
         {rel.videos?.length ? (
           <>
             <h2>Reinhören</h2>
@@ -381,6 +454,42 @@ export default function ReleasePage() {
           </>
         ) : null}
       </div>
+
+      <Sheet open={grading !== null} onClose={() => setGrading(null)}>
+        {grading && (
+          <div className="stack">
+            <b style={{ fontSize: 18 }}>{grading.which === "media" ? "Zustand der Platte" : "Zustand der Hülle"}</b>
+            <span className="sub">Nach Goldmine, wie bei Discogs. Wird dort gespeichert.</span>
+            <div className="list">
+              {(grading.which === "media" ? MEDIA_GRADES : SLEEVE_GRADES).map(([long, short]) => {
+                const on = grading.item[grading.which] === long;
+                return (
+                  <button
+                    key={long}
+                    className={`grade-opt press${on ? " on" : ""}`}
+                    onClick={async () => {
+                      haptic(8);
+                      const value = on ? "" : long;
+                      const { item, which } = grading;
+                      setGrading(null);
+                      try {
+                        await setCondition(item.instanceId, which, value);
+                        toast(value ? `${which === "media" ? "Platte" : "Hülle"}: ${short}` : "Zustand entfernt");
+                      } catch (e) {
+                        toast((e as Error).message);
+                      }
+                    }}
+                  >
+                    <b className="mono">{short}</b>
+                    <span>{GRADE_HINT[short] ?? long}</span>
+                    {on && <span className="grade-check">✓</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </Sheet>
 
       <MenuSheet
         open={lendSheet}

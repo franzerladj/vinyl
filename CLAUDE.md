@@ -9,6 +9,8 @@ Mobile Web-App (PWA) für Vinyl-DJs auf Basis von Discogs. Besitzer: Franz Krali
 - Commit-Nachrichten auf Deutsch, beschreibend. Keine Modellnamen in Commits oder Code.
 - Nie Secrets committen oder Franz bitten, Schlüssel in den Chat zu kopieren.
 - Nicht anfassen: das alte Cloudflare-Projekt `vinyl-wantlist`.
+- Marke: Logo „Die Kiste“ (Plattenkiste mit gezogener Platte), Quelle `tools/brand/logo.cjs` (erzeugt alle Icons), Komponente `web/src/components/Logo.tsx`. Farben Orange `#ff5b14`, Tinte `#16120f`, Papier `#e9dfcc`. Große Titel in Archivo schmal (wdth 62, 900, Versalien), Katalognummern/Matrix/Zustand in JetBrains Mono.
+- Darf nicht nach KI aussehen: keine Farbverläufe, kein Leuchten, keine Weichzeichner-Wolken, kein Funkel-Symbol, keine Wörter wie „KI“ oder „analysieren“ in der Oberfläche. Lieber Begriffe aus dem Plattenladen (Kiste, Pressung, Zustand, Seite A/B).
 - UI-Anspruch: wirkt wie eine große native iOS-App (Apple-Design, Motion, Haptik). Änderungen immer im Handy-Viewport (Playwright, „iPhone 13“) prüfen, hell und dunkel, und mit `tools/e2e/wrap.cjs` auf 320 px gegenprüfen.
 - Umbrüche: Silbentrennung nur in Fließtext, nie in Labels, Fragen, Titeln oder Knöpfen. Kurze Labels statt Trennung.
 
@@ -33,6 +35,7 @@ Wichtige Eigenheiten:
 - Sets teilen: das ganze Set steckt im Link (`/sets/shared#…`, `shared/setShare.ts`), nichts auf dem Server. Empfänger sieht, welche Platten er hat, und übernimmt die spielbaren Tracks. Nach dem Login führt `crate:after` (sessionStorage) zum Link zurück.
 - Kisten-Vorlagen: KV `crateTemplates` (`web/src/lib/crateTemplates.ts`). Set-Verlauf: `web/src/lib/setHistory.ts`. Cue-Punkte: `TrackMeta.cueIn/cueOut`.
 - Teilen-Karten (Story 1080×1920): `web/src/lib/shareCard.ts`, Discogs-Bilder über `/api/img` (CORS).
+- Vinylhead-Daten (`shared/vinyl.ts`): Zustand nach Goldmine aus den Discogs-Sammlungsfeldern 1 (Platte), 2 (Hülle), 3 (Notiz), Schreiben per `setCondition` in `sync.ts`. Pressung (Matrix/Runout, Schnitt, Presswerk) aus `identifiers`/`companies` des Releases, ältere Einträge werden beim Öffnen still nachgeladen.
 - Tap-Tempo (`shared/tap.ts`): Regression über alle Tipps, erkennt Abdriften. Der Ring blinkt erst nach dem Tippen, sonst folgt man dem Blinken statt der Musik.
 - Push-Mitteilungen: `server/push.ts` (VAPID + aes128gcm selbst gebaut, getestet in `tests/push.test.ts`), Routen `/api/push/*` in `server/app.ts`, Client `web/src/lib/push.ts`, Service Worker `web/public/push-sw.js` (per `importScripts`). Speicher: KV-Binding `PUSH` (Namespace `crate-push`). Zeitplan: Worker `crate-cron` (`workers/cron/`, alle 10 Minuten; holt `/api/push/users` und ruft pro Nutzer `/api/push/run?u=` mit `X-Cron-Secret`, je eigener Aufruf mit ~45 Unteranfragen). Wants ohne Angebot oder mit Wunschpreis werden bevorzugt geprüft (`pickWants`), KV nur bei Änderungen beschreiben (Schreib-Kontingent). Öffentlicher VAPID-Schlüssel in `shared/pushKey.ts`, privater als Secret `VAPID_PRIVATE_JWK`. Server-Daten nur für Nutzer mit eingeschalteten Mitteilungen, beim Ausschalten gelöscht. iPhone: nur als Home-Bildschirm-App.
 
@@ -63,6 +66,8 @@ node tools/e2e/curate.cjs   # Set kuratieren: Kiste, Vorschläge, Notiz, Ziehen,
 node tools/e2e/history.cjs  # Set-Verlauf: „gespielt vor … im …“ bei Vorschlägen
 node tools/e2e/share.cjs    # Kisten-Vorlagen, Set per Link teilen und übernehmen
 node tools/e2e/feed.cjs     # Feed: Filter Jahrzehnt/Preis, Wischen nach links
+node tools/e2e/grade.cjs    # Zustand bewerten, Pressung anzeigen
+node tools/brand/logo.cjs   # Icons aus dem Logo neu erzeugen
 node tools/e2e/sharecard.cjs # Teilen-Karten (Profil, Set) als PNG erzeugen
 node tools/e2e/wrap.cjs     # Umbruch-Audit aller Seiten (320/375/390 px, hell/dunkel; SHOTS=1 für Screenshots)
 ```

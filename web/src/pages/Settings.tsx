@@ -34,7 +34,6 @@ import {
   IconHelp,
   IconInfo,
   IconSheet,
-  IconSparkle,
   IconSun,
   IconSync,
   IconWave,
@@ -181,7 +180,7 @@ function Overview() {
         <Group title="Bibliothek">
           <Row icon={<IconSync />} color="#30d158" label="Synchronisation & Analyse" value={stats?.lastSync ? relDay(stats.lastSync) : "nie"} to="/settings/sync" />
           <Row icon={<IconCoin />} color="#ff9f0a" label="Preise & Shopping" value={stats?.currency} to="/settings/prices" />
-          <Row icon={<IconWave />} color="#5e5ce6" label="Datenquellen & KI" value={`${sources} aktiv`} to="/settings/sources" />
+          <Row icon={<IconWave />} color="#5e5ce6" label="Datenquellen" value={`${sources} aktiv`} to="/settings/sources" />
         </Group>
 
         <Group title="Freunde">
@@ -322,7 +321,7 @@ function SyncPage() {
       <div className="page settings-list">
         <div>
           <button className="btn primary block lg" disabled={busy} onClick={run("Sync", async () => (await autoPipeline({ force: true }), "Alles synchron und analysiert"))}>
-            {busy ? "Läuft gerade …" : "Jetzt synchronisieren & analysieren"}
+            {busy ? "Läuft gerade …" : "Jetzt abgleichen & ergänzen"}
           </button>
           <p className="tiny" style={{ textAlign: "center" }}>
             Zuletzt: {when(info?.lastSync)}
@@ -330,8 +329,8 @@ function SyncPage() {
         </div>
 
         <Group title="Automatisch" foot="Nach jedem Sync ergänzt die App fehlende Tracklists, BPM, Keys, Vibes und Preise. Deine Aktionen haben dabei immer Vorrang.">
-          <Row label="Nach dem Sync analysieren" right={<Switch checked={auto.analyze} label="Nach dem Sync analysieren" onChange={(v) => save({ ...auto, analyze: v })} />} />
-          <Row label="Hörproben analysieren" sub="Energie, fehlende BPM und Keys · ca. 0,5 MB pro Track" right={<Switch checked={auto.audio} label="Hörproben analysieren" onChange={(v) => save({ ...auto, audio: v })} />} />
+          <Row label="Nach dem Sync ergänzen" right={<Switch checked={auto.analyze} label="Nach dem Sync ergänzen" onChange={(v) => save({ ...auto, analyze: v })} />} />
+          <Row label="Hörproben ausmessen" sub="Tempo, Tonart, Energie · ca. 0,5 MB pro Track" right={<Switch checked={auto.audio} label="Hörproben ausmessen" onChange={(v) => save({ ...auto, audio: v })} />} />
         </Group>
 
         <Group title="Fortschritt" foot="Jeder Schritt arbeitet nur ab, was noch fehlt. Wird die App unterbrochen, geht es beim nächsten Öffnen automatisch weiter.">
@@ -386,9 +385,9 @@ function SyncPage() {
           <Row icon={<IconDownload />} color="#0a84ff" label="Fehlende Tracklists laden" onClick={run("Tracklists", () => fetchMissingDetails("collection"))} />
           <Row icon={<IconWave />} color="#5e5ce6" label="BPM & Key aus Datenbanken" onClick={run("BPM/Key", async () => `${await lookupAudioFor()} Tracks ergänzt`)} />
           <Row
-            icon={<IconSparkle />}
+            icon={<IconBolt />}
             color="#ff9f0a"
-            label={canClaude(me) ? "Vibes mit Claude taggen" : "Vibes & Energie ergänzen"}
+            label="Stimmung & Energie ergänzen"
             onClick={run("Vibes", async () => `${await tagVibes(undefined, { audio: auto.audio })} Tracks ergänzt`)}
           />
         </Group>
@@ -479,7 +478,7 @@ function SourcesPage() {
   ];
   return (
     <>
-      <NavBar title="Datenquellen & KI" backTo="/settings" backLabel="Einstellungen" />
+      <NavBar title="Datenquellen" backTo="/settings" backLabel="Einstellungen" />
       <div className="page settings-list">
         <Group foot="Grau = auf dem Server nicht eingerichtet. Last.fm und GetSongBPM brauchen einen kostenlosen API-Key in Cloudflare.">
           {list.map(([n, on, d]) => (

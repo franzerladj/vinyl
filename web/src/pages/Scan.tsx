@@ -161,7 +161,7 @@ export default function Scan() {
       // 2. Bildmodell auf dem Server
       let r: Recognition | null = null;
       if (serverAi) {
-        setStatus("KI liest das Cover …");
+        setStatus("Cover wird erkannt …");
         try {
           r = await api<Recognition>("/api/ai/recognize", {
             method: "POST",
@@ -172,7 +172,7 @@ export default function Scan() {
           console.warn("Server-Erkennung", e);
         }
       }
-      // 3. Texterkennung auf dem Gerät, wenn die KI nichts Brauchbares hat
+      // 3. Texterkennung auf dem Gerät, wenn die Bilderkennung nichts Brauchbares hat
       let q = "";
       if (!r || (!r.catno && !r.artist && !r.title)) {
         setStatus("Lese Text auf dem Gerät …");
@@ -264,7 +264,7 @@ export default function Scan() {
             <b>{busy ? status || "Erkenne Platte …" : preview ? "Anderes Foto" : "Rückseite, Center-Label oder Cover"}</b>
             <span className="sub">
               Am besten klappt die Rückseite mit Barcode oder das Center-Label mit Katalognummer, gerade von oben und ohne Spiegelung.
-              {serverAi ? " Für Cover ohne Text hilft die KI." : ""}
+              {serverAi ? " Klappt auch bei Covern ohne Text." : ""}
             </span>
             <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => onPhoto(e.target.files?.[0])} />
           </label>
@@ -280,7 +280,7 @@ export default function Scan() {
           >
             {rec && (
               <div className="sub">
-                {rec.engine === "barcode" ? "Barcode gelesen" : rec.engine === "ocr" ? "Text gelesen" : "Von der KI erkannt"}. Felder bei Bedarf korrigieren.
+                {rec.engine === "barcode" ? "Barcode gelesen" : rec.engine === "ocr" ? "Text gelesen" : "Am Cover erkannt"}. Felder bei Bedarf korrigieren.
               </div>
             )}
             <div className="grid2">

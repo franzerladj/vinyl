@@ -23,7 +23,8 @@ export interface DRelease extends BasicInformation {
   tracklist: DTrack[];
   videos?: DVideo[];
   images?: { uri: string; uri150: string; type: string }[];
-  identifiers?: { type: string; value: string }[];
+  identifiers?: { type: string; value: string; description?: string }[];
+  companies?: { name: string; entity_type_name: string }[];
   uri: string;
   master_id?: number;
   lowest_price?: number | null;

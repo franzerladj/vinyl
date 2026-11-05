@@ -15,7 +15,7 @@ for (let id = 1; id <= 100; id++) {
   R[id] = { id, title: t, year: 1986 + (id * 3) % 38, thumb: id % 11 === 0 ? "" : img(COLORS[id % COLORS.length]), cover_image: id % 11 === 0 ? "" : img(COLORS[id % COLORS.length]),
     artists: [{ name: a }], labels: [{ name: LABELS[id % LABELS.length], catno: `${LABELS[id % LABELS.length].slice(0, 3).toUpperCase()}${100 + id}` }],
     formats: [{ name: "Vinyl", qty: "1", descriptions: ["12\"", id % 2 ? "33 ⅓ RPM" : "45 RPM"] }], genres: ["Electronic"], styles: STYLES[id % STYLES.length], country: ["US", "UK", "Germany", "Japan"][id % 4], uri: "",
-    tracklist: tracks, videos: [{ uri: `https://www.youtube.com/watch?v=${String(id).padStart(11, "x")}`, title: `${a} - ${t}`, duration: 360 }], community: { have: 100 + id * 37, want: 200 + ((id * 97) % 900) }, lowest_price: id % 7 === 0 ? null : 6 + ((id * 17) % 60), num_for_sale: id % 7 === 0 ? 0 : (id * 5) % 40 };
+    tracklist: tracks, videos: [{ uri: `https://www.youtube.com/watch?v=${String(id).padStart(11, "x")}`, title: `${a} - ${t}`, duration: 360 }], community: { have: 100 + id * 37, want: 200 + ((id * 97) % 900) }, identifiers: [{ type: "Matrix / Runout", value: `${LABELS[id % LABELS.length].slice(0, 3).toUpperCase()} ${100 + id} A NT`, description: "Side A" }, { type: "Matrix / Runout", value: `${LABELS[id % LABELS.length].slice(0, 3).toUpperCase()} ${100 + id} B NT`, description: "Side B" }], companies: [{ name: "Dubplates & Mastering", entity_type_name: "Lacquer Cut At" }, { name: "Optimal Media Production", entity_type_name: "Pressed By" }, { name: "Rush Hour Distribution", entity_type_name: "Distributed By" }], lowest_price: id % 7 === 0 ? null : 6 + ((id * 17) % 60), num_for_sale: id % 7 === 0 ? 0 : (id * 5) % 40 };
 }
 const basic = (r) => ({ id: r.id, title: r.title, year: r.year, thumb: r.thumb, cover_image: r.cover_image, artists: r.artists, labels: r.labels, formats: r.formats, genres: r.genres, styles: r.styles });
 const COLL = Array.from({ length: 45 }, (_, i) => i + 1);
@@ -40,6 +40,7 @@ module.exports = async function install(page) {
     if (p === "/api/profile/me") return json({ profile: globalThis.__prof ?? null });
     if (p === "/api/profile/kumpel") return json({ profile: { djName: "DJ Kumpel", bio: "Deep House und Disco aus Bayreuth. Freitags im Glashaus.", location: "Bayreuth", links: [{ url: "https://soundcloud.com/djkumpel", kind: "soundcloud" }, { url: "https://instagram.com/djkumpel", kind: "instagram" }, { url: "https://feuerpfeil.de", kind: "web" }], styles: ["Deep House", "Disco", "Chicago House"], spotlight: { id: 2, title: "Altered States", artist: "Ron Trent" } } });
     if (p.startsWith("/api/profile/")) return json({ profile: null });
+    if (/\/instances\/\d+\/fields\/\d+$/.test(p)) { globalThis.__fields = [...(globalThis.__fields || []), { p, body: route.request().postData() }]; return route.fulfill({ status: 204, body: "" }); }
     const um = p.match(/\/users\/([^/]+)(\/.*)?$/);
     if (um && um[1] !== "franzerladj") {
       const u = decodeURIComponent(um[1]);
@@ -49,7 +50,7 @@ module.exports = async function install(page) {
       if (um[2].includes("/collection/")) { const ids = [...WANTS.slice(0, 6), ...COLL.slice(0, 20)]; return json({ pagination: { page: 1, pages: 1, per_page: 100, items: ids.length }, releases: ids.map((id) => ({ id, date_added: "2026-01-01T00:00:00", basic_information: basic(R[id]) })) }); }
       if (um[2].includes("/wants")) { const ids = [...COLL.slice(30, 34), 70]; return json({ pagination: { page: 1, pages: 1, per_page: 100, items: ids.length }, wants: ids.map((id) => ({ id, date_added: "2026-01-01T00:00:00", basic_information: basic(R[id]) })) }); }
     }
-    if (p.includes("/collection/folders/0/releases")) return json({ pagination: { page: 1, pages: 1, per_page: 100, items: COLL.length }, releases: COLL.map((id) => ({ id, instance_id: 1000 + id, folder_id: 1, date_added: new Date(Date.UTC(2026, 10, 3) - id * 86400000 * 3).toISOString(), rating: id % 6, basic_information: basic(R[id]) })) });
+    if (p.includes("/collection/folders/0/releases")) return json({ pagination: { page: 1, pages: 1, per_page: 100, items: COLL.length }, releases: COLL.map((id) => ({ id, instance_id: 1000 + id, folder_id: 1, notes: id % 3 === 0 ? [] : [{ field_id: 1, value: ["Mint (M)", "Near Mint (NM or M-)", "Very Good Plus (VG+)", "Very Good (VG)"][id % 4] }, { field_id: 2, value: ["Very Good Plus (VG+)", "Generic", "Near Mint (NM or M-)"][id % 3] }], date_added: new Date(Date.UTC(2026, 10, 3) - id * 86400000 * 3).toISOString(), rating: id % 6, basic_information: basic(R[id]) })) });
     if (p.endsWith("/wants")) return json({ pagination: { page: 1, pages: 1, per_page: 100, items: WANTS.length }, wants: WANTS.map((id) => ({ id, date_added: new Date(Date.UTC(2026, 10, 1) - id * 86400000).toISOString(), rating: id % 4, basic_information: basic(R[id]) })) });
     let m = p.match(/\/releases\/(\d+)$/); if (m) return json(R[m[1]]);
     m = p.match(/marketplace\/price_suggestions\/(\d+)/); if (m) return json({ message: "You must fill out your seller settings first." }, 422);

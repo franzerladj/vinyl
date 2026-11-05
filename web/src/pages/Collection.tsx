@@ -5,9 +5,10 @@ import { db, type Release, type TrackMeta } from "../lib/db";
 import { autoPipeline, fetchMissingDetails } from "../lib/sync";
 import { toast } from "../lib/store";
 import { CAMELOT_COLORS, Cover, Empty, KeyBadge, markHero, RecordRow, Sheet, SkeletonRows, useDebounced } from "../components/bits";
-import { IconCamera, IconGrid, IconMore, IconRows, IconSearch, IconSparkle, IconTag } from "../components/icons";
+import { IconCamera, IconGrid, IconMore, IconRows, IconSearch, IconSync, IconTag } from "../components/icons";
 import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
 import { matchesQuery } from "../../../shared/textSearch";
+import { gradeRank, shortGrade } from "../../../shared/vinyl";
 import { keyDistance, parseKey } from "../../../shared/music";
 
 const SORTS: SortOption[] = [
@@ -17,6 +18,7 @@ const SORTS: SortOption[] = [
   { id: "label", label: "Label & Katalognr.", dirs: ["Z – A", "A – Z"], defaultDir: "asc" },
   { id: "year", label: "Erscheinungsjahr", dirs: ["Neueste zuerst", "Älteste zuerst"], defaultDir: "desc" },
   { id: "bpm", label: "Tempo", dirs: ["Schnell – langsam", "Langsam – schnell"], defaultDir: "asc" },
+  { id: "condition", label: "Zustand", dirs: ["Beste zuerst", "Schwächste zuerst"], defaultDir: "desc" },
   { id: "rating", label: "Deine Bewertung", dirs: ["Beste zuerst", "Schwächste zuerst"], defaultDir: "desc" },
   { id: "shelf", label: "Regalplatz", dirs: ["Z – A", "A – Z"], defaultDir: "asc" },
 ];
@@ -96,7 +98,7 @@ export default function Collection() {
     const byRel = new Map<number, TrackMeta[]>();
     tracks.forEach((t) => byRel.set(t.releaseId, [...(byRel.get(t.releaseId) ?? []), t]));
     return ids
-      .map((id, i) => ({ r: rels[i]!, meta: metas[i], tracks: byRel.get(id) ?? [], added: byColl.get(id)?.dateAdded ?? "", rating: byColl.get(id)?.rating ?? 0 }))
+      .map((id, i) => ({ r: rels[i]!, meta: metas[i], tracks: byRel.get(id) ?? [], added: byColl.get(id)?.dateAdded ?? "", rating: byColl.get(id)?.rating ?? 0, media: shortGrade(byColl.get(id)?.media), sleeve: shortGrade(byColl.get(id)?.sleeve) }))
       .filter((x) => x.r);
   });
 
@@ -145,6 +147,7 @@ export default function Collection() {
       year: (a, b) => (a.r.year || 0) - (b.r.year || 0),
       bpm: (a, b) => (avgBpm(a.tracks) || 999) - (avgBpm(b.tracks) || 999),
       rating: (a, b) => a.rating - b.rating,
+      condition: (a, b) => gradeRank(a.media) - gradeRank(b.media),
       shelf: (a, b) => (a.meta?.shelf || "~").localeCompare(b.meta?.shelf || "~", "de", { numeric: true }),
     };
     const cmp = by[sort.id] ?? by.added;
@@ -152,6 +155,10 @@ export default function Collection() {
     return [...out].sort((a, b) => {
       if (sort.id === "bpm") {
         const ea = !avgBpm(a.tracks), eb = !avgBpm(b.tracks);
+        if (ea !== eb) return ea ? 1 : -1;
+      }
+      if (sort.id === "condition") {
+        const ea = !a.media, eb = !b.media;
         if (ea !== eb) return ea ? 1 : -1;
       }
       if (sort.id === "shelf") {
@@ -182,6 +189,8 @@ export default function Collection() {
         };
       case "rating":
         return (x: Item) => (x.rating ? "★".repeat(x.rating) : "Ohne Bewertung");
+      case "condition":
+        return (x: Item) => x.media ?? "Nicht bewertet";
       case "shelf":
         return (x: Item) => x.meta?.shelf || "Ohne Regalplatz";
       default:
@@ -264,7 +273,7 @@ export default function Collection() {
           <SectionList
             sections={sections}
             stickyTop={toolbarH}
-            render={({ r, tracks, meta, rating }: Item) => (
+            render={({ r, tracks, meta, rating, media, sleeve }: Item) => (
               <RecordRow
                 key={r.id}
                 r={r as Release}
@@ -276,6 +285,7 @@ export default function Collection() {
                         <KeyBadge key={k} k={k} />
                       ))}
                     </div>
+                    {(media || sleeve) && <span className="grade-tag mono">{[media ?? "–", sleeve ?? "–"].join("/")}</span>}
                     {sort.id === "rating" && rating > 0 && <span className="tiny" style={{ color: "var(--accent)" }}>{"★".repeat(rating)}</span>}
                     {meta?.shelf && sort.id !== "shelf" && <span className="tiny">{meta.shelf}</span>}
                     {meta?.lentTo && <span className="badge accent">bei {meta.lentTo}</span>}
@@ -322,7 +332,7 @@ export default function Collection() {
         items={[
           { label: "Platte hinzufügen", icon: <IconCamera />, onClick: () => nav("/scan", { viewTransition: true }) },
           { label: "Beschriften (Einleger & Sticker)", icon: <IconTag />, onClick: () => nav("/stickers", { viewTransition: true }) },
-          { label: "Alles synchronisieren & analysieren", icon: <IconSparkle />, onClick: () => autoPipeline({ force: true }).then(() => toast("Alles synchron und analysiert"), (e) => toast(e.message)) },
+          { label: "Alles abgleichen & ergänzen", icon: <IconSync />, onClick: () => autoPipeline({ force: true }).then(() => toast("Alles synchron und analysiert"), (e) => toast(e.message)) },
           { label: "Fehlende Tracklists laden", icon: <IconRows />, onClick: () => fetchMissingDetails("collection").catch((e) => toast(e.message)) },
         ]}
       />

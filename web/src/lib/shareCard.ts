@@ -3,10 +3,12 @@
 import QRCode from "qrcode";
 import type { CrateProfile } from "../../../shared/profile";
 import { linkText, LINK_LABEL } from "../../../shared/profile";
+import { LOGO_SVG } from "./logoSvg";
 
 const W = 1080;
 const H = 1920;
-const ACCENT = "#ff7a1a";
+const ACCENT = "#ff5b14";
+const INK = "#16120f";
 const HEAD = "'Archivo Variable', 'Archivo', 'Inter Variable', system-ui, sans-serif";
 const BODY = "'Inter Variable', 'Inter', -apple-system, system-ui, sans-serif";
 
@@ -24,6 +26,7 @@ function loadImg(src?: string | null): Promise<HTMLImageElement | null> {
 }
 
 async function fonts() {
+  await loadLogo();
   await Promise.all([document.fonts.load(`900 80px ${HEAD}`), document.fonts.load(`600 40px ${BODY}`), document.fonts.load(`400 40px ${BODY}`)]).catch(() => undefined);
 }
 
@@ -35,30 +38,30 @@ function canvas() {
   return { c, ctx };
 }
 
-/** Weichgezeichneter Hintergrund: Bild winzig zeichnen und groß ziehen (geht auch ohne ctx.filter, z. B. in Safari) */
-function backdrop(ctx: CanvasRenderingContext2D, img: HTMLImageElement | null) {
-  ctx.fillStyle = "#0b0b0c";
+/** Flacher Hintergrund mit einer großen Platte am Rand, wie im Logo. Kein Weichzeichner, kein Leuchten. */
+function backdrop(ctx: CanvasRenderingContext2D, _img: HTMLImageElement | null) {
+  ctx.fillStyle = INK;
   ctx.fillRect(0, 0, W, H);
-  if (img) {
-    const small = document.createElement("canvas");
-    small.width = 18;
-    small.height = 32;
-    const s = small.getContext("2d")!;
-    const r = Math.max(small.width / img.width, small.height / img.height);
-    s.drawImage(img, (small.width - img.width * r) / 2, (small.height - img.height * r) / 2, img.width * r, img.height * r);
-    ctx.save();
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    ctx.globalAlpha = 0.85;
-    ctx.drawImage(small, -80, -80, W + 160, H + 160);
-    ctx.restore();
+  const cx = W + 60;
+  const cy = H - 420;
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 520, 0, Math.PI * 2);
+  ctx.fillStyle = "#0b0908";
+  ctx.fill();
+  ctx.strokeStyle = "#2b2420";
+  ctx.lineWidth = 3;
+  for (let r = 480; r > 190; r -= 26) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
   }
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, "rgba(10,10,12,0.35)");
-  g.addColorStop(0.45, "rgba(10,10,12,0.6)");
-  g.addColorStop(1, "rgba(10,10,12,0.92)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
+  ctx.beginPath();
+  ctx.arc(cx, cy, 170, 0, Math.PI * 2);
+  ctx.fillStyle = ACCENT;
+  ctx.fill();
+  ctx.restore();
 }
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -117,21 +120,46 @@ function fit(ctx: CanvasRenderingContext2D, text: string, width: number) {
 }
 
 /** Größte Schrift, bei der der Text in höchstens `lines` Zeilen passt */
+type Ctx2 = CanvasRenderingContext2D & { fontStretch?: string };
+/** Schmale Markenschrift an/aus (wie die Wortmarke) */
+// ctx.font setzt die Breite zurück, deshalb steht sie zusätzlich im Font-Text
+let narrow = false;
+const condensed = (ctx: CanvasRenderingContext2D, on: boolean) => {
+  narrow = on;
+  (ctx as Ctx2).fontStretch = on ? "ultra-condensed" : "normal";
+};
+const stretch = () => (narrow ? "ultra-condensed " : "");
+
 function fitFont(ctx: CanvasRenderingContext2D, text: string, width: number, lines: number, maxPx: number, minPx: number, weight = 900, family = HEAD) {
   for (let px = maxPx; px >= minPx; px -= 4) {
-    ctx.font = `${weight} ${px}px ${family}`;
+    ctx.font = `${weight} ${stretch()}${px}px ${family}`;
     if (wrap(ctx, text, width, lines + 1).length <= lines) return px;
   }
   return minPx;
 }
 
+/** Logo-Kiste klein plus Schriftzug, mittig */
 function wordmark(ctx: CanvasRenderingContext2D, y: number, label: string) {
-  ctx.textAlign = "center";
-  ctx.fillStyle = "rgba(255,255,255,0.75)";
-  ctx.font = `800 30px ${BODY}`;
-  ctx.letterSpacing = "8px";
-  ctx.fillText(label, W / 2, y);
+  const mark = 92;
+  ctx.font = `900 76px ${HEAD}`;
+  condensed(ctx, true);
+  ctx.letterSpacing = "2px";
+  const text = label.toUpperCase();
+  const tw = ctx.measureText(text).width;
+  const x = (W - (mark + 22 + tw)) / 2;
+  if (logoImg) ctx.drawImage(logoImg, x, y - mark + 14, mark, mark * (380 / 392));
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#f3ede2";
+  ctx.fillText(text, x + mark + 22, y);
   ctx.letterSpacing = "0px";
+  condensed(ctx, false);
+  ctx.textAlign = "center";
+}
+
+let logoImg: HTMLImageElement | null = null;
+async function loadLogo() {
+  if (logoImg) return;
+  logoImg = await loadImgData(`data:image/svg+xml,${encodeURIComponent(LOGO_SVG)}`).catch(() => null);
 }
 
 async function qr(text: string) {
@@ -172,10 +200,7 @@ export async function renderProfileCard(p: ProfileCardInput): Promise<Blob> {
   ctx.save();
   ctx.beginPath();
   ctx.arc(W / 2, ay + as / 2, as / 2 + 12, 0, Math.PI * 2);
-  const ring = ctx.createLinearGradient(W / 2 - as / 2, ay, W / 2 + as / 2, ay + as);
-  ring.addColorStop(0, ACCENT);
-  ring.addColorStop(1, "#ffd60a");
-  ctx.fillStyle = ring;
+  ctx.fillStyle = ACCENT;
   ctx.fill();
   ctx.beginPath();
   ctx.arc(W / 2, ay + as / 2, as / 2 + 4, 0, Math.PI * 2);
@@ -196,16 +221,18 @@ export async function renderProfileCard(p: ProfileCardInput): Promise<Blob> {
   ctx.restore();
 
   // Name
-  let y = ay + as + 120;
-  const title = pr?.djName || p.name || p.username;
-  const px = fitFont(ctx, title, W - 160, 2, 120, 64);
-  ctx.font = `900 ${px}px ${HEAD}`;
+  let y = ay + as + 150;
+  const title = (pr?.djName || p.name || p.username).toUpperCase();
+  condensed(ctx, true);
+  const px = fitFont(ctx, title, W - 160, 2, 150, 80);
+  ctx.font = `900 ${stretch()}${px}px ${HEAD}`;
   ctx.fillStyle = "#fff";
   ctx.textAlign = "center";
   for (const l of wrap(ctx, title, W - 160, 2)) {
     ctx.fillText(l, W / 2, y);
-    y += px * 1.02;
+    y += px * 0.92;
   }
+  condensed(ctx, false);
   ctx.font = `500 38px ${BODY}`;
   ctx.fillStyle = "rgba(255,255,255,0.7)";
   const sub = [pr?.djName || p.name ? `@${p.username}` : null, pr?.location || p.location, p.records ? `${p.records} Platten` : null].filter(Boolean).join("  ·  ");
@@ -324,7 +351,7 @@ export async function renderSetCard(s: SetCardInput): Promise<Blob> {
   const covers = await Promise.all([...new Map(s.tracks.filter((t) => t.cover).map((t) => [t.cover, t])).values()].slice(0, 5).map((t) => loadImg(t.cover)));
   const { c, ctx } = canvas();
   backdrop(ctx, covers.find(Boolean) ?? null);
-  wordmark(ctx, 150, "CRATE · SET");
+  wordmark(ctx, 150, "Crate");
 
   // Cover-Fächer
   const size = 230;
@@ -343,13 +370,16 @@ export async function renderSetCard(s: SetCardInput): Promise<Blob> {
 
   let y = n ? 600 : 300;
   ctx.textAlign = "center";
-  const px = fitFont(ctx, s.name, W - 160, 2, 108, 60);
-  ctx.font = `900 ${px}px ${HEAD}`;
+  const setTitle = s.name.toUpperCase();
+  condensed(ctx, true);
+  const px = fitFont(ctx, setTitle, W - 160, 2, 140, 76);
+  ctx.font = `900 ${stretch()}${px}px ${HEAD}`;
   ctx.fillStyle = "#fff";
-  for (const l of wrap(ctx, s.name, W - 160, 2)) {
+  for (const l of wrap(ctx, setTitle, W - 160, 2)) {
     ctx.fillText(l, W / 2, y);
-    y += px * 1.02;
+    y += px * 0.92;
   }
+  condensed(ctx, false);
   const meta = [s.date ? new Date(s.date).toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "long", year: "numeric" }) : null, s.venue, s.dj ? `mit ${s.dj}` : null].filter(Boolean).join("  ·  ");
   if (meta) {
     ctx.font = `500 36px ${BODY}`;

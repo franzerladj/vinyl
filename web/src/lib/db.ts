@@ -18,6 +18,10 @@ export interface Release {
   tracklist?: DTrack[];
   videos?: DVideo[];
   masterId?: number;
+  /** Matrix/Runout, Barcode (undefined = noch nicht geladen) */
+  identifiers?: { type: string; value: string; description?: string }[];
+  /** Presswerk, Schnitt, Mastering, Vertrieb */
+  companies?: { name: string; entity_type_name: string }[];
   detailFetchedAt?: number;
   community?: { have: number; want: number };
 }
@@ -28,6 +32,11 @@ export interface CollectionItem {
   folderId: number;
   dateAdded: string;
   rating: number;
+  /** Zustand nach Goldmine, Discogs-Wert wie „Very Good Plus (VG+)“ */
+  media?: string;
+  sleeve?: string;
+  /** Freitext-Notiz aus Discogs */
+  note?: string;
 }
 
 export interface Want {

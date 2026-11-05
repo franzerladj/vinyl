@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import type { Me } from "../lib/api";
 import { completeLogin, startLogin } from "../lib/auth";
-import { IconCart, IconList, IconSearch, IconTag } from "../components/icons";
+import { LogoMark, Wordmark } from "../components/Logo";
 
-const SLEEVES = [
-  { bg: "linear-gradient(135deg,#ff9a3c,#ff3d00)", x: 18, y: 40, r: -12 },
-  { bg: "linear-gradient(135deg,#7c3aed,#c084fc)", x: 190, y: 30, r: 10 },
-  { bg: "linear-gradient(135deg,#0ea5e9,#22d3ee)", x: 104, y: 92, r: -2 },
+// Wie eine Tracklist auf dem Label: Seite A, Seite B
+const SIDES: [string, string, string][] = [
+  ["A1", "Sammlung & Wantlist", "Nach Label, Katalognummer, Jahr und Preis sortieren. Zustand und Pressung immer dabei."],
+  ["A2", "Digging", "Neues aus deinen Labels und Styles, mit Hörprobe. Wischen, merken, weiter."],
+  ["B1", "Weniger Porto", "Findet die Händler, die gleich mehrere deiner Wants haben."],
+  ["B2", "Sets aus der Kiste", "Platten einpacken, Reihenfolge bauen, BPM, Key und Mix-Notizen."],
 ];
 
 export default function Login({ me }: { me: Me | null }) {
@@ -15,43 +17,22 @@ export default function Login({ me }: { me: Me | null }) {
   return (
     <div className="app" style={{ paddingBottom: 0 }}>
       <div className="hero">
-        <div className="hero-art" aria-hidden="true">
-          {SLEEVES.map((s, i) => (
-            <div
-              key={i}
-              className="c"
-              style={{ left: s.x, top: s.y, background: s.bg, rotate: `${s.r}deg`, animation: `rise .9s var(--spring) ${0.1 + i * 0.12}s both` }}
-            >
-              <svg viewBox="0 0 100 100" style={{ width: "100%", height: "100%", opacity: 0.25 }}>
-                <circle cx="50" cy="50" r="30" fill="none" stroke="#fff" strokeWidth="1.2" />
-                <circle cx="50" cy="50" r="6" fill="#fff" />
-              </svg>
-            </div>
-          ))}
+        <div className="login-mark">
+          <LogoMark size={168} animate />
         </div>
-        <h1>Crate</h1>
-        <p className="sub" style={{ fontSize: 17, margin: 0 }}>Deine Discogs-Sammlung, gebaut für Vinyl-DJs.</p>
-        <div className="feature-list">
-          {[
-            [IconSearch, "Wantlist, die man gern benutzt", "Sortieren nach Preis, Angeboten, Style, Label."],
-            [IconCart, "Weniger Versand zahlen", "Findet die Händler mit den meisten deiner Wants."],
-            [IconList, "Sets nach BPM, Key und Vibe", "Harmonische Übergänge, Energie-Kurve, Einpackliste."],
-            [IconTag, "Sticker & Einleger", "Tracks, BPM und Key, von außen lesbar."],
-          ].map(([Icon, t, d], i) => {
-            const I = Icon as typeof IconSearch;
-            return (
-              <div key={i} style={{ animation: `rise .6s var(--ease) ${0.35 + i * 0.07}s both` }}>
-                <span className="ico">
-                  <I />
-                </span>
-                <div>
-                  <b>{t as string}</b>
-                  <span className="sub">{d as string}</span>
-                </div>
+        <Wordmark className="login-word" />
+        <p className="login-claim">Für Leute, die Platten auflegen.</p>
+        <ol className="side-list">
+          {SIDES.map(([pos, t, d], i) => (
+            <li key={pos} style={{ animation: `rise .6s var(--ease) ${0.45 + i * 0.07}s both` }}>
+              <span className="pos">{pos}</span>
+              <div>
+                <b>{t}</b>
+                <span className="sub">{d}</span>
               </div>
-            );
-          })}
-        </div>
+            </li>
+          ))}
+        </ol>
         <div style={{ marginTop: "auto" }}>
           {status === "failed" && !busyText && <p style={{ color: "var(--bad)" }}>Die Anmeldung hat nicht geklappt. Bitte noch einmal versuchen.</p>}
           {status === "busy" && !busyText && <p style={{ color: "var(--warn)" }}>Discogs war gerade ausgelastet. Einfach noch einmal tippen, meistens klappt es beim zweiten Mal.</p>}

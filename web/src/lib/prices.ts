@@ -31,7 +31,7 @@ export async function refreshPrices(ids: number[], opts: { maxAgeHours?: number;
   const todo = ids.filter((_, i) => !stats[i] || Date.now() - stats[i]!.fetchedAt > maxAge);
   if (!todo.length) return 0;
   const job = "stats";
-  jobUpdate(job, { label: "Preise analysieren", done: 0, total: todo.length });
+  jobUpdate(job, { label: "Preise laden", done: 0, total: todo.length });
   try {
     let done = 0;
     for (const id of todo) {

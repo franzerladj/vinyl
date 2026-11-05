@@ -33,6 +33,8 @@ export function fromDetail(r: DRelease, prev?: Release): Release {
     tracklist: r.tracklist,
     videos: r.videos,
     masterId: r.master_id,
+    identifiers: r.identifiers ?? [],
+    companies: (r.companies ?? []).map((c) => ({ name: c.name, entity_type_name: c.entity_type_name })),
     community: r.community ? { have: r.community.have, want: r.community.want } : undefined,
     detailFetchedAt: Date.now(),
   };
@@ -43,7 +45,11 @@ export async function upsertBasics(items: BasicInformation[]) {
   await db.releases.bulkPut(items.map((b, i) => fromBasic(b, prev[i])));
 }
 
-interface CollPage { pagination: Pagination; releases: { id: number; instance_id: number; folder_id: number; date_added: string; rating: number; basic_information: BasicInformation }[] }
+interface CollPage { pagination: Pagination; releases: { id: number; instance_id: number; folder_id: number; date_added: string; rating: number; notes?: { field_id: number; value: string }[]; basic_information: BasicInformation }[] }
+
+/** Discogs-Standardfelder der Sammlung */
+export const FIELD = { media: 1, sleeve: 2, note: 3 } as const;
+const field = (n: { field_id: number; value: string }[] | undefined, id: number) => n?.find((x) => x.field_id === id)?.value || undefined;
 interface WantPage { pagination: Pagination; wants: { id: number; date_added: string; rating: number; notes?: string; basic_information: BasicInformation }[] }
 
 export async function syncCollection() {
@@ -60,7 +66,7 @@ export async function syncCollection() {
       pages = data.pagination.pages;
       await upsertBasics(data.releases.map((r) => r.basic_information));
       await db.collection.bulkPut(
-        data.releases.map((r) => ({ instanceId: r.instance_id, releaseId: r.id, folderId: r.folder_id, dateAdded: r.date_added, rating: r.rating })),
+        data.releases.map((r) => ({ instanceId: r.instance_id, releaseId: r.id, folderId: r.folder_id, dateAdded: r.date_added, rating: r.rating, media: field(r.notes, FIELD.media), sleeve: field(r.notes, FIELD.sleeve), note: field(r.notes, FIELD.note) })),
       );
       for (const r of data.releases) {
         seen.add(r.instance_id);
@@ -292,6 +298,14 @@ export async function fetchMarketStats(ids: number[], maxAgeHours = 12) {
 }
 
 // ---------- Aktionen ----------
+/** Zustand von Platte oder Hülle bei Discogs speichern (Wert wie „Very Good Plus (VG+)“, leer = löschen) */
+export async function setCondition(instanceId: number, which: "media" | "sleeve", value: string) {
+  const item = await db.collection.get(instanceId);
+  if (!item) throw new Error("Platte nicht in der Sammlung");
+  await discogs(`/users/${u()}/collection/folders/${item.folderId}/releases/${item.releaseId}/instances/${instanceId}/fields/${FIELD[which]}`, { method: "POST", body: { value } });
+  await db.collection.update(instanceId, { [which]: value || undefined });
+}
+
 export async function addWant(id: number) {
   await discogs(`/users/${u()}/wants/${id}`, { method: "PUT" });
   await db.wants.put({ releaseId: id, dateAdded: new Date().toISOString(), rating: 0 });

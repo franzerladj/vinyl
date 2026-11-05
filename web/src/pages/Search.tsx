@@ -187,7 +187,6 @@ export default function Search() {
         {!loading && hasQuery && results.length === 0 && <Empty title="Nichts gefunden">Anders schreiben oder Filter entfernen.</Empty>}
         {!hasQuery && (
           <Link to="/dig" viewTransition className="dig-entry press" style={{ marginTop: 8 }}>
-            <span className="covers" style={{ background: "linear-gradient(120deg, #ff6a00, #bf5af2 60%, #0a84ff)" }} />
             <span>
               <b>Diggen statt suchen</b>
               <small>Wischen, reinhören, merken. Wie im Plattenladen.</small>
