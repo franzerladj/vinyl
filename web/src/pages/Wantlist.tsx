@@ -8,8 +8,10 @@ import { dismissRepress, repressNews } from "../lib/repress";
 import { money } from "../lib/format";
 import { toast, useStore } from "../lib/store";
 import { DealDot, Empty, RecordRow, Sheet, SkeletonRows, useDebounced } from "../components/bits";
-import { IconCart, IconCoin, IconMore, IconRows, IconSearch, IconSync } from "../components/icons";
+import { IconCart, IconCoin, IconFolder, IconMore, IconRows, IconSearch, IconSync } from "../components/icons";
 import { matchesQuery } from "../../../shared/textSearch";
+import { stripFolder } from "../../../shared/folders";
+import { FolderBar, FolderManager, inPick, useFolderRecords, useFolderTabs } from "../components/Folders";
 import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
 
 const SORTS: SortOption[] = [
@@ -56,7 +58,7 @@ export default function Wantlist() {
     return () => ro.disconnect();
   }, []);
 
-  const data = useLiveQuery(async () => {
+  const all = useLiveQuery(async () => {
     const wants = await db.wants.toArray();
     const ids = wants.map((w) => w.releaseId);
     const [rels, stats, owned] = await Promise.all([db.releases.bulkGet(ids), db.marketStats.bulkGet(ids), db.collection.where("releaseId").anyOf(ids).toArray()]);
@@ -67,6 +69,16 @@ export default function Wantlist() {
     fi.forEach((x) => atFriends.set(x.releaseId, [...(atFriends.get(x.releaseId) ?? []), x.username]));
     return wants.map((w, i) => ({ w, r: rels[i]!, s: stats[i], p: info.get(w.releaseId)!, owned: ownedSet.has(w.releaseId), friends: atFriends.get(w.releaseId) ?? [] })).filter((x) => x.r);
   });
+  const recs = useFolderRecords("want");
+  const { names: folderNames } = useFolderTabs("want", recs);
+  const [folderSel, setFolderSel] = usePersisted<{ f: string }>("want-folder", { f: "" });
+  const folder = folderSel.f === "-" || folderNames.some((n) => n === folderSel.f) ? folderSel.f : "";
+  const [folderSheet, setFolderSheet] = useState<{ start: string | null } | null>(null);
+  const data = useMemo(() => {
+    if (!all || !folder || !recs) return all;
+    const of = new Map(recs.map((r) => [r.id, r.folder]));
+    return all.filter((x) => inPick(of.get(x.r.id), folder));
+  }, [all, recs, folder]);
 
   const facets = useMemo(() => {
     const count = (vals: string[]) => {
@@ -91,7 +103,7 @@ export default function Wantlist() {
     const mp = Number(f.maxPrice.replace(",", ".")) || Infinity;
     const out = data.filter(({ r, s, w, p, owned, friends }) => {
       if (dq) {
-        const hay = `${r.artist} ${r.title} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")} ${r.styles.join(" ")} ${w.notes ?? ""} ${r.year}`;
+        const hay = `${r.artist} ${r.title} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")} ${r.styles.join(" ")} ${stripFolder(w.notes)} ${r.year}`;
         if (!matchesQuery(hay, dq)) return false;
       }
       if (f.styles.length && !f.styles.some((st) => r.styles.includes(st))) return false;
@@ -200,6 +212,8 @@ export default function Wantlist() {
           </button>
         </div>
       </div>
+      <FolderBar kind="want" recs={recs} value={folder} onChange={(f) => setFolderSel({ f })} onManage={() => setFolderSheet({ start: null })} />
+      <FolderManager kind="want" open={folderSheet !== null} onClose={() => setFolderSheet(null)} recs={recs} startWith={folderSheet?.start} onShow={(f) => setFolderSel({ f })} key={folderSheet?.start ?? "list"} />
 
       {repress && repress.size > 0 && (
         <div className="page" style={{ paddingTop: 4, paddingBottom: 0 }}>
@@ -239,7 +253,7 @@ export default function Wantlist() {
         </div>
       )}
 
-      <div className="toolbar" ref={toolbar} data-title="Wantlist">
+      <div className="toolbar" ref={toolbar} data-title={folder && folder !== "-" ? folder : "Wantlist"}>
         <div className="search-bar">
           <IconSearch />
           <input className="input" type="search" placeholder="In der Wantlist suchen …" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
@@ -315,7 +329,12 @@ export default function Wantlist() {
           )}
         />
         <AlphaIndex letters={letters} offset={toolbarH} />
-        {data && data.length === 0 && <Empty title="Wantlist ist leer">Tippe in der Suche auf das Herz, um Platten zu merken.</Empty>}
+        {all && all.length > 0 && data && data.length === 0 && (
+          <Empty title="Ordner ist leer" action={<button className="btn tinted" onClick={() => setFolderSheet({ start: folder === "-" ? null : folder })}>Platten einsortieren</button>}>
+            In diesem Ordner liegt noch nichts.
+          </Empty>
+        )}
+        {all && all.length === 0 && <Empty title="Wantlist ist leer">Tippe in der Suche auf das Herz, um Platten zu merken.</Empty>}
         {data && data.length > 0 && list.length === 0 && (
           <Empty title="Nichts gefunden" action={<button className="btn tinted" onClick={() => (setQ(""), setF(NO_FILTERS))}>Suche und Filter zurücksetzen</button>}>
             Keine Platte passt zu Suche und Filtern.
@@ -329,6 +348,7 @@ export default function Wantlist() {
         onClose={() => setSheet(null)}
         items={[
           { label: priced ? "Preise aktualisieren" : "Preise laden", icon: <IconCoin />, onClick: loadPrices, disabled: loading },
+          { label: "Ordner", icon: <IconFolder />, onClick: () => setFolderSheet({ start: null }) },
           { label: "Wantlist synchronisieren", icon: <IconSync />, onClick: () => syncWants().then(() => toast("Wantlist aktualisiert"), (e) => toast(e.message)) },
           { label: "Fehlende Details laden", icon: <IconRows />, onClick: () => fetchMissingDetails("wants").catch((e) => toast(e.message)) },
           { label: "Zum Händler-Optimierer", icon: <IconCart />, onClick: () => nav("/shop", { viewTransition: true }) },

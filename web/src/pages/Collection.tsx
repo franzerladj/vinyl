@@ -5,7 +5,7 @@ import { db, type Release, type TrackMeta } from "../lib/db";
 import { autoPipeline, fetchMissingDetails } from "../lib/sync";
 import { toast } from "../lib/store";
 import { CAMELOT_COLORS, Cover, Empty, KeyBadge, markHero, RecordRow, Sheet, SkeletonRows, useDebounced, keepParens } from "../components/bits";
-import { IconCamera, IconCart, IconRecord, IconGrid, IconMore, IconRows, IconSearch, IconSync, IconTag } from "../components/icons";
+import { IconCamera, IconCart, IconFolder, IconRecord, IconGrid, IconMore, IconRows, IconSearch, IconSync, IconTag } from "../components/icons";
 import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
 import { matchesQuery } from "../../../shared/textSearch";
 import { gradeRank, shortGrade } from "../../../shared/vinyl";
@@ -14,6 +14,7 @@ import { roughly } from "../../../shared/value";
 import { money } from "../lib/format";
 import { cachedCollectionValue, recordValues, refreshCollectionValue } from "../lib/value";
 import { refreshPrices, suggestionsState } from "../lib/prices";
+import { FolderBar, FolderManager, inPick, useFolderRecords, useFolderTabs } from "../components/Folders";
 
 const SORTS: SortOption[] = [
   { id: "added", label: "Hinzugefügt", dirs: ["Neueste zuerst", "Älteste zuerst"], defaultDir: "desc" },
@@ -101,7 +102,7 @@ export default function Collection() {
     return () => ro.disconnect();
   }, []);
 
-  const data = useLiveQuery(async () => {
+  const all = useLiveQuery(async () => {
     const coll = await db.collection.toArray();
     const ids = [...new Set(coll.map((c) => c.releaseId))];
     const [rels, metas, tracks] = await Promise.all([db.releases.bulkGet(ids), db.recordMeta.bulkGet(ids), db.tracks.where("releaseId").anyOf(ids).toArray()]);
@@ -112,6 +113,17 @@ export default function Collection() {
       .map((id, i) => ({ r: rels[i]!, meta: metas[i], tracks: byRel.get(id) ?? [], added: byColl.get(id)?.dateAdded ?? "", rating: byColl.get(id)?.rating ?? 0, media: shortGrade(byColl.get(id)?.media), sleeve: shortGrade(byColl.get(id)?.sleeve) }))
       .filter((x) => x.r);
   });
+  // Ordner: Leiste über der Liste, Auswahl bleibt gemerkt
+  const recs = useFolderRecords("coll");
+  const { names: folderNames } = useFolderTabs("coll", recs);
+  const [folderSel, setFolderSel] = usePersisted<{ f: string }>("coll-folder", { f: "" });
+  const folder = folderSel.f === "-" || folderNames.some((n) => n === folderSel.f) ? folderSel.f : "";
+  const [folderSheet, setFolderSheet] = useState<{ start: string | null } | null>(null);
+  const data = useMemo(() => {
+    if (!all || !folder || !recs) return all;
+    const of = new Map(recs.map((r) => [r.id, r.folder]));
+    return all.filter((x) => inPick(of.get(x.r.id), folder));
+  }, [all, recs, folder]);
 
   const facets = useMemo(() => {
     const count = (vals: string[]) => {
@@ -264,7 +276,10 @@ export default function Collection() {
         </div>
       </div>
 
-      <div className="toolbar" ref={toolbar} data-title="Sammlung">
+      <FolderBar kind="coll" recs={recs} value={folder} onChange={(f) => setFolderSel({ f })} onManage={() => setFolderSheet({ start: null })} />
+      <FolderManager kind="coll" open={folderSheet !== null} onClose={() => setFolderSheet(null)} recs={recs} startWith={folderSheet?.start} onShow={(f) => setFolderSel({ f })} key={folderSheet?.start ?? "list"} />
+
+      <div className="toolbar" ref={toolbar} data-title={folder && folder !== "-" ? folder : "Sammlung"}>
         <div className="search-bar">
           <IconSearch />
           <input className="input" type="search" placeholder="Artist, Titel, Label, Track, Regal …" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
@@ -336,7 +351,12 @@ export default function Collection() {
           />
         )}
         {view.v === "list" && <AlphaIndex letters={letters} offset={toolbarH} />}
-        {data && data.length === 0 && (
+        {all && all.length > 0 && data && data.length === 0 && (
+          <Empty title="Ordner ist leer" action={<button className="btn tinted" onClick={() => setFolderSheet({ start: folder === "-" ? null : folder })}>Platten einsortieren</button>}>
+            In diesem Ordner liegt noch nichts.
+          </Empty>
+        )}
+        {all && all.length === 0 && (
           <Empty title="Noch keine Platten" action={<button className="btn primary" onClick={() => autoPipeline({ force: true }).catch((e) => toast(e.message))}>Von Discogs laden</button>}>
             Synchronisiere deine Discogs-Sammlung oder scanne eine Platte.
           </Empty>
@@ -358,6 +378,7 @@ export default function Collection() {
         onClose={() => setSheet(null)}
         items={[
           { label: "Platte hinzufügen", icon: <IconCamera />, onClick: () => nav("/scan", { viewTransition: true }) },
+          { label: "Ordner", icon: <IconFolder />, onClick: () => setFolderSheet({ start: null }) },
           { label: "Wert der Sammlung", icon: <IconCart />, onClick: () => setSheet("value") },
           { label: "Jahresrückblick", icon: <IconRecord />, onClick: () => nav("/year", { viewTransition: true }) },
           { label: "Labels vervollständigen", icon: <IconRecord />, onClick: () => nav("/labels", { viewTransition: true }) },

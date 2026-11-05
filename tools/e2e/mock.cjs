@@ -24,6 +24,10 @@ module.exports = async function install(page) {
   // Begrüßung nur zeigen, wenn ein Test sie ausdrücklich will (WELCOME=1)
   if (!process.env.WELCOME) await page.addInitScript(() => { try { localStorage.setItem("crate:welcome:franzerladj", "1"); } catch {} });
   if (!process.env.COACH) await page.addInitScript(() => { try { localStorage.setItem("crate:coach:dig", "1"); } catch {} });
+  // Ordner: kleiner Zustand pro Seite (Discogs-Ordner, Verschiebungen, Want-Notizen)
+  const st = { folders: [{ id: 0, name: "All", count: COLL.length }, { id: 1, name: "Uncategorized", count: COLL.length }], fid: {}, notes: {}, next: 100, calls: [] };
+  if (process.env.FOLDERS) { st.folders.push({ id: 7, name: "Auflegen", count: 30 }, { id: 8, name: "Metal", count: 5 }); COLL.forEach((id) => (st.fid[id] = id <= 30 ? 7 : id <= 35 ? 8 : 1)); WANTS.slice(0, 3).forEach((id) => (st.notes[id] = "[Ordner: Metal]")); }
+  page.__folders = st;
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url()); const p = url.pathname;
     const json = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });
@@ -46,6 +50,17 @@ module.exports = async function install(page) {
     if (p === "/api/profile/kumpel") return json({ profile: { djName: "DJ Kumpel", bio: "Deep House und Disco aus Bayreuth. Freitags im Glashaus.", location: "Bayreuth", links: [{ url: "https://soundcloud.com/djkumpel", kind: "soundcloud" }, { url: "https://instagram.com/djkumpel", kind: "instagram" }, { url: "https://feuerpfeil.de", kind: "web" }], styles: ["Deep House", "Disco", "Chicago House"], spotlight: { id: 2, title: "Altered States", artist: "Ron Trent" }, plays: "vinyl", setup: { decks: "2× Technics SL-1210 MK2", carts: "Ortofon Concorde Nightclub", mixer: "E&S DJR400 Rotary", phones: "Sennheiser HD 25", sound: "Klipsch La Scala zu Hause", care: "Pro-Ject VC-S" } } });
     if (p.startsWith("/api/profile/")) return json({ profile: null });
     if (/\/instances\/\d+\/fields\/\d+$/.test(p)) { globalThis.__fields = [...(globalThis.__fields || []), { p, body: route.request().postData() }]; return route.fulfill({ status: 204, body: "" }); }
+    const method = route.request().method();
+    const body = () => { try { return JSON.parse(route.request().postData() || "{}"); } catch { return {}; } };
+    if (/\/users\/franzerladj\//.test(p)) {
+      let fm;
+      if (p.endsWith("/collection/folders") && method === "GET") return json({ folders: st.folders });
+      if (p.endsWith("/collection/folders") && method === "POST") { const f = { id: st.next++, name: body().name, count: 0 }; st.folders.push(f); st.calls.push(["create", f.name]); return json(f, 201); }
+      if ((fm = p.match(/\/collection\/folders\/(\d+)$/))) { const id = +fm[1]; if (method === "DELETE") { st.folders = st.folders.filter((f) => f.id !== id); st.calls.push(["delete", id]); return route.fulfill({ status: 204, body: "" }); } const f = st.folders.find((x) => x.id === id); if (f) f.name = body().name; st.calls.push(["rename", id, body().name]); return json(f || {}); }
+      if ((fm = p.match(/\/collection\/folders\/\d+\/releases\/(\d+)\/instances\/\d+$/)) && method === "POST") { const b = body(); if (b.folder_id != null) { st.fid[+fm[1]] = b.folder_id; st.calls.push(["move", +fm[1], b.folder_id]); } return route.fulfill({ status: 204, body: "" }); }
+      if ((fm = p.match(/\/collection\/folders\/(\d+)\/releases\/(\d+)$/)) && method === "POST") { st.calls.push(["add", +fm[2], +fm[1]]); return json({ instance_id: 5000 + +fm[2] }, 201); }
+      if ((fm = p.match(/\/wants\/(\d+)$/)) && method === "POST") { st.notes[+fm[1]] = body().notes; st.calls.push(["note", +fm[1], body().notes]); return json({ id: +fm[1], notes: body().notes }); }
+    }
     const um = p.match(/\/users\/([^/]+)(\/.*)?$/);
     if (um && um[1] !== "franzerladj") {
       const u = decodeURIComponent(um[1]);
@@ -55,8 +70,8 @@ module.exports = async function install(page) {
       if (um[2].includes("/collection/")) { const ids = [...WANTS.slice(0, 6), ...COLL.slice(0, 20)]; return json({ pagination: { page: 1, pages: 1, per_page: 100, items: ids.length }, releases: ids.map((id) => ({ id, date_added: "2026-01-01T00:00:00", basic_information: basic(R[id]) })) }); }
       if (um[2].includes("/wants")) { const ids = [...COLL.slice(30, 34), 70]; return json({ pagination: { page: 1, pages: 1, per_page: 100, items: ids.length }, wants: ids.map((id) => ({ id, date_added: "2026-01-01T00:00:00", basic_information: basic(R[id]) })) }); }
     }
-    if (p.includes("/collection/folders/0/releases")) return json({ pagination: { page: 1, pages: 1, per_page: 100, items: COLL.length }, releases: COLL.map((id) => ({ id, instance_id: 1000 + id, folder_id: 1, notes: id % 3 === 0 ? [] : [{ field_id: 1, value: ["Mint (M)", "Near Mint (NM or M-)", "Very Good Plus (VG+)", "Very Good (VG)"][id % 4] }, { field_id: 2, value: ["Very Good Plus (VG+)", "Generic", "Near Mint (NM or M-)"][id % 3] }], date_added: new Date(Date.UTC(2026, 10, 3) - id * 86400000 * 3).toISOString(), rating: id % 6, basic_information: basic(R[id]) })) });
-    if (p.endsWith("/wants")) return json({ pagination: { page: 1, pages: 1, per_page: 100, items: WANTS.length }, wants: WANTS.map((id) => ({ id, date_added: new Date(Date.UTC(2026, 10, 1) - id * 86400000).toISOString(), rating: id % 4, basic_information: basic(R[id]) })) });
+    if (p.includes("/collection/folders/0/releases")) return json({ pagination: { page: 1, pages: 1, per_page: 100, items: COLL.length }, releases: COLL.map((id) => ({ id, instance_id: 1000 + id, folder_id: st.fid[id] ?? 1, notes: id % 3 === 0 ? [] : [{ field_id: 1, value: ["Mint (M)", "Near Mint (NM or M-)", "Very Good Plus (VG+)", "Very Good (VG)"][id % 4] }, { field_id: 2, value: ["Very Good Plus (VG+)", "Generic", "Near Mint (NM or M-)"][id % 3] }], date_added: new Date(Date.UTC(2026, 10, 3) - id * 86400000 * 3).toISOString(), rating: id % 6, basic_information: basic(R[id]) })) });
+    if (p.endsWith("/wants")) return json({ pagination: { page: 1, pages: 1, per_page: 100, items: WANTS.length }, wants: WANTS.map((id) => ({ id, notes: st.notes[id], date_added: new Date(Date.UTC(2026, 10, 1) - id * 86400000).toISOString(), rating: id % 4, basic_information: basic(R[id]) })) });
     let m = p.match(/\/masters\/(\d+)\/versions$/); if (m) { const mid = +m[1]; return json({ pagination: { pages: 1 }, versions: [{ id: 9000 + mid, title: "Repress", format: 'Vinyl, 12", Reissue', label: "Repress Records", catno: `RP${mid}`, country: "Germany", released: "2026" }, { id: mid - 2000, title: "Original", format: 'Vinyl, 12"', released: "1996" }] }); }
     m = p.match(/\/releases\/(\d+)$/); if (m) return json(+m[1] >= 46 && +m[1] <= 70 ? { ...R[m[1]], master_id: 2000 + +m[1] } : R[m[1]]);
     m = p.match(/marketplace\/price_suggestions\/(\d+)/); if (m) return json({ message: "You must fill out your seller settings first." }, 422);

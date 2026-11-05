@@ -61,6 +61,8 @@ export async function syncCollection() {
     let pages = 1;
     const known = new Set((await db.collection.toArray()).map((c) => c.releaseId));
     let added = 0;
+    // Ordnerliste mitnehmen (eine Anfrage), Fehler hier sollen den Sync nicht stoppen
+    await import("./folders").then((f) => f.syncFolders()).catch((e) => console.warn("Ordner", e));
     do {
       const data = await discogs<CollPage>(`/users/${u()}/collection/folders/0/releases?per_page=100&page=${page}&sort=added&sort_order=desc`, { background: true });
       pages = data.pagination.pages;
@@ -317,7 +319,9 @@ export async function removeWant(id: number) {
   await db.wants.delete(id);
 }
 
-export async function addToCollection(id: number, folderId = 1) {
+export async function addToCollection(id: number, folder?: number) {
+  // Gekauftes Want landet im Ordner, dem es auf der Wantlist zugeordnet war
+  const folderId: number = folder ?? (await (await import("./folders")).folderForNewRecord(id));
   const res = await discogs<{ instance_id: number }>(`/users/${u()}/collection/folders/${folderId}/releases/${id}`, { method: "POST" });
   // Sofort lokal eintragen: scheitert danach das Nachladen, tippt man sonst nochmal und hat die Platte doppelt bei Discogs
   await db.collection.put({ instanceId: res.instance_id, releaseId: id, folderId, dateAdded: new Date().toISOString(), rating: 0 });

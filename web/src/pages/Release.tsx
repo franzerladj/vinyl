@@ -4,7 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { api } from "../lib/api";
 import { db, realTracks, trackId, type TrackMeta } from "../lib/db";
 import { addToCollection, addWant, fetchMarketStats, fetchRelease, lookupAudioFor, removeWant, setCondition, tagVibes } from "../lib/sync";
-import { GRADE_HINT, MEDIA_GRADES, SLEEVE_GRADES, pressingInfo, shortGrade } from "../../../shared/vinyl";
+import { GRADE_HINT, SLEEVE_HINT, MEDIA_GRADES, SLEEVE_GRADES, pressingInfo, shortGrade } from "../../../shared/vinyl";
 import type { CollectionItem } from "../lib/db";
 import { discogsReleaseUrl, discogsSellUrl, formatLine, money, sideOf } from "../lib/format";
 import { toast, useStore } from "../lib/store";
@@ -20,6 +20,9 @@ import { matchVideo, parseDuration, youtubeId } from "../../../shared/match";
 import { IconBack, IconCart, IconExternal, IconShare, IconHeart, IconPlay, IconPlus, IconMic, IconPrint, IconWave } from "../components/icons";
 import { Listen } from "../components/Listen";
 import { estimateBpm } from "../../../shared/vibes";
+import { FolderChooser } from "../components/Folders";
+import { folderIdFor, moveToFolder, setWantFolder, useFolders, useWantFolderNames } from "../lib/folders";
+import { NO_FOLDER, wantFolderOf } from "../../../shared/folders";
 
 export default function ReleasePage() {
   const id = Number(useParams().id);
@@ -32,6 +35,10 @@ export default function ReleasePage() {
   const [playing, setPlaying] = useState(false);
   const [media, setMedia] = useState<Media | null>(null);
   const [lendSheet, setLendSheet] = useState(false);
+  const [folderSheet, setFolderSheet] = useState<"coll" | "want" | null>(null);
+  const folders = useFolders();
+  const wantFolderNames = useWantFolderNames();
+  const wantNotes = useLiveQuery(async () => (await db.wants.get(id))?.notes ?? "", [id], "");
   const [listenSide, setListenSide] = useState(false);
   const [grading, setGrading] = useState<{ item: CollectionItem; which: "media" | "sleeve" } | null>(null);
   const copies = useLiveQuery(() => db.collection.where("releaseId").equals(id).toArray(), [id], [] as CollectionItem[]);
@@ -199,6 +206,16 @@ export default function ReleasePage() {
             {rel.community && <span className="tiny">{rel.community.have} haben</span>}
           </div>
         </div>
+
+        {isWant && !inColl && wantFolderNames.length > 0 && (
+          <div className="group" style={{ marginTop: 10 }}>
+            <button className="group-row" onClick={() => setFolderSheet("want")}>
+              <span style={{ width: 92 }} className="sub">Ordner</span>
+              <span style={{ flex: 1 }}>{wantFolderOf(wantNotes) ?? "Ohne Ordner"}</span>
+              <span className="chev">›</span>
+            </button>
+          </div>
+        )}
 
         {isWant && price && (
           <div className="card stack" style={{ marginTop: 10, gap: 10 }}>
@@ -392,6 +409,11 @@ export default function ReleasePage() {
                   key={meta?.shelf}
                 />
               </label>
+              <button className="group-row" onClick={() => setFolderSheet("coll")}>
+                <span style={{ width: 92 }} className="sub">Ordner</span>
+                <span style={{ flex: 1 }}>{folders.find((f) => copies.some((c) => c.folderId === f.id))?.name ?? "Ohne Ordner"}</span>
+                <span className="chev">›</span>
+              </button>
               <label className="group-row">
                 <span style={{ width: 92 }} className="sub">Crates</span>
                 <input
@@ -503,7 +525,7 @@ export default function ReleasePage() {
                     }}
                   >
                     <b className="mono">{short}</b>
-                    <span>{GRADE_HINT[short] ?? long}</span>
+                    <span>{(grading.which === "media" ? GRADE_HINT : SLEEVE_HINT)[short] ?? long}</span>
                     {on && <span className="grade-check">✓</span>}
                   </button>
                 );
@@ -512,6 +534,20 @@ export default function ReleasePage() {
           </div>
         )}
       </Sheet>
+
+      <FolderChooser
+        open={folderSheet !== null}
+        onClose={() => setFolderSheet(null)}
+        kind={folderSheet ?? "coll"}
+        current={folderSheet === "want" ? wantFolderOf(wantNotes) : (folders.find((f) => copies.some((c) => c.folderId === f.id))?.name ?? null)}
+        onPick={(name) => {
+          const job = folderSheet === "want" ? setWantFolder([id], name) : (name ? folderIdFor(name) : Promise.resolve(NO_FOLDER)).then((fid) => moveToFolder([id], fid));
+          job.then(
+            () => toast(name ? `In „${name}“ einsortiert` : "Ohne Ordner"),
+            (e) => toast((e as Error).message),
+          );
+        }}
+      />
 
       <MenuSheet
         open={lendSheet}

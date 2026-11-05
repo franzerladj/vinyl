@@ -1,6 +1,7 @@
 // Google-Sheets-Spiegel über ein eigenes Apps-Script (siehe google-sheets/Code.gs).
 // Die App schreibt Sammlung, Wantlist, Tracks und Sets als Tabellenblätter und kann
 // Änderungen an BPM/Key/Energie aus dem Blatt "Tracks" zurücklesen.
+import { stripFolder, wantFolderOf } from "../../../shared/folders";
 import { db, getKV, realTracks, trackId } from "./db";
 import { discogsReleaseUrl } from "./format";
 import { camelotString, parseKey } from "../../../shared/music";
@@ -38,8 +39,8 @@ async function buildPayload() {
     }),
   ];
   const Wantlist = [
-    ["Release-ID", "Artist", "Titel", "Label", "Katalognr.", "Jahr", "Genre", "Styles", "Hinzugefügt", "Discogs", "Günstigster Preis", "Angebote", "Notiz"],
-    ...wants.map((w) => [...recordRow(w.releaseId, w.dateAdded), stat.get(w.releaseId)?.lowest ?? "", stat.get(w.releaseId)?.numForSale ?? "", w.notes ?? ""]),
+    ["Release-ID", "Artist", "Titel", "Label", "Katalognr.", "Jahr", "Genre", "Styles", "Hinzugefügt", "Discogs", "Günstigster Preis", "Angebote", "Notiz", "Ordner"],
+    ...wants.map((w) => [...recordRow(w.releaseId, w.dateAdded), stat.get(w.releaseId)?.lowest ?? "", stat.get(w.releaseId)?.numForSale ?? "", stripFolder(w.notes), wantFolderOf(w.notes) ?? ""]),
   ];
   const inColl = new Set(collection.map((c) => c.releaseId));
   const Tracks = [

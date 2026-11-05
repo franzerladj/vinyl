@@ -24,7 +24,21 @@ export const GRADE_HINT: Record<string, string> = {
   G: "Stark abgespielt",
   F: "Springt oder rauscht stark",
   P: "Kaum spielbar",
+};
+
+/** Die Hülle bewertet man nach Abnutzung, nicht nach Klang */
+export const SLEEVE_HINT: Record<string, string> = {
+  M: "Neu, noch eingeschweißt",
+  NM: "Wie neu, keine Knicke, keine Schrift",
+  "VG+": "Leicht abgenutzt, Ecken minimal gestoßen",
+  VG: "Leichter Ringabrieb, kleine Knicke oder Nahtriss",
+  "G+": "Deutlicher Ringabrieb, Risse an der Naht, Schrift",
+  G: "Stark abgenutzt, größere Risse",
+  F: "Beschädigt, Wasserschaden oder Teile fehlen",
+  P: "Kaum noch zu erkennen",
   Generic: "Neutrale Hülle ohne Druck",
+  ohne: "Hülle nicht bewertet",
+  keine: "Platte ohne Hülle",
 };
 
 export function shortGrade(v?: string | null): string | undefined {

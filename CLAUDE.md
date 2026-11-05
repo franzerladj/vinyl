@@ -41,6 +41,8 @@ Wichtige Eigenheiten:
 - Kisten-Vorlagen: KV `crateTemplates` (`web/src/lib/crateTemplates.ts`). Set-Verlauf: `web/src/lib/setHistory.ts`. Cue-Punkte: `TrackMeta.cueIn/cueOut`.
 - Teilen-Karten (Story 1080×1920): `web/src/lib/shareCard.ts`, Discogs-Bilder über `/api/img` (CORS).
 - Vinylhead-Daten (`shared/vinyl.ts`): Zustand nach Goldmine aus den Discogs-Sammlungsfeldern 1 (Platte), 2 (Hülle), 3 (Notiz), Schreiben per `setCondition` in `sync.ts`. Pressung (Matrix/Runout, Schnitt, Presswerk) aus `identifiers`/`companies` des Releases, ältere Einträge werden beim Öffnen still nachgeladen.
+- Ordner: Sammlung nutzt die echten Discogs-Ordner (`/collection/folders`, Liste im KV `folders`, beim Sammlungs-Sync mitgeladen, Verschieben per `folder_id` am Exemplar). Die Wantlist hat bei Discogs keine Ordner: Marke „[Ordner: Name]“ am Ende der Want-Notiz (`shared/folders.ts`, Schreiben per POST `/wants/{id}`), so synchron auf allen Geräten. Beide teilen sich die Namen. Gekauftes Want landet im gleichnamigen Ordner (`folderForNewRecord` in `addToCollection`). UI: `web/src/components/Folders.tsx` (Leiste über der Liste nur mit eigenen Ordnern, Verwalten und Einsortieren auch nach Style, Auswahl auf der Platten-Seite). Set: `DJSet.folderId` (Chips „Platten aus“), gilt für Vorschläge, Kiste packen und Automatik, letzter Ordner wird für neue Sets gemerkt. Test: `tools/e2e/folders.cjs` (Mock mit Zustand, `FOLDERS=1` legt Beispielordner an).
+- Zustand der Hülle hat eigene Beschreibungen (`SLEEVE_HINT` in `shared/vinyl.ts`), nicht die der Platte.
 - Plattenbörse: nach dem Suchen auf `/scan` zeigt `Verdict` groß „Hast du schon“, „Auf deiner Wantlist“, „Andere Pressung“ (gleicher Master) oder „Neu für dich“ mit Discogs-Preis.
 - Label-Vollständigkeit: `shared/labels.ts` (`labelCompletion`, je Katalognummer auf Vinyl, andere Pressung zählt), `web/src/lib/labels.ts` (`/labels/{id}/releases`, max. 5 Seiten, KV `label:<id>` 7 Tage), Seiten `/labels` und `/label/:id`, Link vom Label auf der Platten-Seite.
 - Nadel-Stunden: `shared/stylus.ts` (gespielte Sets seit Einbau, Länge aus Track-Laufzeiten, sonst 6 Min. je Track, plus eigene Minuten), `web/src/lib/stylus.ts` (KV `stylus`), Seite `/settings/stylus`, Erinnerung auf Start ab 90 % der Herstellerangabe. Keine erfundenen Lebensdauern, die trägt man selbst ein.
@@ -88,6 +90,7 @@ node tools/e2e/welcome.cjs  # Begrüßung, Einmal-Hinweis
 node tools/e2e/fair.cjs     # Plattenbörse: Hast du schon / Wantlist
 node tools/e2e/labels.cjs   # Label vervollständigen
 node tools/e2e/stylus.cjs   # Nadel-Stunden
+node tools/e2e/folders.cjs  # Ordner: Sammlung, Wantlist, Kauf in den Ordner, Set aus einem Ordner
 node tools/e2e/like.cjs     # Digging: Like, Likes-Liste, keine Wantlist
 node tools/e2e/year.cjs     # Jahresrückblick und Story-Karte
 node tools/e2e/repress.cjs  # Repress-Alarm auf der Wantlist

@@ -23,6 +23,16 @@ import { parseDuration } from "../../../shared/match";
 import { Hint } from "../components/Welcome";
 import { CalendarSheet } from "../components/CalendarSheet";
 import type { GigEvent } from "../../../shared/ics";
+import { useFolders } from "../lib/folders";
+
+/** Zuletzt gewählter Ordner gilt für das nächste neue Set */
+const lastFolder = () => {
+  try {
+    return Number(localStorage.getItem("crate:set-folder")) || undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 const CURVES: [Curve, string, string][] = [
   ["warmup", "Warm-up", "ruhig starten, langsam steigern"],
@@ -38,13 +48,15 @@ type Data = {
   rels: Map<number, Release>;
   metas: Map<number, { shelf?: string; crates?: string[] }>;
   ratings: Map<number, number>;
+  /** Discogs-Ordner je Platte (alle Exemplare) */
+  folders: Map<number, number[]>;
 };
 
 export default function SetEditor() {
   const { id } = useParams();
   const nav = useNavigate();
   const isNew = id === "new";
-  const [set, setSet] = useState<DJSet>({ name: "", curve: "journey", trackIds: [], createdAt: Date.now(), crateIds: [], mixNotes: {} });
+  const [set, setSet] = useState<DJSet>({ name: "", curve: "journey", trackIds: [], createdAt: Date.now(), crateIds: [], mixNotes: {}, folderId: lastFolder() });
   const [dirty, setDirty] = useState(false);
   const [view, setView] = useState<"order" | "crate">("order");
   const [picker, setPicker] = useState(false);
@@ -95,6 +107,7 @@ export default function SetEditor() {
       rels: new Map(rels.filter(Boolean).map((r) => [r!.id, r!])),
       metas: new Map(metas.filter(Boolean).map((m) => [m!.releaseId, m!])),
       ratings: new Map(coll.map((c) => [c.releaseId, c.rating])),
+      folders: coll.reduce((m, c) => m.set(c.releaseId, [...(m.get(c.releaseId) ?? []), c.folderId]), new Map<number, number[]>()),
     };
   });
 
@@ -132,6 +145,20 @@ export default function SetEditor() {
   const seq = useMemo(() => tracks.map(toSetTrack), [tracks, data, estBpm]); // eslint-disable-line react-hooks/exhaustive-deps
   const crate = set.crateIds ?? [];
   const crateSet = new Set(crate);
+  // Quelle: ganze Sammlung oder ein Ordner (z. B. nur Platten zum Auflegen)
+  const folders = useFolders();
+  const folderId = set.folderId && folders.some((f) => f.id === set.folderId) ? set.folderId : undefined;
+  const folderName = folders.find((f) => f.id === folderId)?.name;
+  const fromSource = (rid: number) => !folderId || Boolean(data?.folders.get(rid)?.includes(folderId));
+  const chooseFolder = (id?: number) => {
+    update({ folderId: id });
+    try {
+      if (id) localStorage.setItem("crate:set-folder", String(id));
+      else localStorage.removeItem("crate:set-folder");
+    } catch {
+      /* egal */
+    }
+  };
   const stats = setStats(seq);
   const durOf = (t: TrackMeta) => parseDuration(data?.rels.get(t.releaseId)?.tracklist?.find((x) => x.position === t.position)?.duration);
   // Beim Mixen überlappen Tracks: grob 80 % der Länge, nur der letzte läuft ganz
@@ -142,7 +169,7 @@ export default function SetEditor() {
     if (!data) return [];
     const prev = index >= 0 ? seq[index] : null;
     const used = new Set(seq.map((t) => t.group!));
-    const pool = (wide || !crate.length ? data.tracks : data.tracks.filter((t) => crateSet.has(t.releaseId))).filter((t) => !set.trackIds.includes(t.id));
+    const pool = (wide || !crate.length ? data.tracks.filter((t) => fromSource(t.releaseId) || crateSet.has(t.releaseId)) : data.tracks.filter((t) => crateSet.has(t.releaseId))).filter((t) => !set.trackIds.includes(t.id));
     const t = seq.length <= 1 ? 0 : Math.min(1, (index + 1) / Math.max(1, seq.length));
     return suggestNext(prev, pool.map(toSetTrack), { usedGroups: used, energyGoal: targetEnergy(set.curve as Curve, t), limit: 6 });
   };
@@ -279,6 +306,21 @@ export default function SetEditor() {
             </button>
           ))}
         </div>
+        {folders.length > 0 && (
+          <div className="set-source">
+            <span className="sub">Platten aus</span>
+            <div className="chips chips-scroll">
+              <button className={`chip ${!folderId ? "on" : ""}`} onClick={() => chooseFolder(undefined)}>
+                Ganze Sammlung
+              </button>
+              {folders.map((f) => (
+                <button key={f.id} className={`chip ${folderId === f.id ? "on" : ""}`} onClick={() => chooseFolder(f.id)}>
+                  {f.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Überblick */}
         {tracks.length > 0 && (
@@ -431,7 +473,7 @@ export default function SetEditor() {
       </Sheet>
 
       <Sheet open={picker} onClose={() => setPicker(false)}>
-        <RecordPicker data={data} crate={crateSet} onToggle={(rid) => update({ crateIds: crateSet.has(rid) ? crate.filter((x) => x !== rid) : [...crate, rid] })} onDone={() => setPicker(false)} />
+        <RecordPicker data={data} crate={crateSet} fromSource={fromSource} folderName={folderName} onToggle={(rid) => update({ crateIds: crateSet.has(rid) ? crate.filter((x) => x !== rid) : [...crate, rid] })} onDone={() => setPicker(false)} />
       </Sheet>
 
       <Sheet open={tplOpen} onClose={() => setTplOpen(false)}>
@@ -475,6 +517,8 @@ export default function SetEditor() {
             set={set}
             seq={seq}
             toSetTrack={toSetTrack}
+            fromSource={fromSource}
+            folderName={folderName}
             onApply={(ids, crateIds) => {
               update({ trackIds: ids, crateIds });
               setAuto(false);
@@ -776,12 +820,12 @@ function CrateView({ crate, data, used, onAdd, onTemplates, onRemove }: { crate:
   );
 }
 
-function RecordPicker({ data, crate, onToggle, onDone }: { data?: Data; crate: Set<number>; onToggle: (rid: number) => void; onDone: () => void }) {
+function RecordPicker({ data, crate, fromSource, folderName, onToggle, onDone }: { data?: Data; crate: Set<number>; fromSource: (rid: number) => boolean; folderName?: string; onToggle: (rid: number) => void; onDone: () => void }) {
   const [q, setQ] = useState("");
   const [style, setStyle] = useState("");
   const styles = useMemo(() => {
     const c = new Map<string, number>();
-    data?.rels.forEach((r) => r.styles.forEach((s) => c.set(s, (c.get(s) ?? 0) + 1)));
+    data?.rels.forEach((r) => fromSource(r.id) && r.styles.forEach((s) => c.set(s, (c.get(s) ?? 0) + 1)));
     return [...c.entries()].sort((a, b) => b[1] - a[1]).slice(0, 14).map(([s]) => s);
   }, [data]);
   const bpmByRel = useMemo(() => {
@@ -792,7 +836,7 @@ function RecordPicker({ data, crate, onToggle, onDone }: { data?: Data; crate: S
   const list = useMemo(() => {
     const rels = [...(data?.rels.values() ?? [])];
     return rels
-      .filter((r) => (!style || r.styles.includes(style)) && (!q.trim() || matchesQuery(`${r.artist} ${r.title} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")} ${(r.tracklist ?? []).map((t) => t.title).join(" ")}`, q)))
+      .filter((r) => (fromSource(r.id) || crate.has(r.id)) && (!style || r.styles.includes(style)) && (!q.trim() || matchesQuery(`${r.artist} ${r.title} ${r.labels.map((l) => `${l.name} ${l.catno}`).join(" ")} ${(r.tracklist ?? []).map((t) => t.title).join(" ")}`, q)))
       .sort((a, b) => a.artist.localeCompare(b.artist, "de"))
       .slice(0, 80);
   }, [data, q, style]);
@@ -803,7 +847,7 @@ function RecordPicker({ data, crate, onToggle, onDone }: { data?: Data; crate: S
   return (
     <div className="stack">
       <div className="row">
-        <b style={{ fontSize: 18 }}>Kiste packen</b>
+        <b style={{ fontSize: 18 }}>{folderName ? `Kiste packen aus „${folderName}“` : "Kiste packen"}</b>
         <span className="spacer" />
         <button className="text-btn" onClick={onDone}>
           Fertig ({crate.size})
@@ -917,7 +961,7 @@ function NoteEditor({ title, value, onSave }: { title: string; value: string; on
 // ---------------------------------------------------------------------------
 // Automatik als Hilfe: nur ordnen, oder aus der Kiste vorschlagen
 // ---------------------------------------------------------------------------
-function AutoHelp({ data, set, seq, toSetTrack, onApply }: { data?: Data; set: DJSet; seq: SetTrack[]; toSetTrack: (t: TrackMeta) => SetTrack; onApply: (ids: string[], crateIds: number[]) => void }) {
+function AutoHelp({ data, set, seq, toSetTrack, fromSource, folderName, onApply }: { data?: Data; set: DJSet; seq: SetTrack[]; toSetTrack: (t: TrackMeta) => SetTrack; fromSource: (rid: number) => boolean; folderName?: string; onApply: (ids: string[], crateIds: number[]) => void }) {
   const crate = set.crateIds ?? [];
   const [length, setLength] = useState(Math.max(10, seq.length || 20));
   const [perRecord, setPerRecord] = useState(1);
@@ -930,7 +974,7 @@ function AutoHelp({ data, set, seq, toSetTrack, onApply }: { data?: Data; set: D
   };
   const fill = () => {
     if (!data) return;
-    const pool = (crate.length ? data.tracks.filter((t) => crate.includes(t.releaseId)) : data.tracks).map(toSetTrack);
+    const pool = (crate.length ? data.tracks.filter((t) => crate.includes(t.releaseId)) : data.tracks.filter((t) => fromSource(t.releaseId))).map(toSetTrack);
     if (!pool.length) return toast("Keine Tracks gefunden");
     if (seq.length && !confirm("Das ersetzt deine aktuelle Reihenfolge. Weiter?")) return;
     const ids = buildSetlist(pool, { ...opts, length, maxPerRecord: perRecord });
@@ -948,7 +992,7 @@ function AutoHelp({ data, set, seq, toSetTrack, onApply }: { data?: Data; set: D
         </button>
       </div>
       <div className="card stack" style={{ gap: 8, background: "var(--surface-2)" }}>
-        <b>{crate.length ? "Aus der Kiste vorschlagen" : "Aus der Sammlung vorschlagen"}</b>
+        <b>{crate.length ? "Aus der Kiste vorschlagen" : folderName ? `Aus „${folderName}“ vorschlagen` : "Aus der Sammlung vorschlagen"}</b>
         <span className="sub">Ein Startpunkt zum Weiterbauen. {crate.length ? `Nimmt nur die ${crate.length} Platten aus deiner Kiste.` : "Tipp: Pack vorher eine Kiste, dann kommt nur raus, was du mitnimmst."}</span>
         <div className="grid2">
           <label className="field">

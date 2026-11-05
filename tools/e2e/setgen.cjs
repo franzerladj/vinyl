@@ -25,6 +25,7 @@ const readSet = (page) =>
   await page.waitForTimeout(40000);
   for (const [len, per] of [[20, "Einer"], [60, "Einer"]]) {
     await page.goto("http://localhost:8787/sets/new");
+    await page.click("text=Automatisch vorschlagen");
     await page.waitForSelector("text=Vorschlag erstellen");
     await page.locator(".field:has-text('Tracks') input").first().fill(String(len));
     await page.click(`.seg >> text=${per}`);

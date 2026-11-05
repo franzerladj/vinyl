@@ -101,6 +101,8 @@ export interface DJSet {
   curve: string;
   trackIds: string[];
   played?: string[];
+  /** Nur Platten aus diesem Discogs-Ordner vorschlagen (leer = ganze Sammlung) */
+  folderId?: number;
   /** Eingepackte Platten (Release-IDs): die Kiste für diesen Abend */
   crateIds?: number[];
   /** Mix-Notizen pro Übergang, Schlüssel = ID des Tracks, der reinkommt */
