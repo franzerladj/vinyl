@@ -204,7 +204,7 @@ export default function Wantlist() {
           <div className="summary-strip">
             <button className="stat press" onClick={() => setSort({ id: "price", dir: "asc" })} style={{ textAlign: "left", border: 0 }}>
               <b>{priced ? money(total) : "–"}</b>
-              <span>{priced ? "alle verfügbaren, ab" : "Preise folgen"}</span>
+              <span>{priced ? `ab, für ${available.length === 1 ? "die verfügbare" : `alle ${available.length} verfügbaren`}` : "Preise folgen"}</span>
             </button>
             {(["green", "target", "cheaper", "hot"] as const).map((d) => (
               <button key={d} className={`stat press ${f.deal.includes(d) ? "on" : ""}`} onClick={() => toggleDeal(d)} style={{ textAlign: "left", border: 0, outline: f.deal.includes(d) ? "2px solid var(--accent)" : undefined }}>

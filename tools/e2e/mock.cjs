@@ -21,6 +21,8 @@ const basic = (r) => ({ id: r.id, title: r.title, year: r.year, thumb: r.thumb, 
 const COLL = Array.from({ length: 45 }, (_, i) => i + 1);
 const WANTS = Array.from({ length: 25 }, (_, i) => i + 46);
 module.exports = async function install(page) {
+  // Begrüßung nur zeigen, wenn ein Test sie ausdrücklich will (WELCOME=1)
+  if (!process.env.WELCOME) await page.addInitScript(() => { try { localStorage.setItem("crate:welcome:franzerladj", "1"); } catch {} });
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url()); const p = url.pathname;
     const json = (b, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(b) });

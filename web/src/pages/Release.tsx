@@ -13,7 +13,8 @@ import { loadPriceInfo, setTargetPrice } from "../lib/prices";
 import { friendsFor, lendRecord, messageUrl } from "../lib/friends";
 import { MenuSheet } from "../components/ui";
 import { previewUrl } from "../lib/free";
-import { ytConsent } from "../lib/theme";
+import { setYtConsent, ytConsent } from "../lib/theme";
+import { Hint } from "../components/Welcome";
 import { playedHistory, playedText } from "../lib/setHistory";
 import { matchVideo, parseDuration, youtubeId } from "../../../shared/match";
 import { IconBack, IconCart, IconExternal, IconShare, IconHeart, IconPlay, IconPlus, IconMic, IconPrint, IconWave } from "../components/icons";
@@ -307,6 +308,7 @@ export default function ReleasePage() {
             <IconMic /> Mithören
           </button>
         </div>
+        <Hint id="release-tracks">Tippe auf einen Track zum Reinhören, für BPM, Key, Cue-Punkte und Notizen. Fehlt ein Tempo, hilft „Mithören“.</Hint>
         <table className="tracks">
           <tbody>
             {tl.flatMap((t, i) => {
@@ -730,9 +732,28 @@ function TrackEdit({
 /** YouTube direkt laden, wenn eingewilligt; sonst erst nach Antippen (vorher keine Verbindung zu Google) */
 function VideoFacade({ id, title }: { id: string; title: string }) {
   const [on, setOn] = useState(false);
+  const [asked, setAsked] = useState(ytConsent() !== null);
   const allowed = ytConsent() === "yes";
   if (on || allowed)
-    return <iframe className="video" src={`https://www.youtube-nocookie.com/embed/${id}?playsinline=1&rel=0${on ? "&autoplay=1" : ""}`} title={title} allow="autoplay; encrypted-media" allowFullScreen loading="lazy" />;
+    return (
+      <>
+        <iframe className="video" src={`https://www.youtube-nocookie.com/embed/${id}?playsinline=1&rel=0${on ? "&autoplay=1" : ""}`} title={title} allow="autoplay; encrypted-media" allowFullScreen loading="lazy" />
+        {/* Erst beim ersten Video fragen, nicht beim Start der App */}
+        {on && !asked && (
+          <div className="hint" role="note">
+            <span className="hint-text">Videos künftig gleich laden? YouTube erfährt dann beim Öffnen einer Platte deine IP-Adresse.</span>
+            <span className="row" style={{ gap: 6 }}>
+              <button className="hint-x" onClick={() => (setYtConsent("yes"), setAsked(true))}>
+                Ja
+              </button>
+              <button className="hint-x ghost" onClick={() => (setYtConsent("no"), setAsked(true))}>
+                Nein
+              </button>
+            </span>
+          </div>
+        )}
+      </>
+    );
   return (
     <button className="video video-facade press" onClick={() => setOn(true)} aria-label={`${title} abspielen`}>
       <span className="video-play">

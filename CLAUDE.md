@@ -31,7 +31,8 @@ Wichtige Eigenheiten:
 - Marktplatz-Seiten von Discogs sind für Server gesperrt (403). Angebote kommen über Inventare der Lieblingshändler (API) oder optional das Lesezeichen.
 - BPM: Deezer-Album-Matching (`server/audio.ts`, `POST /api/audio/release`, Artist wird getrennt geprüft), dann Einzelsuche, dann Analyse der Hörprobe im Web Worker (`shared/audioAnalysis.ts`, Bassdrum-Band + Kammfilter, Style als Tempo-Hinweis). Gemessen an echten Hörproben: rund 95 % richtig. Keys: nur Analyse (Schätzung) oder GetSongBPM. AcousticBrainz liefert für typische Platten nichts.
 - Hörproben laufen über den Server (`/api/audio/preview`). iOS: Ton nur nach Tippen, deshalb ein einziges Audio-Element wiederverwenden.
-- Schriften selbst gehostet (`@fontsource-variable/*`), YouTube erst nach Antippen (DSGVO).
+- Schriften selbst gehostet (`@fontsource-variable/*`), YouTube erst nach Antippen (DSGVO). Die Frage „Videos künftig gleich laden?“ kommt beim ersten angetippten Video (`VideoFacade` in `Release.tsx`), nicht beim Start.
+- Führung: Begrüßung in vier Schritten nach dem ersten Login (`web/src/components/Welcome.tsx`, localStorage `crate:welcome:<name>`), Einmal-Hinweise mit `<Hint id>` (localStorage `crate:hint:<id>`). Browser-Tests überspringen die Begrüßung, außer `WELCOME=1` (`tools/e2e/welcome.cjs`).
 - Sets teilen: das ganze Set steckt im Link (`/sets/shared#…`, `shared/setShare.ts`), nichts auf dem Server. Empfänger sieht, welche Platten er hat, und übernimmt die spielbaren Tracks. Nach dem Login führt `crate:after` (sessionStorage) zum Link zurück.
 - Kisten-Vorlagen: KV `crateTemplates` (`web/src/lib/crateTemplates.ts`). Set-Verlauf: `web/src/lib/setHistory.ts`. Cue-Punkte: `TrackMeta.cueIn/cueOut`.
 - Teilen-Karten (Story 1080×1920): `web/src/lib/shareCard.ts`, Discogs-Bilder über `/api/img` (CORS).
@@ -71,6 +72,7 @@ node tools/e2e/share.cjs    # Kisten-Vorlagen, Set per Link teilen und übernehm
 node tools/e2e/feed.cjs     # Feed: Filter Jahrzehnt/Preis, Wischen nach links
 node tools/e2e/grade.cjs    # Zustand bewerten, Pressung anzeigen
 node tools/e2e/value.cjs    # Wert der Sammlung, wertvollste Platten, Sortierung nach Wert (dauert ~5 Min.)
+node tools/e2e/welcome.cjs  # Begrüßung, Einmal-Hinweis
 node tools/e2e/listen.cjs   # Mithören mit simuliertem Mikrofon (124 BPM, Am)
 node tools/brand/logo.cjs   # Icons aus dem Logo neu erzeugen
 node tools/e2e/sharecard.cjs # Teilen-Karten (Profil, Set) als PNG erzeugen

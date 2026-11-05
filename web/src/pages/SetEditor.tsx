@@ -20,6 +20,7 @@ import { estimateBpm, estimateVibe } from "../../../shared/vibes";
 import { matchesQuery } from "../../../shared/textSearch";
 import { bpmDelta, keyDistance, parseKey } from "../../../shared/music";
 import { parseDuration } from "../../../shared/match";
+import { Hint } from "../components/Welcome";
 
 const CURVES: [Curve, string, string][] = [
   ["warmup", "Warm-up", "ruhig starten, langsam steigern"],
@@ -531,6 +532,8 @@ function OrderList(p: {
 
   if (!p.tracks.length) return null;
   return (
+    <>
+    <Hint id="set-order">Zieh einen Track am Griff an eine neue Stelle. Tippe zwischen zwei Tracks für eine Mix-Notiz, mit + fügst du einen Track ein.</Hint>
     <div className={`order${drag ? " is-dragging" : ""}`} ref={list} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
       <button className="order-insert" onClick={() => p.onInsert(0)} aria-label="Am Anfang einfügen">
         <IconPlus />
@@ -585,6 +588,7 @@ function OrderList(p: {
         );
       })}
     </div>
+    </>
   );
 }
 

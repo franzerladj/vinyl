@@ -975,3 +975,17 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .ta-tube { fill: none; stroke: #c9c2b6; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
 .ta-head { fill: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .tonearm, .tonearm.down { transition: none; animation: none; } }
+
+/* Begrüßung und Einmal-Hinweise */
+.welcome { display: flex; flex-direction: column; gap: 10px; padding: 6px 4px 4px; }
+.welcome-mark { display: grid; place-items: center; margin: 4px 0 6px; }
+.welcome-pos { font-size: 12px; letter-spacing: 0.12em; color: var(--accent); font-weight: 700; }
+.welcome-title { margin: 0; font: 900 40px/0.95 var(--font-brand); font-stretch: 62%; font-variation-settings: "wdth" 62; text-transform: uppercase; letter-spacing: -0.005em; }
+.welcome-text { margin: 0; font-size: 16px; line-height: 1.5; color: var(--text-2); min-height: 7.5em; }
+.welcome-dots { display: flex; gap: 6px; margin: 4px 0 8px; }
+.welcome-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--surface-3); transition: background 0.25s, width 0.3s var(--ease); }
+.welcome-dots span.on { width: 22px; border-radius: 4px; background: var(--accent); }
+.hint { display: flex; align-items: center; gap: 12px; margin: 10px 0; padding: 12px 12px 12px 14px; border-radius: 14px; background: var(--surface); box-shadow: inset 3px 0 0 var(--accent), inset 0 0 0 0.5px var(--hairline); }
+.hint-text { flex: 1; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--text); }
+.hint-x { flex: none; border: 0; border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 700; background: var(--accent); color: #fff; cursor: pointer; white-space: nowrap; }
+.hint-x.ghost { background: var(--surface-2); color: var(--text); }

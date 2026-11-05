@@ -178,7 +178,7 @@ function Overview() {
         </div>
 
         <Group title="Bibliothek">
-          <Row icon={<IconSync />} color="#30d158" label="Synchronisation & Analyse" value={stats?.lastSync ? relDay(stats.lastSync) : "nie"} to="/settings/sync" />
+          <Row icon={<IconSync />} color="#30d158" label="Abgleich & Ergänzen" value={stats?.lastSync ? relDay(stats.lastSync) : "nie"} to="/settings/sync" />
           <Row icon={<IconCoin />} color="#ff9f0a" label="Preise & Shopping" value={stats?.currency} to="/settings/prices" />
           <Row icon={<IconWave />} color="#5e5ce6" label="Datenquellen" value={`${sources} aktiv`} to="/settings/sources" />
         </Group>
@@ -317,7 +317,7 @@ function SyncPage() {
 
   return (
     <>
-      <NavBar title="Synchronisation" backTo="/settings" backLabel="Einstellungen" />
+      <NavBar title="Abgleich" backTo="/settings" backLabel="Einstellungen" />
       <div className="page settings-list">
         <div>
           <button className="btn primary block lg" disabled={busy} onClick={run("Sync", async () => (await autoPipeline({ force: true }), "Alles synchron und analysiert"))}>
@@ -469,7 +469,7 @@ function SourcesPage() {
     ["Discogs", true, "Sammlung, Wantlist, Tracklists, Preise"],
     ["Deezer", true, "BPM und Hörproben, passender Mix nach Titel und Länge"],
     ["YouTube", true, "Videos von der Discogs-Seite zum Reinhören"],
-    ["Audio-Analyse", true, "Energie, Tempo und Tonart aus der Hörprobe, auf dem Gerät"],
+    ["Hörproben ausmessen", true, "Energie, Tempo und Tonart aus der Hörprobe, auf dem Gerät"],
     ["Texterkennung", true, "Katalognummer vom Foto lesen, auf dem Gerät"],
     ["Last.fm", me?.features.lastfm, "Vibe-Tags von Hörern"],
     ["GetSongBPM", me?.features.keyLookup, "BPM und Tonart"],
