@@ -27,7 +27,8 @@ const install = require("./mock.cjs");
   await page.waitForTimeout(400);
   await page.screenshot({ path: __dirname + "/dig2.png" });
   await page.waitForTimeout(1500);
-  console.log("first", t1, "want calls", wants.length, "rail on", await page.locator(".dig-rail .on").count());
+  // Doppeltippen = Mag ich: kein Wantlist-Aufruf, Daumen ist an
+  console.log("first", t1, "want calls (soll 0)", wants.length, "gemocht", await page.locator(".dig-rail .on.like").count());
   console.log("errors", errors);
   await b.close();
 })();

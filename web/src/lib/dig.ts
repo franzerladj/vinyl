@@ -43,6 +43,14 @@ export async function markSeen(id: number) {
   await setKV("digSeen", seen.slice(-SEEN_MAX));
 }
 
+/** Gemochte Platten (getrennt von der Wantlist), neueste zuerst */
+export const likedCards = () => getKV<(DigCard & { likedAt: number })[]>("digLiked", []);
+
+export async function setLiked(c: DigCard, on: boolean) {
+  const list = (await likedCards()).filter((x) => x.id !== c.id);
+  await setKV("digLiked", on ? [{ ...c, likedAt: Date.now() }, ...list].slice(0, 500) : list);
+}
+
 /** Weggewischtes für eine Weile ganz ausblenden */
 export async function markSkipped(id: number) {
   const s = await getKV<number[]>("digSkipped", []);

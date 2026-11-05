@@ -1,7 +1,7 @@
 // Digging-Feed: eine Platte pro Bildschirm, senkrecht wischen, Hörprobe läuft automatisch.
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { buildQueue, digDetail, loadWeights, markSeen, markSkipped, moreLike, recordAction, type DigDetail, type DigFilter } from "../lib/dig";
+import { buildQueue, digDetail, likedCards, loadWeights, markSeen, markSkipped, moreLike, recordAction, setLiked, type DigDetail, type DigFilter } from "../lib/dig";
 import { previewUrl } from "../lib/free";
 import { addToCollection, addWant } from "../lib/sync";
 import { discogsSellUrl, money } from "../lib/format";
@@ -9,7 +9,7 @@ import { toast } from "../lib/store";
 import { getKV, setKV } from "../lib/db";
 import { ytConsent } from "../lib/theme";
 import { haptic, keepParens } from "../components/bits";
-import { IconBack, IconCart, IconFilter, IconHeart, IconPlay, IconPlus, IconShare, IconSleeves, IconX } from "../components/icons";
+import { IconBack, IconCart, IconFilter, IconHeart, IconPlay, IconPlus, IconShare, IconSleeves, IconThumb, IconX } from "../components/icons";
 import { DECADES, decadeLabel, passesPrice, top, type DigCard } from "../../../shared/dig";
 import { parseDuration } from "../../../shared/match";
 
@@ -31,7 +31,16 @@ export default function Dig() {
   const [audioState, setAudioState] = useState<Audio>("idle");
   const [detail, setDetail] = useState<Map<number, DigDetail>>(new Map());
   const [wanted, setWanted] = useState<Set<number>>(new Set());
-  const [burst, setBurst] = useState<number | null>(null);
+  const [burst, setBurst] = useState<{ id: number; kind: "like" | "want" } | null>(null);
+  const [liked, setLikedIds] = useState<Set<number>>(new Set());
+  const [likedOpen, setLikedOpen] = useState(false);
+  const [likedList, setLikedList] = useState<Awaited<ReturnType<typeof likedCards>>>([]);
+  useEffect(() => {
+    void likedCards().then((l) => {
+      setLikedList(l);
+      setLikedIds(new Set(l.map((x) => x.id)));
+    });
+  }, []);
   const [video, setVideo] = useState<string | null>(null);
   const [sheet, setSheet] = useState<number | null>(null);
   const audio = useRef<HTMLAudioElement>(null);
@@ -152,7 +161,7 @@ export default function Dig() {
     if (wanted.has(c.id)) return;
     haptic(20);
     setWanted((s) => new Set(s).add(c.id));
-    setBurst(c.id);
+    setBurst({ id: c.id, kind: "want" });
     setTimeout(() => setBurst(null), 900);
     void recordAction(c, "want");
     try {
@@ -164,6 +173,26 @@ export default function Dig() {
         return n;
       });
       toast((e as Error).message);
+    }
+  };
+
+  /** Mag ich: ins Geschmacksprofil, nicht auf die Wantlist. Nochmal tippen nimmt es zurück. */
+  const like = (c: DigCard, next = false) => {
+    const on = !liked.has(c.id);
+    haptic(on ? 16 : 6);
+    setLikedIds((s) => {
+      const n = new Set(s);
+      if (on) n.add(c.id);
+      else n.delete(c.id);
+      return n;
+    });
+    void recordAction(c, on ? "like" : "unlike");
+    void setLiked(c, on).then(() => likedCards().then(setLikedList));
+    if (on) {
+      setBurst({ id: c.id, kind: "like" });
+      setTimeout(() => setBurst(null), 900);
+      // Nach dem Wischen geht es direkt zur nächsten Platte
+      if (next) setTimeout(() => feed.current?.querySelectorAll(".dig-card")[active + 1]?.scrollIntoView({ behavior: "smooth" }), 420);
     }
   };
 
@@ -204,14 +233,18 @@ export default function Dig() {
     const dx = t.clientX - s.x;
     const dy = t.clientY - s.y;
     if (s.horizontal === undefined && Math.hypot(dx, dy) > 10) s.horizontal = Math.abs(dx) > Math.abs(dy) * 1.3;
-    if (s.horizontal) setDrag({ id: s.id, dx: Math.min(0, dx) });
+    if (s.horizontal) setDrag({ id: s.id, dx: Math.max(-200, Math.min(200, dx)) });
   };
   const onTouchEnd = (c: DigCard) => {
     const s = touch.current;
     touch.current = null;
     if (!s?.horizontal) return;
-    if ((drag?.dx ?? 0) < -90) skip(c);
-    else setDrag(null);
+    const dx = drag?.dx ?? 0;
+    if (dx < -90) skip(c);
+    else {
+      if (dx > 90 && !liked.has(c.id)) like(c, true);
+      setDrag(null);
+    }
   };
 
   const more = async (c: DigCard) => {
@@ -237,13 +270,13 @@ export default function Dig() {
   };
 
   // Einfaches Tippen: Ton an/aus, sofort (iOS erlaubt play() nur direkt im Tipp).
-  // Doppeltippen: auf die Wantlist, der zweite Tipp stellt den Ton wieder her.
+  // Doppeltippen: Mag ich, der zweite Tipp stellt den Ton wieder her.
   const onCardTap = (c: DigCard) => {
     const now = Date.now();
     toggleSound();
     if (now - lastTap.current < 320) {
       lastTap.current = 0;
-      void want(c);
+      if (!liked.has(c.id)) like(c);
       return;
     }
     lastTap.current = now;
@@ -271,6 +304,10 @@ export default function Dig() {
             </button>
           ))}
         </div>
+        <button className="dig-icon dig-liked-btn" onClick={() => setLikedOpen(true)} aria-label={`Gemochte Platten (${likedList.length})`}>
+          <IconThumb />
+          {likedList.length > 0 && <span>{likedList.length}</span>}
+        </button>
         <button className={`dig-icon${extraFilters ? " on" : ""}`} onClick={() => setFilterOpen(true)} aria-label="Filter">
           <IconFilter />
         </button>
@@ -314,7 +351,8 @@ export default function Dig() {
             >
               {near && (
                 <div className="dig-swipe" style={drag?.id === c.id ? { transform: `translateX(${drag.dx}px) rotate(${drag.dx / 40}deg)`, transition: "none" } : undefined}>
-                  {drag?.id === c.id && <span className="dig-nope" style={{ opacity: Math.min(1, -drag.dx / 90) }}>Weg</span>}
+                  {drag?.id === c.id && drag.dx < 0 && <span className="dig-nope" style={{ opacity: Math.min(1, -drag.dx / 90) }}>Weg</span>}
+                  {drag?.id === c.id && drag.dx > 0 && <span className="dig-yes" style={{ opacity: Math.min(1, drag.dx / 90) }}>Mag ich</span>}
                   <img className="dig-bg" src={c.cover} alt="" />
                   <div className="dig-shade" />
                   <div className="dig-stage" onClick={() => onCardTap(c)}>
@@ -323,7 +361,7 @@ export default function Dig() {
                     ) : (
                       <img className={`dig-cover${i === active && audioState === "playing" ? " playing" : ""}`} src={c.cover} alt="" />
                     )}
-                    {burst === c.id && <span className="dig-burst">♥</span>}
+                    {burst?.id === c.id && (burst.kind === "like" ? <span className="dig-burst like"><IconThumb /></span> : <span className="dig-burst">♥</span>)}
                   </div>
                   <div className="dig-info">
                     <span className="dig-reason">{c.reason}</span>
@@ -370,6 +408,10 @@ export default function Dig() {
                     )}
                   </div>
                   <div className="dig-rail">
+                    <button className={liked.has(c.id) ? "on like" : ""} onClick={() => like(c)} aria-label="Mag ich" aria-pressed={liked.has(c.id)}>
+                      <IconThumb />
+                      <small>{liked.has(c.id) ? "Gemocht" : "Mag ich"}</small>
+                    </button>
                     <button className={isWanted ? "on" : ""} onClick={() => want(c)} aria-label="Auf die Wantlist">
                       <IconHeart />
                       <small>{isWanted ? "Gemerkt" : "Want"}</small>
@@ -402,6 +444,34 @@ export default function Dig() {
         })}
       </div>
 
+      {likedOpen && (
+        <div className="dig-sheet-bg" onClick={() => setLikedOpen(false)}>
+          <div className="dig-sheet stack" onClick={(e) => e.stopPropagation()}>
+            <div className="sheet-grab" />
+            <b style={{ fontSize: 18 }}>Mag ich</b>
+            <span className="sub">Gemochte Platten prägen, was der Feed dir zeigt. Auf die Wantlist kommen sie nur, wenn du sie dort hinsetzt.</span>
+            {likedList.length === 0 && <span className="sub">Noch nichts. Nach rechts wischen, doppeltippen oder den Daumen nehmen.</span>}
+            <div className="dig-liked">
+              {likedList.map((x) => (
+                <div key={x.id} className="dig-liked-row">
+                  <img src={x.thumb || x.cover} alt="" onClick={() => nav(`/release/${x.id}`, { viewTransition: true })} />
+                  <button className="dig-liked-main" onClick={() => nav(`/release/${x.id}`, { viewTransition: true })}>
+                    <b>{keepParens(x.title)}</b>
+                    <span>{[x.artist, x.label, x.year].filter(Boolean).join(" · ")}</span>
+                  </button>
+                  {wanted.has(x.id) ? (
+                    <span className="dig-liked-tag">Want</span>
+                  ) : (
+                    <button className="dig-liked-want" onClick={() => want(x)} aria-label="Auf die Wantlist">
+                      <IconHeart />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {filterOpen && (
         <div className="dig-sheet-bg" onClick={() => setFilterOpen(false)}>
           <div className="dig-sheet stack" onClick={(e) => e.stopPropagation()}>

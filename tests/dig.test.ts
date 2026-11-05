@@ -56,3 +56,15 @@ describe("Feed-Filter", () => {
     expect(passesPrice(25, 20)).toBe(false);
   });
 });
+
+describe("Mag ich", () => {
+  it("stärkt Style, Label und Artist, schwächer als die Wantlist; Zurücknehmen hebt es auf", async () => {
+    const { emptyWeights, learn } = await import("../shared/dig");
+    const c = { styles: ["Disco"], label: "Salsoul", artist: "Loleatta" };
+    const liked = learn(emptyWeights(), c, "like");
+    const wanted = learn(emptyWeights(), c, "want");
+    expect(liked.style.Disco).toBeGreaterThan(0);
+    expect(liked.style.Disco).toBeLessThan(wanted.style.Disco);
+    expect(learn(liked, c, "unlike").style.Disco).toBe(0);
+  });
+});

@@ -28,9 +28,10 @@ export interface DigWeights {
 
 export const emptyWeights = (): DigWeights => ({ style: {}, label: {}, artist: {} });
 
-export type DigAction = "want" | "collect" | "more" | "skip" | "dwell";
+export type DigAction = "want" | "collect" | "like" | "unlike" | "more" | "skip" | "dwell";
 
-const DELTA: Record<DigAction, number> = { want: 3, collect: 3, more: 2, dwell: 0.5, skip: -2 };
+// „Mag ich“ zählt fast so stark wie die Wantlist, landet aber nicht dort
+const DELTA: Record<DigAction, number> = { want: 3, collect: 3, like: 2.5, unlike: -2.5, more: 2, dwell: 0.5, skip: -2 };
 
 /** Aktion auf einer Karte verschiebt die Gewichte von Style, Label und Artist (gedeckelt auf ±20) */
 export function learn(w: DigWeights, c: Pick<DigCard, "styles" | "label" | "artist">, action: DigAction): DigWeights {
