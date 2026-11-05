@@ -339,7 +339,7 @@ export function Seg<T extends string>({ value, options, onChange }: { value: T; 
   }, [value, options]);
   return (
     <div className="seg" ref={ref} role="tablist">
-      {thumb && <span className="seg-thumb" style={thumb} />}
+      {thumb && <span className="seg-thumb" style={{ left: 0, width: thumb.width, transform: `translateX(${thumb.left}px)` }} />}
       {options.map(([v, l]) => (
         <button
           key={v}

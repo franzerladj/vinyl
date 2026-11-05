@@ -201,7 +201,7 @@ details[open] > summary::after { transform: rotate(270deg); }
 .chip.on .sub { color: inherit; opacity: 0.6; }
 .seg { position: relative; display: flex; background: var(--surface-2); border-radius: 10px; padding: 2px; isolation: isolate; }
 .seg button { position: relative; z-index: 1; flex: 1; border: 0; background: transparent; min-height: 32px; padding: 0 10px; font-size: 13.5px; font-weight: 600; color: var(--text); cursor: pointer; white-space: nowrap; }
-.seg-thumb { position: absolute; z-index: 0; top: 2px; bottom: 2px; border-radius: 8px; background: var(--seg-thumb); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); transition: left 0.45s var(--spring), width 0.45s var(--spring); }
+.seg-thumb { position: absolute; z-index: 0; top: 2px; bottom: 2px; border-radius: 8px; background: var(--seg-thumb); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); transition: transform 0.45s var(--spring), width 0.45s var(--spring); will-change: transform; }
 
 /* --------- Listen --------- */
 .list { display: flex; flex-direction: column; }
@@ -267,7 +267,8 @@ details[open] > summary::after { transform: rotate(270deg); }
 .empty { text-align: center; color: var(--text-2); padding: 48px 24px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .empty b { color: var(--text); font-size: 19px; }
 .empty svg.disc { width: 92px; height: 92px; opacity: 0.9; }
-.skel { background: linear-gradient(90deg, var(--surface) 0%, var(--surface-2) 40%, var(--surface) 80%); background-size: 200% 100%; animation: shimmer 1.4s linear infinite; border-radius: 8px; }
+.skel { background: var(--surface-2); animation: skel-pulse 1.2s ease-in-out infinite alternate; border-radius: 8px; }
+@keyframes skel-pulse { from { opacity: 0.55; } to { opacity: 1; } }
 @keyframes shimmer { to { background-position: -200% 0; } }
 
 /* --------- Bottom-Sheet --------- */
@@ -335,7 +336,7 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .vinyl::before { content: ""; position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 30deg, transparent 0 20%, rgba(255, 255, 255, 0.1) 25%, transparent 30% 70%, rgba(255, 255, 255, 0.07) 75%, transparent 80%); }
 .vinyl .label { position: absolute; inset: 33%; border-radius: 50%; background-size: cover; background-position: center; box-shadow: 0 0 0 2px #0b0b0b; }
 .vinyl .label::after { content: ""; position: absolute; inset: 46%; border-radius: 50%; background: var(--bg); }
-.vinyl.spin { animation: slide-out 1.1s var(--ease) 0.25s both, spin 1.8s linear infinite; }
+.vinyl.spin { will-change: transform; animation: slide-out 1.1s var(--ease) 0.25s both, spin 1.8s linear infinite; }
 @keyframes slide-out { from { translate: 0 0; } to { translate: 26% 0; } }
 @keyframes spin { from { rotate: 0deg; } to { rotate: 360deg; } }
 .stage h1 { font: 800 26px/1.15 var(--font-display); letter-spacing: -0.03em; margin: 22px 0 2px; }
@@ -370,10 +371,10 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 ::view-transition-group(hero-cover) { animation-duration: 0.45s; animation-timing-function: var(--ease); z-index: 5; }
 ::view-transition-group(nav), ::view-transition-group(topbar) { animation: none; }
 .nav { view-transition-name: nav; }
-@keyframes vt-push-out { to { transform: translateX(-26%); filter: brightness(0.8); } }
+@keyframes vt-push-out { to { transform: translateX(-26%); opacity: 0.7; } }
 @keyframes vt-push-in { from { transform: translateX(100%); } }
 @keyframes vt-pop-out { to { transform: translateX(100%); } }
-@keyframes vt-pop-in { from { transform: translateX(-26%); filter: brightness(0.8); } }
+@keyframes vt-pop-in { from { transform: translateX(-26%); opacity: 0.7; } }
 @keyframes vt-fade-out { to { opacity: 0; } }
 @keyframes vt-fade-in { from { opacity: 0; transform: translateY(6px); } }
 
@@ -426,8 +427,10 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .toolbar { position: sticky; top: 0; z-index: 12; padding: 8px var(--gutter) 10px; margin-top: calc(-1 * env(safe-area-inset-top)); padding-top: calc(env(safe-area-inset-top) + 8px); background: var(--bg); border-bottom: 0.5px solid transparent; transition: background-color 0.25s, border-color 0.25s; }
 /* Klebt die Leiste oben, wird sie zur Glas-Leiste mit kleinem Titel (wie iOS), statt in der Luft zu hängen */
 .bar-on .toolbar { background: var(--material); -webkit-backdrop-filter: saturate(180%) blur(22px); backdrop-filter: saturate(180%) blur(22px); border-bottom-color: var(--hairline); }
-.toolbar::before { content: attr(data-title); display: block; height: 0; overflow: hidden; text-align: center; font-weight: 600; font-size: 17px; line-height: 30px; opacity: 0; transition: height 0.3s var(--ease), opacity 0.2s; }
-.bar-on .toolbar::before { height: 30px; opacity: 1; margin-top: -2px; }
+.toolbar::before { content: attr(data-title); display: block; height: 0; overflow: hidden; text-align: center; font-weight: 600; font-size: 17px; line-height: 30px; opacity: 0; transform: translateY(6px); transition: opacity 0.22s var(--ease), transform 0.32s var(--ease); }
+/* Höhe kommt dazu, der Abstand darunter geht weg: der Inhalt springt nicht */
+.bar-on .toolbar::before { height: 30px; opacity: 1; transform: none; margin-top: -2px; }
+.bar-on .toolbar { margin-bottom: -28px; }
 .toolbar-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; overflow-x: auto; scrollbar-width: none; margin-left: calc(-1 * var(--gutter)); margin-right: calc(-1 * var(--gutter)); padding: 0 var(--gutter); }
 .toolbar-row::-webkit-scrollbar { display: none; }
 .tool-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border-radius: 999px; border: 0; background: var(--surface-2); color: var(--text); font-size: 14px; font-weight: 600; cursor: pointer; transition: transform 0.35s var(--spring), background-color 0.2s; }
@@ -661,10 +664,11 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .tap-track { fill: none; stroke: var(--surface-3); stroke-width: 3; }
 .tap-progress { fill: none; stroke: var(--ok); stroke-width: 3; stroke-linecap: round; transition: stroke-dasharray 0.35s var(--ease); }
 .tap-btn.hit { animation: tap-hit 0.18s ease-out; }
-@keyframes tap-hit { 0% { transform: scale(0.92); filter: brightness(1.25); } 100% { transform: scale(1); filter: none; } }
+@keyframes tap-hit { 0% { transform: scale(0.92); } 100% { transform: scale(1); } }
 .tap-ring { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
-.tap-ring.beat { animation: tap-beat 0.35s ease-out; }
-@keyframes tap-beat { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
+.tap-ring::after { content: ""; position: absolute; inset: 0; border-radius: 50%; border: 3px solid var(--accent); opacity: 0; }
+.tap-ring.beat::after { animation: tap-beat 0.35s ease-out; will-change: transform, opacity; }
+@keyframes tap-beat { 0% { transform: scale(1); opacity: 0.7; } 100% { transform: scale(1.27); opacity: 0; } }
 .tap-info { grid-area: info; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .tap-bpm { font-size: 34px; font-weight: 800; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; line-height: 1; }
 .tap-bpm small { font-size: 15px; font-weight: 600; color: var(--text-2); letter-spacing: 0; }
@@ -983,8 +987,9 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .welcome-title { margin: 0; font: 900 40px/0.95 var(--font-brand); font-stretch: 62%; font-variation-settings: "wdth" 62; text-transform: uppercase; letter-spacing: -0.005em; }
 .welcome-text { margin: 0; font-size: 16px; line-height: 1.5; color: var(--text-2); min-height: 7.5em; }
 .welcome-dots { display: flex; gap: 6px; margin: 4px 0 8px; }
-.welcome-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--surface-3); transition: background 0.25s, width 0.3s var(--ease); }
-.welcome-dots span.on { width: 22px; border-radius: 4px; background: var(--accent); }
+.welcome-dots { gap: 2px; }
+.welcome-dots span { width: 22px; height: 8px; border-radius: 4px; background: var(--surface-3); transform: scaleX(0.36); transform-origin: left; transition: background-color 0.25s, transform 0.35s var(--spring); margin-right: -8px; }
+.welcome-dots span.on { transform: none; background: var(--accent); margin-right: 6px; }
 .hint { display: flex; align-items: center; gap: 12px; margin: 10px 0; padding: 12px 12px 12px 14px; border-radius: 14px; background: var(--surface); box-shadow: inset 3px 0 0 var(--accent), inset 0 0 0 0.5px var(--hairline); }
 .hint-text { flex: 1; min-width: 0; font-size: 14px; line-height: 1.4; color: var(--text); }
 .hint-x { flex: none; border: 0; border-radius: 999px; padding: 7px 12px; font: inherit; font-size: 13px; font-weight: 700; background: var(--accent); color: #fff; cursor: pointer; white-space: nowrap; }
@@ -1000,3 +1005,16 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .verdict-price { font-size: 13px; opacity: 0.85; margin-top: 4px; }
 .label-link { color: inherit; text-decoration: underline; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 3px; }
 .stylus-hero { display: flex; flex-direction: column; gap: 8px; padding: 6px 2px 18px; }
+
+/* Listen beim Öffnen sanft gestaffelt einblenden (nur die ersten Einträge, nur transform/opacity) */
+.list > :nth-child(-n + 10) { animation: rise 0.42s var(--ease) both; }
+.list > :nth-child(2) { animation-delay: 0.025s; }
+.list > :nth-child(3) { animation-delay: 0.05s; }
+.list > :nth-child(4) { animation-delay: 0.075s; }
+.list > :nth-child(5) { animation-delay: 0.1s; }
+.list > :nth-child(6) { animation-delay: 0.125s; }
+.list > :nth-child(7) { animation-delay: 0.15s; }
+.list > :nth-child(8) { animation-delay: 0.175s; }
+.list > :nth-child(9) { animation-delay: 0.2s; }
+.list > :nth-child(10) { animation-delay: 0.225s; }
+@media (prefers-reduced-motion: reduce) { .list > * { animation: none !important; } }

@@ -56,5 +56,28 @@ createRoot(document.getElementById("root")!).render(
   </StrictMode>,
 );
 
+// Startbildschirm aus index.html: Schriftzug erst zeigen, wenn die Markenschrift da ist,
+// beim ersten Öffnen kurz stehen lassen, danach (z. B. nach Neuladen) gleich ausblenden.
+const splash = document.getElementById("splash");
+if (splash) {
+  let seen = false;
+  try {
+    seen = sessionStorage.getItem("crate:splash") === "1";
+    sessionStorage.setItem("crate:splash", "1");
+  } catch {
+    /* egal */
+  }
+  Promise.all([document.fonts.load('900 40px "Archivo Variable"'), document.fonts.load('600 12px "JetBrains Mono Variable"')])
+    .then(() => splash.classList.add("fonts"))
+    .catch(() => undefined);
+  const minMs = seen ? 300 : 1400;
+  requestAnimationFrame(() =>
+    setTimeout(() => {
+      splash.classList.add("out");
+      setTimeout(() => splash.remove(), 450);
+    }, Math.max(0, minMs - performance.now())),
+  );
+}
+
 // Merker für das automatische Neuladen nach einem Update zurücksetzen, sobald die App läuft
 setTimeout(() => sessionStorage.removeItem("crate:reloaded"), 10_000);
