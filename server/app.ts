@@ -9,7 +9,7 @@ import { oauthHmacHeader, oauthHmacParams } from "./oauthSign";
 import { recognizeRecord, recognizeRecordFree, tagVibes, tagVibesFree, type VibeInput } from "./ai";
 import { fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
 import { lastfmTags } from "./lastfm";
-import { sanitizeProfile, type CrateProfile } from "../shared/profile";
+import { profileEmpty, sanitizeProfile, type CrateProfile } from "../shared/profile";
 
 type C = Context<{ Bindings: Env; Variables: { cfg: Config } }>;
 
@@ -560,7 +560,7 @@ app.post("/api/profile/me", async (c) => {
   const s = await session(c);
   if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
   const p = { ...sanitizeProfile(await c.req.json()), updatedAt: Date.now() };
-  const empty = !p.djName && !p.bio && !p.location && !p.links.length && !p.styles.length && !p.spotlight;
+  const empty = profileEmpty(p);
   const u = s.username.toLowerCase();
   if (empty) await cfg.kv.delete(profKey(u));
   else await cfg.kv.put(profKey(u), JSON.stringify(p));

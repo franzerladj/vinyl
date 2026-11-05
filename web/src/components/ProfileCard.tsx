@@ -1,6 +1,6 @@
-// Crate-Profil, wie Freunde es sehen: Name, Ort, Bio, Links, Styles, Platte des Moments
+// Crate-Profil, wie Freunde es sehen: Name, Ort, Bio, Links, Styles, Platte des Moments, Setup
 import { Link } from "react-router-dom";
-import { linkText, LINK_LABEL, type CrateProfile } from "../../../shared/profile";
+import { GEAR, linkText, LINK_LABEL, PLAY_LABEL, type CrateProfile } from "../../../shared/profile";
 import { Avatar, Cover } from "./bits";
 
 const LINK_COLOR: Record<string, string> = {
@@ -52,6 +52,30 @@ export function ProfileHeader({ username, avatar, discogsName, location, profile
             <span>{profile.spotlight.artist}</span>
           </span>
         </Link>
+      )}
+      {(profile?.setup || profile?.plays) && <SetupRider profile={profile} />}
+    </div>
+  );
+}
+
+/** Setup wie ein Technical Rider: Platz in Mono, Gerät daneben */
+export function SetupRider({ profile }: { profile: CrateProfile }) {
+  const rows = GEAR.filter((g) => profile.setup?.[g.id]);
+  return (
+    <div className="rider">
+      <div className="rider-head">
+        <span>Setup</span>
+        {profile.plays && <b className={profile.plays === "vinyl" ? "on" : ""}>{PLAY_LABEL[profile.plays]}</b>}
+      </div>
+      {rows.length > 0 && (
+        <dl>
+          {rows.map((g) => (
+            <div key={g.id}>
+              <dt>{g.short}</dt>
+              <dd>{profile.setup![g.id]}</dd>
+            </div>
+          ))}
+        </dl>
       )}
     </div>
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { linkText, parseLink, sanitizeProfile } from "../shared/profile";
+import { linkText, parseLink, profileEmpty, sanitizeProfile } from "../shared/profile";
 
 describe("Crate-Profil", () => {
   it("erkennt Dienste und kürzt die Anzeige", () => {
@@ -21,5 +21,20 @@ describe("Crate-Profil", () => {
     expect(p.styles).toEqual(["House", "Disco", "a", "b", "c", "d"]);
     expect(p.links).toHaveLength(5);
     expect(p.spotlight?.cover).toBeUndefined();
+  });
+});
+
+describe("Setup im Profil", () => {
+  it("übernimmt nur bekannte Plätze und kürzt", () => {
+    const p = sanitizeProfile({ links: [], styles: [], setup: { decks: " 2× Technics SL-1210 MK2 ", mixer: "x".repeat(200), hack: "<b>", carts: "" } as never, plays: "vinyl" });
+    expect(p.setup).toEqual({ decks: "2× Technics SL-1210 MK2", mixer: "x".repeat(80) });
+    expect(p.plays).toBe("vinyl");
+    expect(profileEmpty(p)).toBe(false);
+  });
+  it("leeres Setup fällt weg, unbekannte Spielweise auch", () => {
+    const p = sanitizeProfile({ links: [], styles: [], setup: { decks: "  " }, plays: "cdj" as never });
+    expect(p.setup).toBeUndefined();
+    expect(p.plays).toBeUndefined();
+    expect(profileEmpty(p)).toBe(true);
   });
 });

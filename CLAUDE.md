@@ -26,7 +26,7 @@ Wichtige Eigenheiten:
 - Discogs-Anfragen gehen direkt vom Browser an api.discogs.com (Signatur über `/api/sign`), weil Discogs pro IP limitiert (60/min) und Cloudflare-IPs geteilt sind. Warteschlange in `web/src/lib/api.ts`.
 - Auch der Login läuft vom Gerät (`web/src/lib/auth.ts`, Server: `/api/auth/start|pending|sign-access|finish|identity`). OAuth-Parameter stehen in Query/Formular statt im Header, weil Discogs bei `/oauth/*` die CORS-Vorabprüfung ablehnt. Rückfall: `/api/auth/login` und `/api/auth/exchange` (Server, mit Wiederholungen). Vorschau-Deployments haben keine Discogs-Secrets, Login nur auf Produktion testbar (`node tools/e2e/login.cjs`).
 - Freunde finden: Discogs hat keine Personensuche. Freiwilliges Crate-Verzeichnis im KV (`dir:<name>`, `dirn:<namensteil>:<name>`, Routen `/api/dir/*`), dazu exakter Discogs-Name live und Lieblingshändler (`searchPeople` in `web/src/lib/friends.ts`).
-- Crate-Profil (DJ-Name, Bio, Ort, bis 5 Links, 6 Styles, Platte des Moments): `shared/profile.ts` (Prüfung, Link-Erkennung), KV `prof:<name>`, Routen `/api/profile/me|:u` (nur angemeldet), Karte `web/src/components/ProfileCard.tsx`, Editor unter `/settings/profile`.
+- Crate-Profil (DJ-Name, Bio, Ort, bis 5 Links, 6 Styles, Platte des Moments, Setup als Rider mit `GEAR`-Plätzen und Spielweise `plays`, Vorschläge per `<datalist>`): `shared/profile.ts` (Prüfung, Link-Erkennung), KV `prof:<name>`, Routen `/api/profile/me|:u` (nur angemeldet), Karte `web/src/components/ProfileCard.tsx`, Editor unter `/settings/profile`.
 - Textsuche überall über `shared/textSearch.ts` (`matchesQuery`): Satzzeichen/Klammern egal, & = and, Akzente egal. Keine `toLowerCase().includes()`-Suchen mehr bauen.
 - Marktplatz-Seiten von Discogs sind für Server gesperrt (403). Angebote kommen über Inventare der Lieblingshändler (API) oder optional das Lesezeichen.
 - BPM: Deezer-Album-Matching (`server/audio.ts`, `POST /api/audio/release`, Artist wird getrennt geprüft), dann Einzelsuche, dann Analyse der Hörprobe im Web Worker (`shared/audioAnalysis.ts`, Bassdrum-Band + Kammfilter, Style als Tempo-Hinweis). Gemessen an echten Hörproben: rund 95 % richtig. Keys: nur Analyse (Schätzung) oder GetSongBPM. AcousticBrainz liefert für typische Platten nichts.
@@ -59,7 +59,7 @@ node tools/e2e/ship.cjs     # Versand-Schätzung
 node tools/e2e/tap.cjs      # Tap-Tempo
 node tools/e2e/push.cjs     # Mitteilungen-Seite und Freund-Rückmeldung
 node tools/e2e/people.cjs   # Freunde suchen mit Vorschlägen
-node tools/e2e/profile.cjs  # Crate-Profil bearbeiten und beim Freund ansehen
+node tools/e2e/profile.cjs  # Crate-Profil samt Setup bearbeiten und beim Freund ansehen
 node tools/e2e/pick.cjs     # Verzeihende Suche (Platte des Moments, Sammlung)
 node tools/e2e/nobpm.cjs    # Beschriften: Platten ohne Tempo
 node tools/e2e/setgen.cjs   # Set erzeugen: ein Track pro Platte, nie hintereinander

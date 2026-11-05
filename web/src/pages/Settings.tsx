@@ -20,7 +20,7 @@ import { ShareCardSheet } from "../components/ShareCard";
 import { renderProfileCard } from "../lib/shareCard";
 import { inviteLink } from "../lib/friends";
 import { loadMyProfile, saveMyProfile } from "../lib/profile";
-import { linkText, LINK_LABEL, parseLink, sanitizeProfile, type CrateProfile } from "../../../shared/profile";
+import { GEAR, linkText, LINK_LABEL, parseLink, PLAY_LABEL, sanitizeProfile, type CrateProfile, type GearSlot, type PlayMode } from "../../../shared/profile";
 import { DEFAULT_PREFS, disablePush, enablePush, isIOS, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs } from "../lib/push";
 import { DEFAULT_SHIP, type ShipConfig } from "../../../shared/shipping";
 import {
@@ -173,7 +173,7 @@ function Overview() {
               </div>
             </div>
           </div>
-          <Row label="Crate-Profil bearbeiten" sub="DJ-Name, Bio, Links, Platte des Moments" to="/settings/profile" />
+          <Row label="Crate-Profil bearbeiten" sub="DJ-Name, Bio, Links, Setup, Platte des Moments" to="/settings/profile" />
           <Row label="Profil auf Discogs" value="↗" onClick={() => window.open(`https://www.discogs.com/user/${me?.username}`, "_blank")} right={<span />} />
         </div>
 
@@ -945,6 +945,36 @@ function ProfileEditPage() {
               );
             })}
           </div>
+        </Group>
+
+        <Group title="Setup" foot="Was bei dir steht, zu Hause oder im Club. Tippe in ein Feld für Vorschläge oder schreib frei.">
+          <div className="chip-wrap" style={{ padding: "12px 14px 6px" }} role="radiogroup" aria-label="Spielweise">
+            {(Object.keys(PLAY_LABEL) as PlayMode[]).map((m) => (
+              <button key={m} role="radio" aria-checked={p.plays === m} className={`chip ${p.plays === m ? "on" : ""}`} onClick={() => (haptic(5), set({ plays: p.plays === m ? undefined : m }))}>
+                {PLAY_LABEL[m]}
+              </button>
+            ))}
+          </div>
+          {GEAR.map((g) => (
+            <label key={g.id} className="pe-field">
+              <span>{g.label}</span>
+              <input
+                className="input"
+                maxLength={80}
+                list={`gear-${g.id}`}
+                autoCapitalize="words"
+                autoCorrect="off"
+                placeholder={g.placeholder}
+                value={p.setup?.[g.id] ?? ""}
+                onChange={(e) => set({ setup: { ...p.setup, [g.id as GearSlot]: e.target.value } })}
+              />
+              <datalist id={`gear-${g.id}`}>
+                {g.suggest.map((x) => (
+                  <option key={x} value={x} />
+                ))}
+              </datalist>
+            </label>
+          ))}
         </Group>
 
         <Group title="Platte des Moments">
