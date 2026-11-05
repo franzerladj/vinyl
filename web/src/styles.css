@@ -426,7 +426,8 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 /* Werkzeugleiste unter dem großen Titel (Suche, Sortieren, Filter) */
 .toolbar { position: sticky; top: 0; z-index: 12; padding: 8px var(--gutter) 10px; margin-top: calc(-1 * env(safe-area-inset-top)); padding-top: calc(env(safe-area-inset-top) + 8px); background: var(--bg); border-bottom: 0.5px solid transparent; transition: background-color 0.25s, border-color 0.25s; }
 /* Klebt die Leiste oben, wird sie zur Glas-Leiste mit kleinem Titel (wie iOS), statt in der Luft zu hängen */
-.bar-on .toolbar { background: var(--material); -webkit-backdrop-filter: saturate(180%) blur(22px); backdrop-filter: saturate(180%) blur(22px); border-bottom-color: var(--hairline); }
+/* Deckend statt Glas: sonst scheint unter den Knöpfen ein Streifen der Liste durch */
+.bar-on .toolbar { background: var(--bg); border-bottom-color: var(--hairline); }
 .toolbar::before { content: attr(data-title); display: block; height: 0; overflow: hidden; text-align: center; font-weight: 600; font-size: 17px; line-height: 30px; opacity: 0; transform: translateY(6px); transition: opacity 0.22s var(--ease), transform 0.32s var(--ease); }
 /* Höhe kommt dazu, der Abstand darunter geht weg: der Inhalt springt nicht */
 .bar-on .toolbar::before { height: 30px; opacity: 1; transform: none; margin-top: -2px; }
@@ -444,7 +445,7 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .result-line { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 13px; font-weight: 500; padding: 4px 0 2px; }
 
 /* Abschnitte mit klebenden Überschriften */
-.section-head { position: sticky; top: var(--sticky-top, 0px); z-index: 5; display: flex; align-items: baseline; gap: 8px; padding: 12px var(--gutter) 6px; margin: 0 calc(-1 * var(--gutter)); background: color-mix(in srgb, var(--bg) 94%, transparent); -webkit-backdrop-filter: saturate(180%) blur(22px); backdrop-filter: saturate(180%) blur(22px); font: 700 15px/1.2 var(--font-display); letter-spacing: -0.01em; }
+.section-head { position: sticky; top: var(--sticky-top, 0px); z-index: 5; display: flex; align-items: baseline; gap: 8px; padding: 12px var(--gutter) 6px; margin: 0 calc(-1 * var(--gutter)); background: var(--bg); box-shadow: 0 -1px 0 var(--bg); font: 700 15px/1.2 var(--font-display); letter-spacing: -0.01em; }
 .section-head .n { color: var(--text-3); font-size: 13px; font-weight: 600; }
 
 /* A–Z-Leiste am rechten Rand */
