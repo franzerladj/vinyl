@@ -179,7 +179,7 @@ export default function Dig() {
     }
   };
 
-  /** Mag ich: ins Geschmacksprofil, nicht auf die Wantlist. Nochmal tippen nimmt es zurück. */
+  /** Like: ins Geschmacksprofil, nicht auf die Wantlist. Nochmal tippen nimmt es zurück. */
   const like = (c: DigCard, next = false) => {
     const on = !liked.has(c.id);
     haptic(on ? 16 : 6);
@@ -211,7 +211,7 @@ export default function Dig() {
     }
   };
 
-  /** Weg damit: Karte fliegt nach links raus, die nächste rückt an ihre Stelle */
+  /** Skip: Karte fliegt nach links raus, die nächste rückt an ihre Stelle */
   const skip = (c: DigCard) => {
     haptic(8);
     void recordAction(c, "skip");
@@ -273,7 +273,7 @@ export default function Dig() {
   };
 
   // Einfaches Tippen: Ton an/aus, sofort (iOS erlaubt play() nur direkt im Tipp).
-  // Doppeltippen: Mag ich, der zweite Tipp stellt den Ton wieder her.
+  // Doppeltippen: Like, der zweite Tipp stellt den Ton wieder her.
   const onCardTap = (c: DigCard) => {
     const now = Date.now();
     toggleSound();
@@ -307,7 +307,7 @@ export default function Dig() {
             </button>
           ))}
         </div>
-        <button className="dig-icon dig-liked-btn" onClick={() => setLikedOpen(true)} aria-label={`Gemochte Platten (${likedList.length})`}>
+        <button className="dig-icon dig-liked-btn" onClick={() => setLikedOpen(true)} aria-label={`Likes (${likedList.length})`}>
           <IconThumb />
           {likedList.length > 0 && <span>{likedList.length}</span>}
         </button>
@@ -354,8 +354,8 @@ export default function Dig() {
             >
               {near && (
                 <div className="dig-swipe" style={drag?.id === c.id ? { transform: `translateX(${drag.dx}px) rotate(${drag.dx / 40}deg)`, transition: "none" } : undefined}>
-                  {drag?.id === c.id && drag.dx < 0 && <span className="dig-nope" style={{ opacity: Math.min(1, -drag.dx / 90) }}>Weg</span>}
-                  {drag?.id === c.id && drag.dx > 0 && <span className="dig-yes" style={{ opacity: Math.min(1, drag.dx / 90) }}>Mag ich</span>}
+                  {drag?.id === c.id && drag.dx < 0 && <span className="dig-nope" style={{ opacity: Math.min(1, -drag.dx / 90) }}>Skip</span>}
+                  {drag?.id === c.id && drag.dx > 0 && <span className="dig-yes" style={{ opacity: Math.min(1, drag.dx / 90) }}>Like</span>}
                   <div className="dig-body">
                     <div className="dig-stage" onClick={() => onCardTap(c)}>
                       {i === active && video ? (
@@ -429,21 +429,21 @@ export default function Dig() {
       <DigCoach ready={!loading && cards.length > 0} />
       {current && (
         <nav className="dig-bar" aria-label="Aktionen">
-          <button onClick={() => skip(current)} aria-label="Weg" data-coach="skip">
+          <button onClick={() => skip(current)} aria-label="Skip" data-coach="skip">
             <IconX />
-            <small>Weg</small>
+            <small>Skip</small>
           </button>
           <button onClick={() => more(current)} aria-label="Mehr davon" data-coach="more">
             <IconSleeves />
             <small>Mehr davon</small>
           </button>
-          <button className={`big${liked.has(current.id) ? " on like" : ""}`} onClick={() => like(current)} aria-label="Mag ich" aria-pressed={liked.has(current.id)} data-coach="like">
+          <button className={`big${liked.has(current.id) ? " on like" : ""}`} onClick={() => like(current)} aria-label="Like" aria-pressed={liked.has(current.id)} data-coach="like">
             <IconThumb />
-            <small>{liked.has(current.id) ? "Gemocht" : "Mag ich"}</small>
+            <small>{liked.has(current.id) ? "Liked" : "Like"}</small>
           </button>
           <button className={wanted.has(current.id) ? "on" : ""} onClick={() => want(current)} aria-label="Auf die Wantlist" data-coach="want">
             <IconHeart />
-            <small>{wanted.has(current.id) ? "Gemerkt" : "Want"}</small>
+            <small>{wanted.has(current.id) ? "Wanted" : "Want"}</small>
           </button>
           <button onClick={() => setMoreMenu(true)} aria-label="Optionen" data-coach="menu">
             <IconMore />
@@ -467,9 +467,9 @@ export default function Dig() {
         <div className="dig-sheet-bg" onClick={() => setLikedOpen(false)}>
           <div className="dig-sheet stack" onClick={(e) => e.stopPropagation()}>
             <div className="sheet-grab" />
-            <b style={{ fontSize: 18 }}>Mag ich</b>
-            <span className="sub">Gemochte Platten prägen, was der Feed dir zeigt. Auf die Wantlist kommen sie nur, wenn du sie dort hinsetzt.</span>
-            {likedList.length === 0 && <span className="sub">Noch nichts. Nach rechts wischen, doppeltippen oder den Daumen nehmen.</span>}
+            <b style={{ fontSize: 18 }}>Likes</b>
+            <span className="sub">Deine Likes prägen, was der Feed dir zeigt. Auf die Wantlist kommen sie nur, wenn du sie dort hinsetzt.</span>
+            {likedList.length === 0 && <span className="sub">Noch keine Likes. Nach rechts wischen, doppeltippen oder den Daumen nehmen.</span>}
             <div className="dig-liked">
               {likedList.map((x) => (
                 <div key={x.id} className="dig-liked-row">

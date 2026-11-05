@@ -1,4 +1,4 @@
-// Digging: Mag ich (Knopf, Doppeltippen), Liste der gemochten Platten, nichts landet auf der Wantlist
+// Digging: Like (Knopf, Doppeltippen), Likes-Liste, nichts landet auf der Wantlist
 const { chromium, devices } = require("playwright");
 const install = require("./mock.cjs");
 (async () => {
@@ -17,10 +17,10 @@ const install = require("./mock.cjs");
     await page.goto("http://localhost:8787/dig");
     await page.waitForSelector(".dig-bar", { timeout: 30000 });
     await page.waitForTimeout(800);
-    await page.locator(".dig-bar button[aria-label='Mag ich']").first().dispatchEvent("click");
+    await page.locator(".dig-bar button[aria-label='Like']").first().dispatchEvent("click");
     await page.waitForTimeout(300);
     await page.screenshot({ path: `${__dirname}/like-${name}.png` });
-    const pressed = await page.locator(".dig-bar button[aria-label='Mag ich']").first().getAttribute("aria-pressed");
+    const pressed = await page.locator(".dig-bar button[aria-label='Like']").first().getAttribute("aria-pressed");
     const weights = await page.evaluate(() => new Promise((r) => { const q = indexedDB.open("crate"); q.onsuccess = () => { const g = q.result.transaction("kv").objectStore("kv").get("digLiked"); g.onsuccess = () => r((g.result?.value ?? []).length); }; }));
     await page.locator(".dig-liked-btn").dispatchEvent("click");
     await page.waitForSelector(".dig-liked-row");

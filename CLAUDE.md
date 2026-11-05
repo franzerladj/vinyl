@@ -45,7 +45,7 @@ Wichtige Eigenheiten:
 - Label-Vollständigkeit: `shared/labels.ts` (`labelCompletion`, je Katalognummer auf Vinyl, andere Pressung zählt), `web/src/lib/labels.ts` (`/labels/{id}/releases`, max. 5 Seiten, KV `label:<id>` 7 Tage), Seiten `/labels` und `/label/:id`, Link vom Label auf der Platten-Seite.
 - Nadel-Stunden: `shared/stylus.ts` (gespielte Sets seit Einbau, Länge aus Track-Laufzeiten, sonst 6 Min. je Track, plus eigene Minuten), `web/src/lib/stylus.ts` (KV `stylus`), Seite `/settings/stylus`, Erinnerung auf Start ab 90 % der Herstellerangabe. Keine erfundenen Lebensdauern, die trägt man selbst ein.
 - Digging-Ansicht: flacher Tinte-Hintergrund (kein Weichzeichner), Hülle mit Platte (`.dig-deck`, Platte fährt beim Abspielen raus und dreht sich), Cover/Video und Infos mittig, Aktionsleiste unten (`.dig-bar`: Weg, Mehr davon, Mag ich, Want, Optionen-Menü mit Hab ich/Kaufen/Teilen). Einführung vor dem ersten Diggen: `web/src/components/DigCoach.tsx` (Spotlight je Knopf, localStorage `crate:coach:dig`; Browser-Tests überspringen sie außer `COACH=1`, `tools/e2e/coach.cjs`).
-- Digging „Mag ich“: getrennt von der Wantlist, Aktion `like`/`unlike` in `shared/dig.ts` (+2,5, Wantlist +3, Weg −2), Liste KV `digLiked` (`likedCards`/`setLiked` in `web/src/lib/dig.ts`). Nach rechts wischen oder Doppeltippen = Mag ich, nach links = Weg. Daumen-Knopf oben öffnet die Liste.
+- Digging „Like“: getrennt von der Wantlist, Aktion `like`/`unlike` in `shared/dig.ts` (+2,5, Wantlist +3, Weg −2), Liste KV `digLiked` (`likedCards`/`setLiked` in `web/src/lib/dig.ts`). Nach rechts wischen oder Doppeltippen = Like, nach links = Skip. Feed-Begriffe bewusst englisch (Like, Liked, Likes, Skip, Want, Wanted), keine holprigen Übersetzungen wie „Gemocht“. Daumen-Knopf oben öffnet die Liste.
 - Jahresrückblick: `shared/year.ts` (`yearReview`: Neuzugänge, Labels, Styles, gespielte Sets, Stunden, meistgespielt), Seite `/year` (`YearPage.tsx`, im Januar das Vorjahr), Story-Karte `renderYearCard` (Nullen fallen weg, ohne Sets „Neu in der Kiste“). Auf Start von November bis Januar verlinkt.
 - Repress-Alarm: `shared/repress.ts` (`newPressings`: beim ersten Blick nur Vinyl aus diesem/letztem Jahr, danach unbekannte), `web/src/lib/repress.ts` (`/masters/{id}/versions`, je Master höchstens wöchentlich, 15 pro Durchlauf, KV `repressSeen`/`repressNews`), Schritt „Neue Pressungen“ im `autoPipeline`, Hinweis-Karte und Abzeichen auf der Wantlist, Mitteilung über `localNotify("wants")`.
 - Sammlungswert (`shared/value.ts`, `web/src/lib/value.ts`): Gesamtwert direkt von Discogs (`/users/{u}/collection/value`, Min/Median/Max aus Verkäufen, eine Anfrage, KV `collValue`, alle 12 h). Einzelwert je Platte: Preisempfehlung für den eigenen Zustand, sonst VG+, sonst günstigstes Angebot. Blatt und Sortierung „Wert“ in `Collection.tsx`.
@@ -88,7 +88,7 @@ node tools/e2e/welcome.cjs  # Begrüßung, Einmal-Hinweis
 node tools/e2e/fair.cjs     # Plattenbörse: Hast du schon / Wantlist
 node tools/e2e/labels.cjs   # Label vervollständigen
 node tools/e2e/stylus.cjs   # Nadel-Stunden
-node tools/e2e/like.cjs     # Digging: Mag ich, Liste, keine Wantlist
+node tools/e2e/like.cjs     # Digging: Like, Likes-Liste, keine Wantlist
 node tools/e2e/year.cjs     # Jahresrückblick und Story-Karte
 node tools/e2e/repress.cjs  # Repress-Alarm auf der Wantlist
 node tools/e2e/gigcal.cjs   # Gig: Zeiten, Kalender-Angebot, Google-Link

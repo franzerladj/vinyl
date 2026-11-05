@@ -11,13 +11,13 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { title: "So diggst du", text: "Hoch und runter wischen: nächste Platte. Aufs Cover tippen: Hörprobe an und aus. Nach rechts wischen oder doppeltippen: Mag ich. Nach links wischen: weg damit." },
-  { target: '[data-coach="like"] svg', title: "Mag ich", text: "Gefällt dir. Der Feed zeigt dir mehr in diese Richtung. Auf die Wantlist kommt dabei nichts." },
-  { target: '[data-coach="skip"] svg', title: "Weg", text: "Nicht dein Ding. Die Platte verschwindet, Ähnliches kommt seltener." },
+  { title: "So diggst du", text: "Hoch und runter wischen: nächste Platte. Aufs Cover tippen: Hörprobe an und aus. Nach rechts wischen oder doppeltippen: Like. Nach links wischen: Skip." },
+  { target: '[data-coach="like"] svg', title: "Like", text: "Gefällt dir. Der Feed zeigt dir mehr in diese Richtung. Auf die Wantlist kommt dabei nichts." },
+  { target: '[data-coach="skip"] svg', title: "Skip", text: "Nicht dein Ding. Die Platte verschwindet, Ähnliches kommt seltener." },
   { target: '[data-coach="more"] svg', title: "Mehr davon", text: "Gleich mehr vom selben Label und Artist, direkt als nächste Karten." },
   { target: '[data-coach="want"] svg', title: "Want", text: "Direkt auf deine Wantlist bei Discogs. Crate sagt Bescheid, wenn sie günstig zu haben ist." },
   { target: '[data-coach="menu"] svg', title: "Optionen", text: "Hab ich schon, bei Discogs kaufen, teilen oder zur Platten-Seite." },
-  { target: ".dig-liked-btn", title: "Deine gemochten Platten", text: "Hier liegt alles, was du gemocht hast. Von da aus geht es mit einem Tipp auf die Wantlist." },
+  { target: ".dig-liked-btn", title: "Deine Likes", text: "Hier liegt alles, was du geliked hast. Von da aus geht es mit einem Tipp auf die Wantlist." },
   { target: ".dig-top .dig-icon:last-child", title: "Filter", text: "Nach Jahrzehnt und Preis filtern. Oben in der Leiste wählst du Styles." },
 ];
 
