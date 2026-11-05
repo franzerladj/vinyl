@@ -39,7 +39,9 @@ import {
   IconWave,
   IconUser,
   IconShare,
+  IconRecord,
 } from "../components/icons";
+import { computeStylus, hoursText, saveStylus, today } from "../lib/stylus";
 
 const TABLES = ["releases", "collection", "wants", "tracks", "recordMeta", "sets", "marketStats", "listings", "kv", "priceHistory", "priceSuggestions", "wantMeta", "sellers", "friends", "friendItems"] as const;
 
@@ -124,6 +126,8 @@ export default function Settings() {
       return <NotificationsPage />;
     case "profile":
       return <ProfileEditPage />;
+    case "stylus":
+      return <StylusPage />;
     default:
       return <Overview />;
   }
@@ -146,6 +150,7 @@ function Overview() {
   const [yt, setYt] = useState(ytConsent() === "yes");
   const pushOn = useLiveQuery(() => getKV("pushOn", false), [], false);
   const profile = useLiveQuery(() => getKV<MyProfile | null>("myProfile", null));
+  const stylus = useLiveQuery(() => computeStylus(), []);
   const stats = useLiveQuery(async () => ({
     friends: await db.friends.count(),
     lent: (await db.recordMeta.toArray()).filter((m) => m.lentTo).length,
@@ -186,6 +191,7 @@ function Overview() {
         <Group title="Freunde">
           <Row icon={<IconUser />} color="#bf5af2" label="Freunde" value={stats?.friends ?? 0} to="/friends" />
           <Row icon={<IconShare />} color="#ff9f0a" label="Verliehene Platten" value={stats?.lent ?? 0} to="/friends?tab=lent" />
+          <Row icon={<IconRecord />} color="#8a5a2b" label="Nadel-Stunden" value={stylus ? hoursText(stylus.minutes) : "einrichten"} to="/settings/stylus" />
         </Group>
 
         <Group title="Darstellung" foot="„System“ folgt der Einstellung deines Handys.">
@@ -1062,6 +1068,86 @@ function ProfileEditPage() {
           make={() => renderProfileCard({ username: me?.username ?? "", name: discogs?.name, avatar: discogs?.avatar, location: discogs?.location, profile: sanitizeProfile(p), records, inviteUrl: inviteLink() })}
         />
         <p className="tiny" style={{ textAlign: "center" }}>Sichtbar für angemeldete Crate-Nutzer, die dich als Freund hinzufügen. In der Suche erscheinst du nur, wenn du auf der Freunde-Seite „Für Freunde auffindbar“ eingeschaltet hast.</p>
+      </div>
+    </>
+  );
+}
+
+/** Nadel-Stunden: seit dem letzten Wechsel, aus gespielten Sets und eigenen Sessions */
+function StylusPage() {
+  const data = useLiveQuery(() => computeStylus(), []);
+  const [life, setLife] = useState("");
+  useEffect(() => {
+    if (data?.state.lifeHours) setLife(String(data.state.lifeHours));
+  }, [data?.state.lifeHours]);
+  const st = data?.state ?? { since: today(), extraMinutes: 0 };
+  // Beim ersten Öffnen ab heute zählen; der Einbautag lässt sich unten zurückdatieren
+  useEffect(() => {
+    if (data === null) void saveStylus({ since: today(), extraMinutes: 0 });
+  }, [data]);
+  const add = (min: number) => {
+    haptic(8);
+    void saveStylus({ ...st, extraMinutes: Math.max(0, (st.extraMinutes || 0) + min) });
+  };
+  const wear = data?.wear ?? null;
+  return (
+    <>
+      <NavBar title="Nadel-Stunden" backTo="/settings" backLabel="Einstellungen" />
+      <div className="page settings-list">
+        <div className="stylus-hero">
+          <span className="eyebrow">Seit {new Date(st.since).toLocaleDateString("de-DE", { day: "numeric", month: "long", year: "numeric" })}</span>
+          <b className="value-big">{data ? hoursText(data.minutes) : "0 Min."}</b>
+          {wear != null ? (
+            <>
+              <div className="shared-meter" aria-hidden>
+                <span style={{ width: `${wear * 100}%`, background: wear >= 0.9 ? "var(--bad)" : wear >= 0.7 ? "var(--warn)" : undefined }} />
+              </div>
+              <span className="sub">{wear >= 1 ? "Die Lebensdauer ist erreicht. Zeit für eine neue Nadel." : wear >= 0.9 ? "Bald wechseln: eine abgenutzte Nadel klingt dumpfer und schadet den Rillen." : `${Math.round(wear * 100)} % der angegebenen Lebensdauer`}</span>
+            </>
+          ) : (
+            <span className="sub">Trag unten die Lebensdauer laut Hersteller ein, dann zeigt Crate, wann ein Wechsel ansteht.</span>
+          )}
+        </div>
+        <Group title="Sessions ohne Set" foot="Gespielte Sets zählen von selbst, mit der Länge ihrer Tracks. Üben und Digging zu Hause trägst du hier ein.">
+          <div className="chip-wrap" style={{ padding: "12px 14px" }}>
+            {[
+              [30, "+30 Min."],
+              [60, "+1 Std."],
+              [180, "+3 Std."],
+              [-60, "−1 Std."],
+            ].map(([m, l]) => (
+              <button key={l} className="chip" onClick={() => add(m as number)}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </Group>
+        <Group title="Nadel">
+          <label className="pe-field">
+            <span>Eingebaut am</span>
+            <input className="input" type="date" max={today()} value={st.since} onChange={(e) => e.target.value && void saveStylus({ ...st, since: e.target.value })} />
+          </label>
+          <label className="pe-field">
+            <span>Lebensdauer laut Hersteller (Stunden)</span>
+            <input
+              className="input"
+              inputMode="numeric"
+              placeholder="steht in der Anleitung der Nadel"
+              value={life}
+              onChange={(e) => setLife(e.target.value.replace(/\D/g, ""))}
+              onBlur={() => void saveStylus({ ...st, lifeHours: Number(life) || undefined })}
+            />
+          </label>
+          <Row
+            label="Neue Nadel eingebaut"
+            sub="Zählt ab heute neu"
+            onClick={() => {
+              if (!confirm("Neue Nadel eingebaut? Die Stunden zählen ab heute neu.")) return;
+              haptic(15);
+              void saveStylus({ since: today(), lifeHours: Number(life) || undefined, extraMinutes: 0 }).then(() => toast("Neue Nadel, frischer Klang"));
+            }}
+          />
+        </Group>
       </div>
     </>
   );

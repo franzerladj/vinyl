@@ -7,6 +7,7 @@ import { autoPipeline, isPipelineRunning } from "../lib/sync";
 import { toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, markHero } from "../components/bits";
 import { DjOverview } from "../components/DjOverview";
+import { computeStylus, hoursText } from "../lib/stylus";
 import { IconCamera, IconCart, IconList, IconPlay, IconSync, IconTag } from "../components/icons";
 
 /** Begrüßung mit DJ-Bezug je nach Tageszeit. Wechselt täglich, damit sie nicht jeden Tag gleich ist. */
@@ -29,6 +30,7 @@ export function greeting(name: string, opts: { setToday?: boolean; now?: Date } 
 }
 
 export default function Home() {
+  const stylus = useLiveQuery(() => computeStylus(), []);
   const me = useStore((s) => s.me);
   const jobs = useStore((s) => s.jobs);
   const busy = Object.keys(jobs).length > 0;
@@ -166,6 +168,14 @@ export default function Home() {
               <div className="tiny" style={{ marginTop: 8 }}>Läuft im Hintergrund weiter, du kannst die App normal benutzen.</div>
             </div>
           </div>
+        )}
+        {stylus?.wear != null && stylus.wear >= 0.9 && (
+          <Link to="/settings/stylus" viewTransition className="hint" style={{ color: "inherit", textDecoration: "none" }}>
+            <span className="hint-text">
+              <b>Nadel bald wechseln.</b> {hoursText(stylus.minutes)} seit dem letzten Wechsel, {Math.round(stylus.wear * 100)} % der Lebensdauer.
+            </span>
+            <span className="chev">›</span>
+          </Link>
         )}
         {stats && stats.records === 0 && !busy ? (
           <Empty title="Deine Kiste ist noch leer" action={<button className="btn primary" onClick={sync}>Sammlung von Discogs laden</button>}>
