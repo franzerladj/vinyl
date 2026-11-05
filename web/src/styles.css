@@ -1051,3 +1051,15 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
   .dig-rail svg { width: 22px; height: 22px; padding: 10px; }
   .dig-rail small { font-size: 10px; }
 }
+
+/* Jahresrückblick */
+.year-big { margin: 0; font: 900 120px/0.85 var(--font-brand); font-stretch: 62%; font-variation-settings: "wdth" 62; letter-spacing: -0.01em; }
+.year .stat span { font-size: 13px; }
+.year-fan { display: flex; justify-content: center; padding: 6px 0 4px; }
+.year-fan .cover { width: 92px; height: 92px; margin: 0 -10px; box-shadow: var(--shadow-cover); }
+.year-fan .cover:nth-child(odd) { transform: rotate(-5deg); }
+.year-fan .cover:nth-child(even) { transform: rotate(4deg) translateY(6px); }
+.year-entry { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 12px; margin-bottom: 12px; padding: 16px 18px; border-radius: var(--r-lg); background: var(--text); color: var(--bg); text-decoration: none; }
+.year-entry .eyebrow { grid-column: 1; color: #ff5b14; }
+.year-entry b { grid-column: 1; font: 900 34px/1 var(--font-brand); font-stretch: 62%; font-variation-settings: "wdth" 62; text-transform: uppercase; }
+.year-entry .chev { grid-column: 2; grid-row: 1 / 3; font-size: 28px; }

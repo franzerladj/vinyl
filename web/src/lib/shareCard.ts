@@ -464,6 +464,8 @@ export interface YearCardInput {
   hours: number;
   covers: (string | undefined)[];
   mostPlayed: { title: string; artist: string; n: number }[];
+  /** Ersatz, wenn noch keine Sets gespielt wurden */
+  newest?: { title: string; artist: string }[];
   label?: string;
   style?: string;
 }
@@ -486,12 +488,13 @@ export async function renderYearCard(p: YearCardInput): Promise<Blob> {
   ctx.fillStyle = "#f3ede2";
   ctx.fillText(String(p.year), W / 2, 560);
   // Drei Zahlen
-  const stats: [string, string][] = [
-    [String(p.added), p.added === 1 ? "NEUE PLATTE" : "NEUE PLATTEN"],
-    [String(p.sets), p.sets === 1 ? "SET" : "SETS"],
-    [String(p.hours), p.hours === 1 ? "STUNDE" : "STUNDEN"],
-  ];
-  const colW = (W - 160) / 3;
+  // Nullen weglassen: lieber eine große Zahl als drei traurige
+  const stats = ([
+    [p.added, p.added === 1 ? "NEUE PLATTE" : "NEUE PLATTEN"],
+    [p.sets, p.sets === 1 ? "SET" : "SETS"],
+    [p.hours, p.hours === 1 ? "STUNDE" : "STUNDEN"],
+  ] as [number, string][]).filter(([n], i) => n > 0 || i === 0).map(([n, l]) => [String(n), l] as [string, string]);
+  const colW = (W - 160) / stats.length;
   stats.forEach(([n, l], i) => {
     const x = 80 + colW * i + colW / 2;
     ctx.font = `900 ${stretch()}150px ${HEAD}`;
@@ -521,6 +524,23 @@ export async function renderYearCard(p: YearCardInput): Promise<Blob> {
     });
   }
   let y = covers.length ? 1210 : 950;
+  if (!p.mostPlayed.length && p.newest?.length) {
+    ctx.font = `800 26px ${BODY}`;
+    ctx.fillStyle = ACCENT;
+    ctx.letterSpacing = "6px";
+    ctx.fillText("NEU IN DER KISTE", W / 2, y);
+    ctx.letterSpacing = "0px";
+    y += 64;
+    for (const m of p.newest.slice(0, 3)) {
+      ctx.font = `700 40px ${BODY}`;
+      ctx.fillStyle = "#fff";
+      ctx.fillText(fit(ctx, m.title, W - 200), W / 2, y);
+      ctx.font = `500 28px ${BODY}`;
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.fillText(fit(ctx, m.artist, W - 200), W / 2, y + 40);
+      y += 100;
+    }
+  }
   if (p.mostPlayed.length) {
     ctx.font = `800 26px ${BODY}`;
     ctx.fillStyle = ACCENT;

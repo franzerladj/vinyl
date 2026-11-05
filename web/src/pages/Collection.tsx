@@ -359,6 +359,7 @@ export default function Collection() {
         items={[
           { label: "Platte hinzufügen", icon: <IconCamera />, onClick: () => nav("/scan", { viewTransition: true }) },
           { label: "Wert der Sammlung", icon: <IconCart />, onClick: () => setSheet("value") },
+          { label: "Jahresrückblick", icon: <IconRecord />, onClick: () => nav("/year", { viewTransition: true }) },
           { label: "Labels vervollständigen", icon: <IconRecord />, onClick: () => nav("/labels", { viewTransition: true }) },
           { label: "Beschriften (Einleger & Sticker)", icon: <IconTag />, onClick: () => nav("/stickers", { viewTransition: true }) },
           { label: "Alles abgleichen & ergänzen", icon: <IconSync />, onClick: () => autoPipeline({ force: true }).then(() => toast("Alles synchron und analysiert"), (e) => toast(e.message)) },

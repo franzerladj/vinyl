@@ -229,6 +229,14 @@ export default function Home() {
       <div className="page home-rest">
         {!(stats && stats.records === 0 && !busy) && (
           <>
+            {/* Ab November bis Januar: Jahresrückblick anbieten */}
+            {[10, 11, 0].includes(new Date().getMonth()) && (
+              <Link to="/year" viewTransition className="year-entry press">
+                <span className="eyebrow">Dein Jahr auf Platte</span>
+                <b>Rückblick {new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear()}</b>
+                <span className="chev">›</span>
+              </Link>
+            )}
             <div className="grid3">
               <Link to="/collection" viewTransition className="stat">
                 <b>{stats?.records ?? "–"}</b>
