@@ -124,6 +124,8 @@ export default function Home() {
           <IconSync />
         </div>
       )}
+      {/* Erster Bildschirm: Begrüßung, Diggen, Zuletzt hinzugefügt. Der Rest kommt beim Scrollen. */}
+      <div className="home-first">
       <header className="home-hero">
         <div className="home-hero-bg" aria-hidden="true">
           {(stats?.recent ?? []).filter(Boolean).slice(0, 4).map((r) => r && <img key={r.id} src={r.cover || r.thumb} alt="" />)}
@@ -145,8 +147,9 @@ export default function Home() {
         <p className="home-hero-status">{statusLine}</p>
       </header>
 
-      <div className="page">
-        {busy && (
+      <div className="page home-first-body">
+        {/* Große Fortschritts-Karte nur beim ersten Laden; danach reicht die kleine Anzeige unten */}
+        {busy && !stats?.records && (
           <div className="card progress-card" style={{ marginBottom: 12, animation: "pop .5s var(--spring) both" }} aria-live="polite">
             <span className="spin" />
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -218,7 +221,14 @@ export default function Home() {
                 </div>
               </>
             ) : null}
+          </>
+        )}
+      </div>
+      </div>
 
+      <div className="page home-rest">
+        {!(stats && stats.records === 0 && !busy) && (
+          <>
             <div className="grid3">
               <Link to="/collection" viewTransition className="stat">
                 <b>{stats?.records ?? "–"}</b>

@@ -1020,3 +1020,10 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 @media (prefers-reduced-motion: reduce) { .list > * { animation: none !important; } }
 /* Klammern in Titeln als Ganzes umbrechen */
 .nobr { white-space: nowrap; }
+
+/* Startseite: der erste Bildschirm gehört Begrüßung, Diggen und den Neuzugängen */
+.home-first { min-height: calc(100svh - var(--nav-h) - env(safe-area-inset-bottom)); display: flex; flex-direction: column; }
+.home-first-body { flex: 1; display: flex; flex-direction: column; justify-content: center; padding-bottom: 4px; }
+.home-first-body .dig-entry { margin-bottom: 8px; }
+.home-first-body > h2, .home-first-body .carousel { flex: none; }
+.home-rest { padding-top: 18px; }
