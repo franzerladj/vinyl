@@ -1063,3 +1063,11 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .year-entry .eyebrow { grid-column: 1; color: #ff5b14; }
 .year-entry b { grid-column: 1; font: 900 34px/1 var(--font-brand); font-stretch: 62%; font-variation-settings: "wdth" 62; text-transform: uppercase; }
 .year-entry .chev { grid-column: 2; grid-row: 1 / 3; font-size: 28px; }
+
+/* Repress-Alarm auf der Wantlist */
+.repress-card { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 10px; padding: 14px 16px; border-radius: var(--r-lg); background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); }
+.repress-card .eyebrow { color: var(--accent); }
+.repress-list { display: flex; flex-direction: column; gap: 8px; }
+.repress-row { display: flex; align-items: center; gap: 10px; }
+.repress-t { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.repress-m { display: block; font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
 import { loadPriceInfo } from "../lib/prices";
 import { fetchMarketStats, fetchMissingDetails, syncWants } from "../lib/sync";
+import { dismissRepress, repressNews } from "../lib/repress";
 import { money } from "../lib/format";
 import { toast, useStore } from "../lib/store";
 import { DealDot, Empty, RecordRow, Sheet, SkeletonRows, useDebounced } from "../components/bits";
@@ -37,6 +38,7 @@ const DEAL_LABEL: Record<string, string> = { green: "Unter Marktwert", target: "
 const decadeOf = (y: number) => (y ? `${Math.floor(y / 10) * 10}er` : "Ohne Jahr");
 
 export default function Wantlist() {
+  const repress = useLiveQuery(async () => new Map((await repressNews()).map((n) => [n.wantId, n])), []);
   const nav = useNavigate();
   const [q, setQ] = useState("");
   const dq = useDebounced(q.toLowerCase(), 180);
@@ -199,6 +201,27 @@ export default function Wantlist() {
         </div>
       </div>
 
+      {repress && repress.size > 0 && (
+        <div className="page" style={{ paddingTop: 4, paddingBottom: 0 }}>
+          <div className="repress-card">
+            <span className="eyebrow">Repress-Alarm</span>
+            <b>{repress.size === 1 ? "Eine Platte von deiner Wantlist wurde neu gepresst" : `${repress.size} Platten von deiner Wantlist wurden neu gepresst`}</b>
+            <div className="repress-list">
+              {[...repress.values()].slice(0, 5).map((n) => (
+                <div key={n.wantId} className="repress-row">
+                  <Link to={`/release/${n.version.id}`} viewTransition style={{ color: "inherit", minWidth: 0, flex: 1 }}>
+                    <span className="repress-t">{n.version.title}</span>
+                    <span className="repress-m mono">{[n.version.label, n.version.catno, n.version.country, String(n.version.released ?? "").slice(0, 4)].filter(Boolean).join(" · ")}</span>
+                  </Link>
+                  <button className="hint-x ghost" onClick={() => void dismissRepress(n.wantId)} aria-label="Ausblenden">
+                    Okay
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {data && data.length > 0 && (
         <div className="page" style={{ paddingTop: 4, paddingBottom: 0 }}>
           <div className="summary-strip">
@@ -283,6 +306,7 @@ export default function Wantlist() {
                   {p.deal.underTarget && <span className="badge ok">Wunschpreis</span>}
                   {p.deal.urgency === "hot" && <span className="badge bad">selten</span>}
                   {(p.deal.change ?? 0) < -0.5 && <span className="badge accent">↓ {money(-(p.deal.change ?? 0))}</span>}
+                  {repress?.has(r.id) && <span className="badge accent">Repress {String(repress.get(r.id)!.version.released ?? "").slice(0, 4)}</span>}
                   {owned && <span className="badge ok">schon da</span>}
                   {friends.length > 0 && <span className="badge" style={{ background: "rgba(191,90,242,.16)", color: "#bf5af2" }}>bei {friends[0]}{friends.length > 1 ? ` +${friends.length - 1}` : ""}</span>}
                 </div>

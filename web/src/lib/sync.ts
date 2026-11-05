@@ -432,6 +432,14 @@ export async function autoPipeline(opts: { force?: boolean; resume?: boolean } =
           await localNotify("sellers", fresh.length === 1 ? "Neues Angebot für eine Want" : `${fresh.length} neue Angebote für deine Wants`, `bei ${sellers.slice(0, 3).join(", ")}${sellers.length > 3 ? " und weiteren" : ""}`, "/shop");
         }
       });
+      await step("Neue Pressungen", async () => {
+        const { checkRepresses } = await import("./repress");
+        const found = await checkRepresses();
+        if (found.length) {
+          const { localNotify } = await import("./push");
+          await localNotify("wants", found.length === 1 ? "Eine Want wurde neu gepresst" : `${found.length} Wants wurden neu gepresst`, "Schau auf deine Wantlist", "/wants");
+        }
+      });
       const { syncFriends } = await import("./friends");
       await step("Freunde", () => syncFriends(24));
     };
