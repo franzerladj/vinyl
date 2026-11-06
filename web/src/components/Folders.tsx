@@ -231,6 +231,7 @@ function FolderSorter({ kind, name, recs, folderId, onBack, onSaved, onRenamed, 
     runFolderJob("Ordner wird gelöscht", async () => {
       if (folderId) await deleteFolder(folderId);
       else await setWantFolder([...initial], null);
+      toast(`Ordner „${name}“ gelöscht`);
       return 0;
     });
     onDeleted();

@@ -80,6 +80,7 @@ export async function syncCollection() {
     // Entfernte Einträge löschen
     const stale = (await db.collection.toArray()).filter((c) => !seen.has(c.instanceId)).map((c) => c.instanceId);
     await db.collection.bulkDelete(stale);
+    await import("./folders").then((f) => f.reapplyPending()).catch(() => undefined);
     await setKV("lastCollectionSync", Date.now());
     if (known.size > 0 && added > 0) toast(`${added} neue Platte(n) in der Sammlung`);
   } finally {
@@ -105,6 +106,7 @@ export async function syncWants() {
     } while (page <= pages);
     const stale = (await db.wants.toCollection().primaryKeys()).filter((id) => !seen.has(id));
     await db.wants.bulkDelete(stale);
+    await import("./folders").then((f) => f.reapplyPending()).catch(() => undefined);
     await setKV("lastWantsSync", Date.now());
   } finally {
     jobUpdate(job, null);

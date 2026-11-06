@@ -204,6 +204,8 @@ async function startupSync() {
   void import("./lib/friends").then((f) => f.refreshMyProfile()).catch(() => undefined);
   const run = async () => {
     if (!navigator.onLine) return;
+    // Offene Ordner-Änderungen (z. B. App beim Einsortieren geschlossen) weiter zu Discogs schicken
+    void import("./lib/folders").then((f) => f.resumeFolderQueue()).catch(() => undefined);
     const last = await getKV<number>("lastCollectionSync", 0);
     // Länger als 6 Stunden her: komplett abgleichen. Sonst nur fortsetzen, was noch fehlt (kostet fast nichts).
     autoPipeline({ resume: Date.now() - last < 6 * 3600_000 }).catch((e) => toast(`Sync fehlgeschlagen: ${e.message}`));

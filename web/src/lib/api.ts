@@ -10,7 +10,7 @@ export class ApiError extends Error {
   }
 }
 
-type Job = { run: () => Promise<void>; priority: number };
+type Job = { run: () => Promise<void>; fail: (e: Error) => void; priority: number };
 const queue: Job[] = [];
 let running = false;
 let lastCall = 0;
@@ -34,7 +34,13 @@ async function pump() {
     lastCall = Date.now();
     recent.push(lastCall);
     // Wächter: hängt eine Anfrage, läuft die Warteschlange nach spätestens einer Minute weiter
-    await Promise.race([job.run(), new Promise((r) => setTimeout(r, JOB_WATCHDOG_MS))]);
+    // Der Aufrufer bekommt dann einen Fehler statt ewig zu warten (sonst hängt z. B. das Einsortieren)
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      job.run(),
+      new Promise<void>((r) => (timer = setTimeout(() => (job.fail(new ApiError(408, "Discogs antwortet gerade nicht")), r()), JOB_WATCHDOG_MS))),
+    ]);
+    clearTimeout(timer);
     // Discogs meldet, wie viele Anfragen in dieser Minute noch gehen: kurz vor null kurz durchatmen
     if (remaining != null && remaining <= 2) {
       const t = Date.now();
@@ -50,16 +56,26 @@ const JOB_WATCHDOG_MS = 60_000;
 const REQUEST_TIMEOUT_MS = 20_000;
 let remaining: number | null = null;
 
-function fetchWithTimeout(url: string, init: RequestInit = {}) {
+/**
+ * Die Zeitgrenze gilt bis der Inhalt komplett da ist, nicht nur bis zur Kopfzeile:
+ * stockt die Verbindung mitten in der Antwort (WLAN-Wechsel, App im Hintergrund), wird trotzdem abgebrochen.
+ */
+async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), REQUEST_TIMEOUT_MS);
-  return fetch(url, { ...init, signal: ac.signal }).finally(() => clearTimeout(t));
+  try {
+    const r = await fetch(url, { ...init, signal: ac.signal });
+    const body = r.status === 204 || r.status === 304 ? null : await r.arrayBuffer();
+    return new Response(body, { status: r.status, statusText: r.statusText, headers: r.headers });
+  } finally {
+    clearTimeout(t);
+  }
 }
 const isAbort = (e: unknown) => (e as { name?: string })?.name === "AbortError";
 
 function enqueue<T>(fn: () => Promise<T>, priority: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    queue.push({ priority, run: () => fn().then(resolve, reject) });
+    queue.push({ priority, run: () => fn().then(resolve, reject), fail: reject });
     void pump();
   });
 }
@@ -69,6 +85,8 @@ export interface DiscogsOptions {
   body?: unknown;
   /** Hintergrund-Jobs (Sync) haben niedrige Priorität, Nutzeraktionen hohe */
   background?: boolean;
+  /** Schreibende Anfrage, die man gefahrlos wiederholen kann (z. B. in einen Ordner verschieben) */
+  retry?: boolean;
 }
 
 /**
@@ -122,11 +140,12 @@ export function discogs<T>(path: string, opts: DiscogsOptions = {}): Promise<T> 
         res = (await sendDirect(path, method, body)) ?? (await sendProxy(path, method, body));
       } catch (e) {
         // Hängende Anfrage abgebrochen: kurz warten und neu versuchen
-        if (isAbort(e) && attempt < 3 && method === "GET") {
+        const again = method === "GET" || opts.retry;
+        if ((isAbort(e) || (again && e instanceof TypeError)) && attempt < 3 && again) {
           await new Promise((r) => setTimeout(r, 1500));
           continue;
         }
-        throw isAbort(e) ? new ApiError(408, "Discogs antwortet gerade nicht") : e;
+        throw isAbort(e) ? new ApiError(408, "Discogs antwortet gerade nicht") : e instanceof TypeError ? new ApiError(0, "Keine Verbindung zu Discogs") : e;
       }
       const left = Number(res.headers.get("X-Discogs-Ratelimit-Remaining"));
       if (Number.isFinite(left) && res.headers.has("X-Discogs-Ratelimit-Remaining")) remaining = left;
