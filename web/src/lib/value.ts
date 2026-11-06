@@ -48,3 +48,23 @@ export async function recordValues(): Promise<Map<number, RecordValue & { curren
   });
   return out;
 }
+
+/** Selbst eingetragene Kaufpreise je Platte (mehrere Exemplare werden addiert) */
+export async function paidPrices(): Promise<Map<number, { value: number; currency: string }>> {
+  const { paidOf } = await import("../../../shared/paid");
+  const out = new Map<number, { value: number; currency: string }>();
+  for (const c of await db.collection.toArray()) {
+    const p = paidOf(c.note);
+    if (!p) continue;
+    const prev = out.get(c.releaseId);
+    out.set(c.releaseId, prev && prev.currency === p.currency ? { value: prev.value + p.value, currency: p.currency } : p);
+  }
+  return out;
+}
+
+/** Marktwert einer einzelnen Platte aus geladenen Preisen */
+export async function marketValueOf(releaseId: number, media?: string | null) {
+  const [stat, sugg] = await Promise.all([db.marketStats.get(releaseId), db.priceSuggestions.get(releaseId)]);
+  const v = recordValue({ grade: shortGrade(media) ?? undefined, suggestions: sugg?.values, lowest: stat?.lowest });
+  return v ? { ...v, currency: (v.basis === "lowest" ? stat?.currency : sugg?.currency) ?? "EUR" } : null;
+}

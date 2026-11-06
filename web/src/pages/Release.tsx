@@ -3,7 +3,9 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { api } from "../lib/api";
 import { db, realTracks, trackId, type TrackMeta } from "../lib/db";
-import { addToCollection, addWant, fetchMarketStats, fetchRelease, lookupAudioFor, removeWant, setCondition, tagVibes } from "../lib/sync";
+import { addToCollection, addWant, fetchMarketStats, fetchRelease, lookupAudioFor, removeWant, setCondition, setPaid, tagVibes } from "../lib/sync";
+import { marketValueOf } from "../lib/value";
+import { formatPaid, paidOf, parsePaidInput, stripPaid } from "../../../shared/paid";
 import { GRADE_HINT, SLEEVE_HINT, MEDIA_GRADES, SLEEVE_GRADES, pressingInfo, shortGrade } from "../../../shared/vinyl";
 import type { CollectionItem } from "../lib/db";
 import { discogsReleaseUrl, discogsSellUrl, formatLine, money, sideOf } from "../lib/format";
@@ -42,6 +44,7 @@ export default function ReleasePage() {
   const [listenSide, setListenSide] = useState(false);
   const [grading, setGrading] = useState<{ item: CollectionItem; which: "media" | "sleeve" } | null>(null);
   const copies = useLiveQuery(() => db.collection.where("releaseId").equals(id).toArray(), [id], [] as CollectionItem[]);
+  const market = useLiveQuery(() => marketValueOf(id, copies[0]?.media), [id, copies[0]?.media]);
   const buddies = useLiveQuery(() => friendsFor(id), [id]);
   const friendNames = useLiveQuery(async () => (await db.friends.toArray()).map((f) => f.username), [], [] as string[]);
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -392,10 +395,43 @@ export default function ReleasePage() {
                   </button>
                 </div>
               ))}
-              {copies.some((c) => c.note) && (
+              {copies.map((c, i) => {
+                const paid = paidOf(c.note);
+                return (
+                  <label key={`paid${c.instanceId}`} className="group-row paid-row">
+                    <span style={{ width: 92 }} className="sub">
+                      Bezahlt{copies.length > 1 ? ` ${i + 1}` : ""}
+                    </span>
+                    <input
+                      className="input mono"
+                      inputMode="decimal"
+                      placeholder="z. B. 25"
+                      defaultValue={paid ? formatPaid(paid.value, paid.currency).replace(/\s?€$/, "") : ""}
+                      key={c.note ?? ""}
+                      onBlur={(e) => {
+                        const v = parsePaidInput(e.target.value);
+                        if ((v ?? null) === (paid?.value ?? null)) return;
+                        setPaid(c.instanceId, v).then(
+                          () => toast(v ? `Bezahlt: ${formatPaid(v)}` : "Kaufpreis entfernt"),
+                          (err) => toast((err as Error).message),
+                        );
+                      }}
+                      aria-label="Kaufpreis in Euro"
+                    />
+                    <span className="paid-cur">€</span>
+                    {i === 0 && market && (
+                      <span className="paid-market" title={MARKET_BASIS[market.basis]}>
+                        Markt {money(market.value, market.currency)}
+                        <small>{MARKET_BASIS[market.basis]}</small>
+                      </span>
+                    )}
+                  </label>
+                );
+              })}
+              {copies.some((c) => stripPaid(c.note)) && (
                 <div className="group-row">
                   <span style={{ width: 92 }} className="sub">Notiz</span>
-                  <span style={{ whiteSpace: "pre-line" }}>{copies.map((c) => c.note).filter(Boolean).join("\n")}</span>
+                  <span style={{ whiteSpace: "pre-line" }}>{copies.map((c) => stripPaid(c.note)).filter(Boolean).join("\n")}</span>
                 </div>
               )}
               <label className="group-row">
@@ -864,3 +900,5 @@ function ToneArm({ down }: { down: boolean }) {
     </svg>
   );
 }
+
+const MARKET_BASIS: Record<string, string> = { grade: "für deinen Zustand", vgplus: "Richtwert VG+", lowest: "günstigstes Angebot" };

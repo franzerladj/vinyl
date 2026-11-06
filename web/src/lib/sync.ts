@@ -306,8 +306,21 @@ export async function fetchMarketStats(ids: number[], maxAgeHours = 12) {
 export async function setCondition(instanceId: number, which: "media" | "sleeve", value: string) {
   const item = await db.collection.get(instanceId);
   if (!item) throw new Error("Platte nicht in der Sammlung");
-  await discogs(`/users/${u()}/collection/folders/${item.folderId}/releases/${item.releaseId}/instances/${instanceId}/fields/${FIELD[which]}`, { method: "POST", body: { value } });
+  const folder = await import("./folders").then((f) => f.discogsFolderOf(instanceId, item.folderId));
+  await discogs(`/users/${u()}/collection/folders/${folder}/releases/${item.releaseId}/instances/${instanceId}/fields/${FIELD[which]}`, { method: "POST", body: { value } });
   await db.collection.update(instanceId, { [which]: value || undefined });
+}
+
+/** Kaufpreis eintragen (null = löschen). Steht als Marke in der Discogs-Notiz des Exemplars. */
+export async function setPaid(instanceId: number, value: number | null, currency = "EUR") {
+  const item = await db.collection.get(instanceId);
+  if (!item) throw new Error("Platte nicht in der Sammlung");
+  const { withPaid } = await import("../../../shared/paid");
+  const note = withPaid(item.note, value, currency);
+  if (note === (item.note ?? "")) return;
+  const folder = await import("./folders").then((f) => f.discogsFolderOf(instanceId, item.folderId));
+  await discogs(`/users/${u()}/collection/folders/${folder}/releases/${item.releaseId}/instances/${instanceId}/fields/${FIELD.note}`, { method: "POST", body: { value: note }, retry: true });
+  await db.collection.update(instanceId, { note: note || undefined });
 }
 
 export async function addWant(id: number) {

@@ -12,7 +12,9 @@ import { gradeRank, shortGrade } from "../../../shared/vinyl";
 import { keyDistance, parseKey } from "../../../shared/music";
 import { roughly } from "../../../shared/value";
 import { money } from "../lib/format";
-import { cachedCollectionValue, recordValues, refreshCollectionValue } from "../lib/value";
+import { cachedCollectionValue, paidPrices, recordValues, refreshCollectionValue } from "../lib/value";
+import { setPaid } from "../lib/sync";
+import { formatPaid, parsePaidInput } from "../../../shared/paid";
 import { refreshPrices, suggestionsState } from "../lib/prices";
 import { FolderBar, FolderManager, inPick, useFolderRecords, useFolderTabs } from "../components/Folders";
 
@@ -77,6 +79,9 @@ export default function Collection() {
   // Wert: Gesamtwert von Discogs, Einzelwerte aus geladenen Preisen
   const total = useLiveQuery(() => cachedCollectionValue(), []);
   const values = useLiveQuery(() => recordValues(), [], new Map() as Awaited<ReturnType<typeof recordValues>>);
+  const paid = useLiveQuery(() => paidPrices(), [], new Map() as Awaited<ReturnType<typeof paidPrices>>);
+  // Was die Platte dir wert ist: der höhere von Kaufpreis und Marktwert (eine teure Pressung soll nicht als 19 € zählen)
+  const worth = (id: number) => Math.max(paid.get(id)?.value ?? 0, values.get(id)?.value ?? 0) || undefined;
   useEffect(() => {
     refreshCollectionValue().catch(() => undefined);
   }, []);
@@ -171,7 +176,7 @@ export default function Collection() {
       bpm: (a, b) => (avgBpm(a.tracks) || 999) - (avgBpm(b.tracks) || 999),
       rating: (a, b) => a.rating - b.rating,
       condition: (a, b) => gradeRank(a.media) - gradeRank(b.media),
-      value: (a, b) => (values.get(a.r.id)?.value ?? 0) - (values.get(b.r.id)?.value ?? 0),
+      value: (a, b) => (worth(a.r.id) ?? 0) - (worth(b.r.id) ?? 0),
       shelf: (a, b) => (a.meta?.shelf || "~").localeCompare(b.meta?.shelf || "~", "de", { numeric: true }),
     };
     const cmp = by[sort.id] ?? by.added;
@@ -186,7 +191,7 @@ export default function Collection() {
         if (ea !== eb) return ea ? 1 : -1;
       }
       if (sort.id === "value") {
-        const ea = !values.has(a.r.id), eb = !values.has(b.r.id);
+        const ea = !worth(a.r.id), eb = !worth(b.r.id);
         if (ea !== eb) return ea ? 1 : -1;
       }
       if (sort.id === "shelf") {
@@ -195,7 +200,7 @@ export default function Collection() {
       }
       return cmp(a, b) * dir;
     });
-  }, [data, dq, f, sort, values]);
+  }, [data, dq, f, sort, values, paid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   type Item = (typeof list)[0];
   const sectionKey: ((x: Item) => string) | null = useMemo(() => {
@@ -221,7 +226,7 @@ export default function Collection() {
         return (x: Item) => x.media ?? "Nicht bewertet";
       case "value":
         return (x: Item) => {
-          const v = values.get(x.r.id)?.value;
+          const v = worth(x.r.id);
           return v == null ? "Ohne Preis" : v >= 100 ? "Ab 100" : v >= 50 ? "50 bis 100" : v >= 20 ? "20 bis 50" : "Unter 20";
         };
       case "shelf":
@@ -229,7 +234,7 @@ export default function Collection() {
       default:
         return (x: Item) => (x.added ? new Date(x.added).toLocaleDateString("de-DE", { month: "long", year: "numeric" }) : "Unbekannt");
     }
-  }, [sort.id, values]);
+  }, [sort.id, values, paid]); // eslint-disable-line react-hooks/exhaustive-deps
   const sections = useMemo(() => sectionsOf(list, sectionKey), [list, sectionKey]);
   const letters = sort.id === "artist" || sort.id === "title" ? sections.map(([k]) => k) : [];
 
@@ -327,7 +332,12 @@ export default function Collection() {
                       ))}
                     </div>
                     {(media || sleeve) && <span className="grade-tag mono">{[media ?? "–", sleeve ?? "–"].join("/")}</span>}
-                    {sort.id === "value" && values.get(r.id) && <span className="tiny mono">{money(values.get(r.id)!.value, values.get(r.id)!.currency)}</span>}
+                    {sort.id === "value" && paid.get(r.id) && (
+                      <span className="tiny mono" style={{ color: "var(--text)" }}>
+                        {money(paid.get(r.id)!.value, paid.get(r.id)!.currency)} bez.
+                      </span>
+                    )}
+                    {sort.id === "value" && values.get(r.id) && <span className="tiny mono">{paid.get(r.id) ? "Markt " : ""}{money(values.get(r.id)!.value, values.get(r.id)!.currency)}</span>}
                     {sort.id === "rating" && rating > 0 && <span className="tiny" style={{ color: "var(--accent)" }}>{"★".repeat(rating)}</span>}
                     {meta?.shelf && sort.id !== "shelf" && <span className="tiny">{meta.shelf}</span>}
                     {meta?.lentTo && <span className="badge accent">bei {meta.lentTo}</span>}
@@ -388,7 +398,7 @@ export default function Collection() {
         ]}
       />
       <Sheet open={sheet === "value"} onClose={() => setSheet(null)}>
-        {sheet === "value" && <ValueSheet total={total ?? null} values={values} count={data?.length ?? 0} onSort={() => (setSort({ id: "value", dir: "desc" }), setSheet(null))} />}
+        {sheet === "value" && <ValueSheet total={total ?? null} values={values} paid={paid} count={data?.length ?? 0} onSort={() => (setSort({ id: "value", dir: "desc" }), setSheet(null))} />}
       </Sheet>
       <Sheet open={sheet === "filter"} onClose={() => setSheet(null)}>
         <div className="sheet-title">
@@ -474,14 +484,19 @@ const toggle = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) =
 const BASIS: Record<string, string> = { grade: "nach deinem Zustand", vgplus: "Richtwert VG+", lowest: "günstigstes Angebot" };
 
 /** Wert der Sammlung: Gesamtwert von Discogs, wertvollste Platten, Einzelwerte nachladen */
-function ValueSheet({ total, values, count, onSort }: { total: Awaited<ReturnType<typeof cachedCollectionValue>>; values: Awaited<ReturnType<typeof recordValues>>; count: number; onSort: () => void }) {
+function ValueSheet({ total, values, paid, count, onSort }: { total: Awaited<ReturnType<typeof cachedCollectionValue>>; values: Awaited<ReturnType<typeof recordValues>>; paid: Awaited<ReturnType<typeof paidPrices>>; count: number; onSort: () => void }) {
+  const [paidList, setPaidList] = useState(false);
+  const paidSum = [...paid.values()].reduce((s, p) => s + p.value, 0);
+  const marketOfPaid = [...paid.keys()].reduce((s, id) => s + (values.get(id)?.value ?? 0), 0);
   const [busy, setBusy] = useState(false);
   const sugg = useLiveQuery(() => suggestionsState(), [], "unknown");
   const top = useLiveQuery(async () => {
-    const best = [...values.entries()].sort((a, b) => b[1].value - a[1].value).slice(0, 10);
-    const rels = await db.releases.bulkGet(best.map(([id]) => id));
-    return best.map(([id, v], i) => ({ id, v, r: rels[i] })).filter((x) => x.r);
-  }, [values], []);
+    const ids = [...new Set([...values.keys(), ...paid.keys()])];
+    const w = (id: number) => Math.max(paid.get(id)?.value ?? 0, values.get(id)?.value ?? 0);
+    const best = ids.sort((a, b) => w(b) - w(a)).slice(0, 10);
+    const rels = await db.releases.bulkGet(best);
+    return best.map((id, i) => ({ id, v: values.get(id), p: paid.get(id), r: rels[i] })).filter((x) => x.r);
+  }, [values, paid], []);
   const fmt = (v: number, c = total?.currency ?? "EUR") => money(roughly(v), c).replace(/,00(?=\s|$)/, "");
   const missing = count - values.size;
   const loadAll = async () => {
@@ -531,7 +546,7 @@ function ValueSheet({ total, values, count, onSort }: { total: Awaited<ReturnTyp
             </button>
           </div>
           <div className="list">
-            {top.map(({ id, v, r }, i) => (
+            {top.map(({ id, v, p, r }, i) => (
               <Link key={id} to={`/release/${id}`} viewTransition className="rec value-rec" style={{ color: "inherit" }}>
                 <span className="shared-num">{i + 1}</span>
                 <Cover src={r!.thumb} />
@@ -539,15 +554,30 @@ function ValueSheet({ total, values, count, onSort }: { total: Awaited<ReturnTyp
                   <div className="rec-title">{r!.title}</div>
                   <div className="rec-artist">{r!.artist}</div>
                   <div className="rec-meta">
-                    <span>{BASIS[v.basis]}</span>
+                    <span>{p ? (v ? `bezahlt, Markt ${money(v.value, v.currency)}` : "bezahlt") : v ? BASIS[v.basis] : ""}</span>
                   </div>
                 </div>
-                <b className="mono">{money(v.value, v.currency)}</b>
+                <b className="mono">{p && (!v || p.value >= v.value) ? money(p.value, p.currency) : v ? money(v.value, v.currency) : ""}</b>
               </Link>
             ))}
           </div>
         </>
       )}
+
+      <div className="card stack" style={{ gap: 8 }}>
+        <b>Was du bezahlt hast</b>
+        {paid.size > 0 ? (
+          <span className="sub">
+            {paid.size === 1 ? "Für eine Platte" : `Für ${paid.size} Platten`} hast du {fmt(paidSum)} bezahlt.{marketOfPaid > 0 ? ` Laut Markt sind sie heute etwa ${fmt(marketOfPaid)} wert.` : ""}
+          </span>
+        ) : (
+          <span className="sub">Discogs gibt deine Käufe nicht an Apps weiter. Trag den Kaufpreis selbst ein, dann zählt eine teure Pressung nicht nur mit dem Marktpreis. Er wird bei Discogs in der Notiz gespeichert.</span>
+        )}
+        <button className="btn tinted" onClick={() => setPaidList(!paidList)}>
+          {paidList ? "Fertig" : "Kaufpreise eintragen"}
+        </button>
+        {paidList && <PaidList paid={paid} values={values} />}
+      </div>
 
       <div className="card stack" style={{ gap: 8 }}>
         <b>{missing > 0 ? `Einzelwerte für ${values.size} von ${count} Platten` : "Alle Platten haben einen Einzelwert"}</b>
@@ -562,6 +592,52 @@ function ValueSheet({ total, values, count, onSort }: { total: Awaited<ReturnTyp
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Schnell eintragen: neueste Platten zuerst, ein Feld je Platte */
+function PaidList({ paid, values }: { paid: Awaited<ReturnType<typeof paidPrices>>; values: Awaited<ReturnType<typeof recordValues>> }) {
+  const [n, setN] = useState(30);
+  const rows = useLiveQuery(async () => {
+    const coll = (await db.collection.toArray()).sort((a, b) => b.dateAdded.localeCompare(a.dateAdded));
+    const seen = new Set<number>();
+    const first = coll.filter((c) => !seen.has(c.releaseId) && seen.add(c.releaseId));
+    const rels = await db.releases.bulkGet(first.map((c) => c.releaseId));
+    return first.map((c, i) => ({ c, r: rels[i] })).filter((x) => x.r);
+  }, []);
+  return (
+    <div className="list paid-list">
+      {rows?.slice(0, n).map(({ c, r }) => {
+        const p = paid.get(c.releaseId);
+        const v = values.get(c.releaseId);
+        return (
+          <label key={c.instanceId} className="pick-rec">
+            <Cover src={r!.thumb} />
+            <span className="pick-rec-main">
+              <b>{r!.title}</b>
+              <span>{[r!.artist, v ? `Markt ${money(v.value, v.currency)}` : ""].filter(Boolean).join(" · ")}</span>
+            </span>
+            <input
+              className="input mono paid-input"
+              inputMode="decimal"
+              placeholder="€"
+              defaultValue={p ? formatPaid(p.value, p.currency).replace(/\s?€$/, "") : ""}
+              onBlur={(e) => {
+                const val = parsePaidInput(e.target.value);
+                if ((val ?? null) === (p?.value ?? null)) return;
+                setPaid(c.instanceId, val).catch((err) => toast((err as Error).message));
+              }}
+              aria-label={`Kaufpreis ${r!.title}`}
+            />
+          </label>
+        );
+      })}
+      {rows && rows.length > n && (
+        <button className="text-btn" onClick={() => setN(n + 30)}>
+          Weitere anzeigen
+        </button>
+      )}
     </div>
   );
 }

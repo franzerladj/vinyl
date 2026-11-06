@@ -35,3 +35,26 @@ describe("Hüllen-Zustand", () => {
     }
   });
 });
+
+import { formatPaid, paidOf, parsePaidInput, stripPaid, withPaid } from "../shared/paid";
+describe("Kaufpreis in der Notiz", () => {
+  it("setzt, liest und entfernt den Kaufpreis, die Notiz bleibt", () => {
+    const n = withPaid("Erstpressung, Hülle signiert", 50);
+    expect(n).toBe("Erstpressung, Hülle signiert\n[Bezahlt: 50 €]");
+    expect(paidOf(n)).toEqual({ value: 50, currency: "EUR" });
+    expect(stripPaid(n)).toBe("Erstpressung, Hülle signiert");
+    const m = withPaid(n, 49.9);
+    expect(paidOf(m)?.value).toBe(49.9);
+    expect(m.match(/Bezahlt/g)).toHaveLength(1);
+    expect(withPaid(m, null)).toBe("Erstpressung, Hülle signiert");
+    expect(withPaid("", 12.5)).toBe("[Bezahlt: 12,5 €]".replace("12,5", "12,50"));
+  });
+  it("liest Eingaben und Marken mitten in der Notiz", () => {
+    expect(parsePaidInput("49,90 €")).toBe(49.9);
+    expect(parsePaidInput("")).toBeNull();
+    expect(parsePaidInput("abc")).toBeNull();
+    expect(paidOf("[Bezahlt: 1.234,50 €]\nvon Hardwax")?.value).toBe(1234.5);
+    expect(stripPaid("[Bezahlt: 30 €]\nvon Hardwax")).toBe("von Hardwax");
+    expect(formatPaid(30, "USD")).toBe("30 USD");
+  });
+});

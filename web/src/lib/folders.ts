@@ -211,6 +211,12 @@ export async function setWantFolder(releaseIds: number[], folder: string | null)
   return items.length;
 }
 
+/** Ordner, in dem das Exemplar bei Discogs gerade wirklich liegt (Verschiebung kann noch unterwegs sein) */
+export async function discogsFolderOf(instanceId: number, local: number) {
+  const mv = (await pendingFolderOps()).find((x) => x.t === "move" && x.instanceId === instanceId) as Extract<Pending, { t: "move" }> | undefined;
+  return mv ? mv.from : local;
+}
+
 /** Nach einem Sync: noch nicht übertragene Änderungen wieder lokal anwenden (sonst springt die Platte zurück) */
 export async function reapplyPending() {
   for (const it of await pendingFolderOps()) {
