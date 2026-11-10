@@ -5,7 +5,8 @@ import { setState, toast, useStore } from "./lib/store";
 import { haptic, Jobs, Sheet } from "./components/bits";
 import { Welcome } from "./components/Welcome";
 import { claimDevice } from "./lib/account";
-import { IconHeart, IconHome, IconList, IconRecord, IconSearch } from "./components/icons";
+import { IconCart, IconGear, IconHeart, IconHome, IconList, IconPlay, IconRecord, IconSearch, IconUser } from "./components/icons";
+import { LogoMark, Wordmark } from "./components/Logo";
 import Home from "./pages/Home";
 import Login, { LoginFinish } from "./pages/Login";
 import { claimIdentity, verifyInBackground } from "./lib/auth";
@@ -370,6 +371,19 @@ export default function App() {
       .finally(() => setLoaded(true));
   }, []);
 
+  // Am Computer: „/“ springt in die Suche der Seite (oder zur Suche)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "/" || e.metaKey || e.ctrlKey || (e.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable]")) return;
+      const el = document.querySelector<HTMLInputElement>(".search-bar input, input[type=search]");
+      e.preventDefault();
+      if (el) el.focus();
+      else window.location.assign("/search");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   if (PUBLIC.has(loc.pathname))
     return (
       <div className="app">
@@ -398,9 +412,60 @@ export default function App() {
       <div className={`topbar no-print ${barTitle ? "on" : ""}`} aria-hidden={!barTitle}>
         <div className="topbar-inner">{barTitle}</div>
       </div>
-      <Suspense fallback={<div className="page" />}>
-      <Outlet />
-      </Suspense>
+      {/* Am Computer: Seitenleiste statt Tab-Leiste unten (per CSS ab 1024 px) */}
+      <aside className="side no-print" aria-label="Navigation">
+        <NavLink to="/" end viewTransition className="side-brand" aria-label="Start">
+          <LogoMark size={34} />
+          <Wordmark className="side-word" />
+        </NavLink>
+        <nav className="side-nav">
+          <NavLink to="/" end viewTransition>
+            <IconHome />
+            Start
+          </NavLink>
+          <NavLink to="/search" viewTransition>
+            <IconSearch />
+            Suche
+          </NavLink>
+          <NavLink to="/collection" viewTransition>
+            <IconRecord />
+            Sammlung
+          </NavLink>
+          <NavLink to="/wants" viewTransition>
+            <IconHeart />
+            Wantlist
+          </NavLink>
+          <NavLink to="/sets" viewTransition>
+            <IconList />
+            Sets
+          </NavLink>
+          <span className="side-sep" />
+          <NavLink to="/dig" viewTransition>
+            <IconPlay />
+            Diggen
+          </NavLink>
+          <NavLink to="/shop" viewTransition>
+            <IconCart />
+            Shoppen
+          </NavLink>
+          <NavLink to="/friends" viewTransition>
+            <IconUser />
+            Freunde
+          </NavLink>
+        </nav>
+        <NavLink to="/settings" viewTransition className="side-me">
+          <IconGear />
+          <span>
+            Einstellungen
+            <small>{me.username}</small>
+          </span>
+        </NavLink>
+      </aside>
+      <main className="main">
+        <Suspense fallback={<div className="page" />}>
+          <Outlet />
+        </Suspense>
+      </main>
       <Jobs />
       {me?.username && <Welcome username={me.username} />}
       <nav className="nav no-print">

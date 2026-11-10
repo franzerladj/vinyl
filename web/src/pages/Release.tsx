@@ -130,7 +130,7 @@ export default function ReleasePage() {
     </div>
   );
 
-  if (!rel) return <>{top}<div className="page">{loading || preview ? <SkeletonRows n={4} /> : <Empty title="Nicht gefunden" />}</div></>;
+  if (!rel) return <div className="rel-layout">{top}<div className="page rel-main">{loading || preview ? <SkeletonRows n={4} /> : <Empty title="Nicht gefunden" />}</div></div>;
   const tm = new Map(tracks.map((t) => [t.id, t]));
   const tl = realTracks(rel.tracklist);
   let lastSide = "";
@@ -170,8 +170,9 @@ export default function ReleasePage() {
 
   return (
     <>
+      <div className="rel-layout">
       {top}
-      <div className="page" style={{ paddingTop: 0 }}>
+      <div className="page rel-main" style={{ paddingTop: 0 }}>
         <div className="actions">
           {inColl === 0 ? (
             <button className="action on" onClick={() => (haptic(), addToCollection(id).then(() => toast("In der Sammlung · Sticker vorgemerkt"), (e) => toast(e.message)))}>
@@ -533,6 +534,7 @@ export default function ReleasePage() {
             </div>
           </>
         ) : null}
+      </div>
       </div>
 
       <Sheet open={grading !== null} onClose={() => setGrading(null)}>

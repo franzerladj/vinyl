@@ -287,6 +287,30 @@ export default function Dig() {
 
   const d = current ? detail.get(current.id) : undefined;
 
+  // Am Computer: Tastatur. ← Skip, → Like, W Want, Leertaste abspielen, ↑/↓ blättern
+  const keys = useRef({ current, skip, like, want, onCardTap });
+  keys.current = { current, skip, like, want, onCardTap };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.metaKey || e.ctrlKey || e.altKey || t?.closest("input, textarea, select, [contenteditable]") || document.querySelector(".sheet, .dig-sheet")) return;
+      const k = keys.current;
+      if (!k.current) return;
+      const f = feed.current;
+      const step = (d: number) => f?.scrollBy({ top: d * f.clientHeight, behavior: "smooth" });
+      if (e.key === "ArrowLeft") k.skip(k.current);
+      else if (e.key === "ArrowRight") k.like(k.current);
+      else if (e.key.toLowerCase() === "w") void k.want(k.current);
+      else if (e.key === " ") k.onCardTap(k.current);
+      else if (e.key === "ArrowDown" || e.key.toLowerCase() === "j") step(1);
+      else if (e.key === "ArrowUp" || e.key.toLowerCase() === "k") step(-1);
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className="dig">
       <audio ref={audio} preload="auto" playsInline loop />
@@ -427,6 +451,13 @@ export default function Dig() {
       </div>
 
       <DigCoach ready={!loading && cards.length > 0} />
+      {current && (
+        <div className="dig-keys" aria-hidden="true">
+          <kbd>←</kbd> Skip · <kbd>→</kbd> Like · <kbd>W</kbd> Want
+          <br />
+          <kbd>Leertaste</kbd> Hören · <kbd>↑</kbd> <kbd>↓</kbd> Blättern
+        </div>
+      )}
       {current && (
         <nav className="dig-bar" aria-label="Aktionen">
           <button onClick={() => skip(current)} aria-label="Skip" data-coach="skip">

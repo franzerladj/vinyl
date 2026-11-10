@@ -81,3 +81,20 @@ if (splash) {
 
 // Merker für das automatische Neuladen nach einem Update zurücksetzen, sobald die App läuft
 setTimeout(() => sessionStorage.removeItem("crate:reloaded"), 10_000);
+
+// Am Computer: Mausrad über Karussells (Zuletzt hinzugefügt, Hörproben, Feed-Chips) scrollt seitwärts
+if (matchMedia("(hover: hover) and (pointer: fine)").matches) {
+  window.addEventListener(
+    "wheel",
+    (e) => {
+      if (e.ctrlKey || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+      const el = (e.target as HTMLElement | null)?.closest<HTMLElement>(".carousel, .preview-scroll, .dig-chips");
+      if (!el || el.scrollWidth <= el.clientWidth) return;
+      const atEnd = e.deltaY > 0 ? el.scrollLeft + el.clientWidth >= el.scrollWidth - 1 : el.scrollLeft <= 0;
+      if (atEnd) return;
+      el.scrollLeft += e.deltaY;
+      e.preventDefault();
+    },
+    { passive: false },
+  );
+}

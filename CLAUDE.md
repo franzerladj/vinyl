@@ -13,6 +13,7 @@ Mobile Web-App (PWA) für Vinyl-DJs auf Basis von Discogs. Besitzer: Franz Krali
 - Darf nicht nach KI aussehen: keine Farbverläufe, kein Leuchten, keine Weichzeichner-Wolken, kein Funkel-Symbol, keine Wörter wie „KI“ oder „analysieren“ in der Oberfläche. Lieber Begriffe aus dem Plattenladen (Kiste, Pressung, Zustand, Seite A/B).
 - Startbildschirm: steht als HTML/CSS direkt in `web/index.html` (`#splash`, erscheint vor dem JavaScript), `main.tsx` blendet ihn nach 1,4 s aus (in derselben Sitzung nach 0,3 s), Schriftzug erst wenn die Markenschrift geladen ist. Im Inline-CSS keine `font`-Kurzform mit Prozent-Breite (der Minifier macht sie ungültig).
 - Animationen nur über `transform`/`opacity` (120 Hz): keine Übergänge auf width/height/left/box-shadow/filter, Skeleton pulsiert über Deckkraft, Seitenwechsel dunkelt über Deckkraft ab. Der kleine Titel der Werkzeugleiste gleicht seine Höhe mit negativem Abstand aus (kein Springen).
+- Computer (ab 1024 px, alles in `styles.css` unter „Computer: Seitenleiste …“): Seitenleiste `.side` in `App.tsx` statt Tab-Leiste, Inhalt in `.main` (max. 1040 px, ab 1600 px 1160 px), Detailseiten mit `NavBar` und Formulare 820 px, Blätter als Dialog in der Mitte, Platten-Seite ab 1200 px zweispaltig (`.rel-layout`), Chips/Leisten brechen um, Mausrad scrollt Karussells seitwärts (`main.tsx`), Tastatur: „/“ Suche, beim Diggen ←/→/W/Leertaste/↑↓. Prüfen mit `node tools/e2e/desk.cjs <ordner> [breite]` (1024, 1280, 1440, 1920).
 - UI-Anspruch: wirkt wie eine große native iOS-App (Apple-Design, Motion, Haptik). Änderungen immer im Handy-Viewport (Playwright, „iPhone 13“) prüfen, hell und dunkel, und mit `tools/e2e/wrap.cjs` auf 320 px gegenprüfen.
 - Umbrüche: Silbentrennung nur in Fließtext, nie in Labels, Fragen, Titeln oder Knöpfen. Kurze Labels statt Trennung. Klammern in Titeln brechen als Ganzes um (`keepParens` in `bits.tsx`, Klasse `.nobr`; auf Teilen-Karten in `wrap()`), Klammern über 40 Zeichen dürfen brechen.
 
@@ -102,6 +103,7 @@ node tools/e2e/listen.cjs   # Mithören mit simuliertem Mikrofon (124 BPM, Am)
 node tools/brand/logo.cjs   # Icons aus dem Logo neu erzeugen
 node tools/e2e/sharecard.cjs # Teilen-Karten (Profil, Set) als PNG erzeugen
 node tools/e2e/look.cjs <ordner>  # Bilder der wichtigsten Seiten hell/dunkel (Vorher/Nachher)
+node tools/e2e/desk.cjs <ordner> [breite]  # Computer-Ansicht aller Hauptseiten, hell/dunkel
 node tools/e2e/wrap.cjs     # Umbruch-Audit aller Seiten (320/375/390 px, hell/dunkel; SHOTS=1 für Screenshots)
 ```
 
