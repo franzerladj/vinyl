@@ -55,12 +55,11 @@ export default function Login({ me }: { me: Me | null }) {
           <p className="tiny" style={{ marginTop: 18 }}>
             Daten von{" "}
             <a href="https://www.discogs.com" target="_blank" rel="noreferrer">Discogs</a>,{" "}
-            <a href="https://www.deezer.com" target="_blank" rel="noreferrer">Deezer</a>,{" "}
-            <a href="https://www.last.fm" target="_blank" rel="noreferrer">Last.fm</a> und{" "}
-            <a href="https://getsongbpm.com" target="_blank" rel="noreferrer">GetSongBPM</a>
+            <a href="https://www.deezer.com" target="_blank" rel="noreferrer">Deezer</a> und{" "}
+            <a href="https://www.last.fm" target="_blank" rel="noreferrer">Last.fm</a>
           </p>
           <p className="tiny" style={{ marginTop: 8 }}>
-            Nutzt die Discogs-API, ist aber nicht mit Discogs verbunden oder von Discogs unterstützt.
+            This application uses Discogs’ API but is not affiliated with, sponsored or endorsed by Discogs. ‘Discogs’ is a trademark of Zink Media, LLC.
             <br />
             <a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a>
           </p>

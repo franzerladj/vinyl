@@ -24,7 +24,8 @@ const GRADE_SHORT: Record<string, string> = {
 export const suggestionsState = () => getKV<"ok" | "needs-seller-settings" | "unknown">("suggestionsState", "unknown");
 
 export async function refreshPrices(ids: number[], opts: { maxAgeHours?: number; background?: boolean } = {}) {
-  const maxAge = (opts.maxAgeHours ?? 12) * 3600_000;
+  // Discogs-Bedingungen: höchstens 6 Stunden alt
+  const maxAge = Math.min(opts.maxAgeHours ?? 6, 6) * 3600_000;
   const cur = await getKV("currency", "EUR");
   const [stats, sugg] = await Promise.all([db.marketStats.bulkGet(ids), db.priceSuggestions.bulkGet(ids)]);
   let suggState = await suggestionsState();
@@ -166,7 +167,7 @@ export async function scanSeller(seller: string, maxPages = 50): Promise<number>
 }
 
 /** Alle Lieblingshändler prüfen, deren letzter Scan länger als maxAgeHours her ist */
-export async function scanFavorites(maxAgeHours = 24) {
+export async function scanFavorites(maxAgeHours = 6) {
   const favs = (await db.sellers.toArray()).filter((s) => s.favorite && (!s.lastScan || Date.now() - s.lastScan > maxAgeHours * 3600_000));
   let total = 0;
   for (const s of favs) {

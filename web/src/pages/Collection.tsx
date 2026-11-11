@@ -3,8 +3,8 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type Release, type TrackMeta } from "../lib/db";
 import { autoPipeline, fetchMissingDetails } from "../lib/sync";
-import { toast } from "../lib/store";
-import { CAMELOT_COLORS, Cover, Empty, KeyBadge, markHero, RecordRow, Sheet, SkeletonRows, useDebounced, keepParens } from "../components/bits";
+import { toast, username } from "../lib/store";
+import { CAMELOT_COLORS, Cover, Empty, KeyBadge, markHero, RecordRow, Sheet, SkeletonRows, useDebounced, keepParens, DiscogsCredit } from "../components/bits";
 import { IconCamera, IconCart, IconFolder, IconRecord, IconGrid, IconMore, IconRows, IconSearch, IconSync, IconTag } from "../components/icons";
 import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
 import { matchesQuery } from "../../../shared/textSearch";
@@ -386,6 +386,7 @@ export default function Collection() {
             Keine Platte passt zu Suche und Filtern.
           </Empty>
         )}
+        {all && all.length > 0 && <DiscogsCredit href={`https://www.discogs.com/user/${encodeURIComponent(username())}/collection`} />}
       </div>
 
       <Link to="/scan" viewTransition className="fab no-print" aria-label="Platte hinzufügen">

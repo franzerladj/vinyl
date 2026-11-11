@@ -6,7 +6,7 @@ import { db } from "../lib/db";
 import { addWant } from "../lib/sync";
 import { toast } from "../lib/store";
 import type { Pagination, SearchResult } from "../lib/types";
-import { Cover, Empty, haptic, markHero, SkeletonRows } from "../components/bits";
+import { Cover, Empty, haptic, markHero, SkeletonRows, DiscogsCredit } from "../components/bits";
 import { IconBarcode, IconHeart, IconPlay, IconSearch } from "../components/icons";
 
 const GENRES = ["Electronic", "Hip Hop", "Funk / Soul", "Jazz", "Rock", "Reggae", "Latin", "Pop", "Disco"];
@@ -202,6 +202,7 @@ export default function Search() {
             Mehr laden ({pagination.items.toLocaleString("de-DE")} Treffer)
           </button>
         )}
+        {hasQuery && <DiscogsCredit href={`https://www.discogs.com/search?q=${encodeURIComponent(params.get("q") ?? "")}&type=all`} />}
       </div>
     </>
   );

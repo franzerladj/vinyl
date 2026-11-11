@@ -1,87 +1,83 @@
-# Crate als echte App veröffentlichen
+# Crate in App Store und Play Store bringen
 
-Crate ist eine installierbare Web-App (PWA). Für die Stores wird sie in eine dünne native Hülle verpackt. Der Code bleibt derselbe, Updates kommen weiter über Cloudflare, ohne neue Store-Version.
+Stand: November 2026. Crate ist eine installierbare Web-App (PWA) auf Cloudflare. Für die Stores kommt eine native Hülle drumherum (Capacitor für iOS und Android). Der App-Code bleibt derselbe, Updates an der Oberfläche gehen weiter ohne neue Store-Version.
 
-## Was schon erledigt ist
+## 1. Discogs
 
-- Manifest mit App-ID, Sprache, Kategorien, Shortcuts (Scannen, Wantlist, Sets, Shoppen), normalen und maskierbaren Icons
-- Icons: `icon-192.png`, `icon-512.png`, `icon-maskable-*.png`, `apple-touch-icon.png`, `icon-1024.png` (Store-Icon)
-- Offline-Start über den Service Worker, Update-Hinweis statt Zwangs-Neuladen
-- Fehlerseite statt weißem Bildschirm, automatisches Neuladen nach einem Update
-- Offline-Hinweis oben im Bild
-- Impressum (`/impressum`) und Datenschutz (`/datenschutz`), auch ohne Anmeldung erreichbar
-- Keine Verbindung zu Google Fonts (Schriften liegen in der App), YouTube lädt erst nach Antippen
-- Kein Tracking, keine Werbung, kein Nutzerkonto auf dem Server. Alle Daten liegen auf dem Gerät und lassen sich unter Einstellungen → Daten löschen
-- Discogs-Hinweis („nutzt die Discogs-API, ist aber nicht mit Discogs verbunden …“), wie es die Discogs-API-Bedingungen verlangen
-- Sicherheits-Header in `web/public/_headers`
+Fragen muss man nicht. Laut den [API-Bedingungen](https://support.discogs.com/hc/en-us/articles/360009334593) ist die Nutzung für Apps erlaubt. Pflicht ist:
 
-## Vor dem Veröffentlichen
+| Regel | Stand in Crate |
+| --- | --- |
+| Hinweis wörtlich: „This application uses Discogs’ API but is not affiliated with, sponsored or endorsed by Discogs. ‘Discogs’ is a trademark of Zink Media, LLC.“ | Login, Impressum, Über Crate |
+| „Data provided by Discogs.“ direkt bei den Daten, mit Link (ohne nofollow) auf die Discogs-Seite | `DiscogsCredit` auf Platte, Sammlung, Wantlist, Suche, Diggen, Label, Freund, Shop, Plattenbörse |
+| Angezeigte Daten höchstens 6 Stunden älter als bei Discogs | Preise, Sammlungswert, Freunde, Platten-Details werden nach spätestens 6 Stunden neu geholt |
+| Kein Auslesen von Discogs-Webseiten, keine Umgehung der Limits | Lesezeichen für den Marktplatz entfernt, Anfragen laufen über die Warteschlange (60/min) |
+| Name ohne „Discogs“ | „Crate“. In der Store-Beschreibung nur beschreibend: „für deine Discogs-Sammlung“ |
+| Keine Gebühr für Funktionen mit Discogs-Daten ohne schriftliche Erlaubnis, Nutzer- und Marktplatzdaten nie kommerziell | Crate ist kostenlos, keine Werbung |
 
-1. **Impressum ausfüllen:** `web/src/pages/Legal.tsx`, Objekt `OPERATOR`. Solange Platzhalter drinstehen, zeigen beide Seiten einen gelben Hinweis.
-2. **Eigene Domain** (z. B. `crate.app` oder `crate.feuerpfeil.de`) in Cloudflare Pages verbinden und in der Discogs-App-Einstellung als Callback-URL eintragen.
-3. **Discogs-App umbenennen** (developers → Settings), Beschreibung und Website setzen. Discogs begrenzt auf 60 Anfragen pro Minute und IP-Adresse. Weil die App direkt vom Handy anfragt, hat jeder Nutzer sein eigenes Kontingent.
-4. **Screenshots** mit der echten Sammlung machen (iPhone 6,7" und 6,5", Android Phone). Start, Sammlung, Release mit BPM/Key, Set-Builder, Einleger-Vorschau.
-5. **Datenschutz-Angaben im Store** (siehe unten) eintragen.
+Vor dem Start in der Discogs-Entwickler-Einstellung: App-Name „Crate“, Beschreibung, Website und die neue Callback-Adresse (siehe 4.) eintragen.
 
-## Android (Google Play): Trusted Web Activity
+## 2. Was Apple und Google prüfen
 
-Eine TWA ist Chrome im Vollbild ohne Adressleiste. Google akzeptiert das ausdrücklich.
+| Punkt | Apple | Google | Stand |
+| --- | --- | --- | --- |
+| Mehr als eine Website (Apple 4.2) | streng | locker | Native Teile nötig, siehe 4. |
+| Konto und Daten in der App löschen | Pflicht | Pflicht, dazu eine Lösch-Webseite | Einstellungen → „Alle meine Crate-Daten löschen“ (Server und Gerät), Route `DELETE /api/me` |
+| Datenschutzerklärung als Link | Pflicht | Pflicht | `/datenschutz` |
+| Angaben zu Daten („Privacy Nutrition Label“, „Data safety“) | Pflicht | Pflicht | siehe 5. |
+| Testzugang für die Prüfer | Pflicht | empfohlen | Discogs-Testkonto mit rund 30 Platten anlegen (Franz) |
+| „Mit Apple anmelden“ | nicht nötig: Ausnahme für Apps, die sich nur beim Dienst anmelden, dessen Inhalte sie zeigen (4.8) | – | – |
+| Keine Abstürze, alle Knöpfe gehen | Pflicht | Pflicht | Browser-Tests, dann Test auf echten Geräten |
+| Screenshots vom aktuellen Stand | Pflicht | Pflicht | mit echter Sammlung machen |
+| Händler-Status in der EU (DSA) | Pflicht | Pflicht | „kein Händler“, solange kostenlos |
+| Geschlossener Test mit 12 Personen über 14 Tage | – | Pflicht für neue private Entwicklerkonten | Testerliste sammeln |
 
-```bash
-npm i -g @bubblewrap/cli
-bubblewrap init --manifest https://DEINE-DOMAIN/manifest.webmanifest
-bubblewrap build
-```
+## 3. Was Franz braucht
 
-- Paketname z. B. `de.feuerpfeil.crate`
-- Bubblewrap gibt einen SHA-256-Fingerabdruck aus. Den in `web/public/.well-known/assetlinks.json` eintragen, sonst zeigt die App eine Adressleiste:
+- Apple Developer Program: 99 US-Dollar im Jahr, am besten als Privatperson oder über Feuerpfeil (dann mit D-U-N-S-Nummer)
+- Google Play Console: einmalig 25 US-Dollar, Identitätsprüfung
+- Einen Mac mit Xcode für den iOS-Build (oder einen Cloud-Dienst wie Codemagic)
+- Ein Android-Gerät und ein iPhone zum Testen
+- Eigene Domain (z. B. `kiste.fm` oder `wuehlkiste.app`), damit die App-Adresse nicht `crate-8vf.pages.dev` ist
+- 12 Tester für Google (Freunde, Kollegen) mit Google-Konto
+- Discogs-Testkonto für die Prüfer
 
-```json
-[{ "relation": ["delegate_permission/common.handle_all_urls"],
-   "target": { "namespace": "android_app", "package_name": "de.feuerpfeil.crate",
-               "sha256_cert_fingerprints": ["AA:BB:..."] } }]
-```
+## 4. Technischer Weg
 
-- Bei Play App Signing den Fingerabdruck aus der Play Console nehmen, nicht den lokalen.
-- Kamera, Barcode-Erkennung (nativ in Chrome) und Teilen funktionieren in der TWA ohne Zusatzcode.
+Capacitor mit lokal mitgelieferten Web-Dateien (`web/dist`) und API-Aufrufen an die eigene Domain:
 
-## iOS (App Store): Capacitor
+1. `@capacitor/core`, `@capacitor/ios`, `@capacitor/android`, App-ID `de.feuerpfeil.crate`
+2. **Login:** Discogs-Anmeldung im System-Browser (`@capacitor/browser`), zurück per Deep Link `crate://login`. Server braucht eine Callback-Route für die App, Sitzung dann per Token statt Cookie.
+3. **Native Teile** (gegen 4.2 und für ein besseres Gefühl):
+   - Barcode-Scanner nativ (`@capacitor-mlkit/barcode-scanning`)
+   - Mitteilungen über APNs und FCM (`@capacitor/push-notifications`); der Server schickt heute Web-Push
+   - Haptik (`@capacitor/haptics`), Teilen-Menü (`@capacitor/share`), Kalender-Datei öffnen
+   - Offline-Start mit den Daten auf dem Gerät (geht schon)
+4. **Info.plist**: Kamera („Crate liest Barcodes und Labels, um Platten zu finden“), Mikrofon („Crate hört mit, um Tempo und Tonart zu messen. Die Aufnahme verlässt das Gerät nicht.“)
+5. **Datenschutz-Manifest** (`PrivacyInfo.xcprivacy`) für iOS
 
-Apple lehnt reine Website-Hüllen ab (Richtlinie 4.2). Crate bringt aber genug eigene Funktionen mit, und mit Capacitor kommen native Teile dazu:
-
-```bash
-npm i @capacitor/core @capacitor/cli @capacitor/ios
-npx cap init Crate de.feuerpfeil.crate --web-dir web/dist
-npx cap add ios
-npx cap open ios   # in Xcode signieren und hochladen
-```
-
-Empfohlene native Ergänzungen, damit die App die Prüfung sicher besteht und sich besser anfühlt:
-
-- `@capacitor-mlkit/barcode-scanning`: schneller nativer Barcode-Scanner (iOS Safari hat keinen eingebauten)
-- `@capacitor/haptics`: echte Taptic-Engine-Rückmeldung
-- `@capacitor/share`: natives Teilen-Menü für Sets
-- `@capacitor/browser` oder eine zweite WebView: Discogs-Marktplatz mit dem Login des Nutzers öffnen und Angebote auslesen. Damit fällt das Lesezeichen komplett weg, weil die App die Seite selbst lesen darf.
-
-Wichtig für iOS:
-
-- **Login:** Die Discogs-Anmeldung muss im In-App-Browser (`@capacitor/browser`, SFSafariViewController) laufen und per Deep Link (`crate://callback`) zurückkommen. Dafür im Server eine zweite Callback-Route anlegen.
-- **API-Basis:** In der nativen Hülle zeigt `server.url` in `capacitor.config.ts` auf die Domain, oder die Web-Dateien liegen lokal und die API-Aufrufe gehen an die volle Domain.
-- Kamera-Text in `Info.plist`: `NSCameraUsageDescription` = „Crate liest Barcodes und Labels, um Platten zu finden.“
-
-## Datenschutz-Angaben im Store
+## 5. Angaben zum Datenschutz im Store
 
 | Frage | Antwort |
 | --- | --- |
 | Tracking | Nein |
 | Werbung | Nein |
-| Erhobene Daten | Keine, die mit der Person verknüpft beim Anbieter gespeichert werden |
-| Kamera | Nur zum Erkennen von Platten, Fotos werden nicht gespeichert |
-| Konto löschen | Kein Konto beim Anbieter. Abmelden und „Alle lokalen Daten löschen“ unter Einstellungen → Daten |
-| Altersfreigabe | 4+ / USK 0 (Links zu YouTube und Discogs: „Unbeschränkter Webzugriff“ angeben) |
+| Erhobene Daten | Benutzerkennung (Discogs-Name), vom Nutzer eingetragene Inhalte (Sets, BPM, Notizen) für den Abgleich zwischen Geräten; optional Profil und Push-Adresse |
+| Mit der Person verknüpft | Ja (Discogs-Name), nicht für Tracking |
+| Fotos | Nur zur Erkennung kurz an den Server, nicht gespeichert |
+| Mikrofon | Nur auf dem Gerät ausgewertet |
+| Verschlüsselt übertragen | Ja |
+| Löschen | In der App: Einstellungen → „Alle meine Crate-Daten löschen“ |
+| Altersfreigabe | 4+ / USK 0, „Unbeschränkter Webzugriff“ angeben (Links zu Discogs und YouTube) |
 
-## Kosten
+## 6. Geld verdienen
 
-- Google Play: einmalig 25 US-Dollar
-- Apple Developer Program: 99 US-Dollar pro Jahr
-- Cloudflare Pages und Workers: im kostenlosen Rahmen, solange Workers AI unter dem Tageskontingent bleibt
+Kostenlos und ohne Werbung ist mit Discogs problemlos. Bezahlte Funktionen, ein Abo oder ein Kaufpreis für Funktionen mit Discogs-Daten brauchen eine schriftliche Erlaubnis von Discogs. Nutzer- und Marktplatzdaten (Sammlung, Wantlist, Preise) dürfen gar nicht kommerziell genutzt werden. Werbung mit diesen Daten ist verboten, Links, die Käufer von Discogs zu anderen Shops lenken, ebenso. Denkbar ohne Erlaubnis: eine freiwillige „Trinkgeld“-Kasse als In-App-Kauf (Apple und Google verlangen dafür ihr eigenes Bezahlsystem und behalten 15 bis 30 %).
+
+## 7. Reihenfolge
+
+1. Domain kaufen, App auf die Domain umziehen (mit Datenübergabe)
+2. Capacitor-Hülle, Login per Deep Link, native Mitteilungen und Scanner
+3. Test auf echten Geräten, geschlossener Test bei Google (14 Tage)
+4. Store-Einträge, Screenshots, Datenschutz-Angaben, Testkonto für die Prüfer
+5. Einreichen

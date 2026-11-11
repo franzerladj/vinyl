@@ -520,3 +520,17 @@ function AskDialog() {
     </div>
   );
 }
+
+/**
+ * Pflicht laut Discogs-API-Bedingungen: „Data provided by Discogs.“ direkt bei den Daten,
+ * mit Link auf die Discogs-Seite dieser Daten (ohne nofollow).
+ */
+export function DiscogsCredit({ href, className = "" }: { href: string; className?: string }) {
+  return (
+    <p className={`discogs-credit ${className}`} lang="en">
+      <a href={href} target="_blank" rel="noopener">
+        Data provided by Discogs.
+      </a>
+    </p>
+  );
+}

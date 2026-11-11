@@ -14,7 +14,7 @@ import { loadMyProfile, loadProfile } from "../lib/profile";
 import type { CrateProfile } from "../../../shared/profile";
 import { addFriend, collectionUrl, friendFeed, friendMatches, inviteLink, lentRecords, messageUrl, profileUrl, removeFriend, syncFriend, tasteMatch, type FriendMatch } from "../lib/friends";
 import { ask, toast, useStore } from "../lib/store";
-import { Avatar, Cover, Empty, haptic, RecordRow, Seg, SkeletonRows, useDebounced } from "../components/bits";
+import { Avatar, Cover, Empty, haptic, RecordRow, Seg, SkeletonRows, useDebounced, DiscogsCredit } from "../components/bits";
 import { IconMore, IconPlus, IconSearch, IconShare, IconSync, IconTrash, IconUser } from "../components/icons";
 import { matchesQuery } from "../../../shared/textSearch";
 import { MenuSheet, NavBar } from "../components/ui";
@@ -429,6 +429,7 @@ function FriendDetail({ u }: { u: string }) {
             {tab === "hasYourWants" ? `${u} hat aktuell keine Platte von deiner Wantlist.` : tab === "wantsYours" ? `${u} sucht gerade nichts, was du hast.` : dq ? "Anders suchen." : ""}
           </Empty>
         )}
+        <DiscogsCredit href={`https://www.discogs.com/user/${encodeURIComponent(u)}`} />
         {f.lastSync && <p className="tiny" style={{ textAlign: "center" }}>Stand {new Date(f.lastSync).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}</p>}
       </div>
 

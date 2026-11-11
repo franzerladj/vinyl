@@ -1,5 +1,5 @@
 // Abgleich mit Discogs + Anreicherung (Tracklists, BPM/Key, Vibes, Preise)
-import { api, canClaude, discogs } from "./api";
+import { api, discogs } from "./api";
 import { autoUpdateTrack, db, realTracks, setKV, getKV, trackId, type Release, type TrackMeta } from "./db";
 import { checkKey } from "../../../shared/bpmCheck";
 import { retempo } from "./tempo";
@@ -171,7 +171,7 @@ interface AudioInfo { bpm: number | null; key: string | null; source: string[]; 
 /**
  * BPM/Key für Tracks ohne Werte nachschlagen.
  * Schritt 1 pro Platte: ganzes Album bei Deezer zuordnen (eine Anfrage, genaue Zuordnung über Mix und Länge).
- * Schritt 2 für den Rest: einzeln suchen (Deezer und, falls eingerichtet, GetSongBPM mit Tonart).
+ * Schritt 2 für den Rest: einzeln bei Deezer suchen. Tonarten kommen aus der eigenen Messung.
  */
 export async function lookupAudioFor(trackIds?: string[]) {
   const all = trackIds ? ((await db.tracks.bulkGet(trackIds)).filter(Boolean) as TrackMeta[]) : await db.tracks.toArray();
@@ -188,7 +188,6 @@ export async function lookupAudioFor(trackIds?: string[]) {
   jobUpdate(job, { label: "BPM & Key suchen", done: 0, total: todo.length });
   let found = 0;
   let done = 0;
-  const keyLookup = getState().me?.features.keyLookup;
   try {
     await pool([...byRelease.entries()], 3, async ([rid, tracks]) => {
       const r = rels.get(rid);
@@ -214,12 +213,8 @@ export async function lookupAudioFor(trackIds?: string[]) {
               patch.dbSource = "Deezer (Album)";
               if (!t.bpm) found++;
             }
-            // Ohne Tonart weiter einzeln suchen, falls GetSongBPM eingerichtet ist
-            if (keyLookup && !t.key) rest.push({ ...t, ...patch });
-            else {
-              patch.lookedUpAt = Date.now();
-              done++;
-            }
+            patch.lookedUpAt = Date.now();
+            done++;
             await autoUpdateTrack(t.id, patch);
           }
         } catch (e) {
@@ -267,38 +262,7 @@ export async function lookupAudioFor(trackIds?: string[]) {
  */
 export async function tagVibes(trackIds?: string[], opts: { audio?: boolean } = {}) {
   const { enrichFree } = await import("./free");
-  if (!canClaude(getState().me)) return enrichFree(trackIds, { audio: opts.audio ?? true });
-  // Mit Claude für die Vibes: Tempo trotzdem selbst messen und gegenprüfen
-  if (opts.audio ?? true) await enrichFree(trackIds, { audio: true, measureOnly: true });
-  return tagVibesClaude(trackIds);
-}
-
-async function tagVibesClaude(trackIds?: string[]) {
-  const all = trackIds ? ((await db.tracks.bulkGet(trackIds)).filter(Boolean) as TrackMeta[]) : await db.tracks.toArray();
-  const todo = all.filter((t) => t.energy == null || (t.vibeSource !== "manuell" && t.vibeSource !== "Claude"));
-  if (!todo.length) return 0;
-  const rels = new Map((await db.releases.bulkGet([...new Set(todo.map((t) => t.releaseId))])).filter(Boolean).map((r) => [r!.id, r!]));
-  const job = "vibes";
-  jobUpdate(job, { label: "Vibes taggen (KI)", done: 0, total: todo.length });
-  try {
-    for (let i = 0; i < todo.length; i += 40) {
-      const chunk = todo.slice(i, i + 40);
-      const res = await api<{ items: { id: string; energy: number; moods: string[]; slot: string }[] }>("/api/ai/vibes", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: chunk.map((t) => ({ id: t.id, artist: t.artist, title: t.title, styles: rels.get(t.releaseId)?.styles ?? [], year: rels.get(t.releaseId)?.year, bpm: t.bpm ?? undefined })),
-        }),
-      });
-      await db.transaction("rw", db.tracks, async () => {
-        for (const it of res.items) await db.tracks.update(it.id, { energy: it.energy, moods: [...new Set([...it.moods, it.slot])], vibeSource: "Claude" });
-      });
-      jobUpdate(job, { done: Math.min(todo.length, i + 40) });
-    }
-  } finally {
-    jobUpdate(job, null);
-  }
-  return todo.length;
+  return enrichFree(trackIds, { audio: opts.audio ?? true });
 }
 
 export async function currency(): Promise<string> {
@@ -306,7 +270,7 @@ export async function currency(): Promise<string> {
 }
 
 /** Marktpreise laden (mit Verlauf und Preisempfehlung, siehe prices.ts) */
-export async function fetchMarketStats(ids: number[], maxAgeHours = 12) {
+export async function fetchMarketStats(ids: number[], maxAgeHours = 6) {
   const { refreshPrices } = await import("./prices");
   return refreshPrices(ids, { maxAgeHours, background: ids.length > 1 });
 }
@@ -316,9 +280,16 @@ export async function fetchMarketStats(ids: number[], maxAgeHours = 12) {
 export async function setCondition(instanceId: number, which: "media" | "sleeve", value: string) {
   const item = await db.collection.get(instanceId);
   if (!item) throw new Error("Platte nicht in der Sammlung");
-  const folder = await import("./folders").then((f) => f.discogsFolderOf(instanceId, item.folderId));
-  await discogs(`/users/${u()}/collection/folders/${folder}/releases/${item.releaseId}/instances/${instanceId}/fields/${FIELD[which]}`, { method: "POST", body: { value } });
+  // Sofort anzeigen, bei Fehler zurücknehmen (Discogs antwortet bei laufendem Sync manchmal erst nach Sekunden)
+  const before = item[which];
   await db.collection.update(instanceId, { [which]: value || undefined });
+  try {
+    const folder = await import("./folders").then((f) => f.discogsFolderOf(instanceId, item.folderId));
+    await discogs(`/users/${u()}/collection/folders/${folder}/releases/${item.releaseId}/instances/${instanceId}/fields/${FIELD[which]}`, { method: "POST", body: { value }, retry: true });
+  } catch (e) {
+    await db.collection.update(instanceId, { [which]: before });
+    throw e;
+  }
 }
 
 /** Kaufpreis eintragen (null = löschen). Steht als Marke in der Discogs-Notiz des Exemplars. */
@@ -470,7 +441,7 @@ export async function autoPipeline(opts: { force?: boolean; resume?: boolean } =
         }
       });
       const { syncFriends } = await import("./friends");
-      await step("Freunde", () => syncFriends(24));
+      await step("Freunde", () => syncFriends(6));
     };
     const audioLane = async () => {
       // Läuft in Runden, bis keine neuen Tracklists mehr dazukommen

@@ -85,3 +85,14 @@ describe("Abgleich-Daten löschen", () => {
     expect((await pull("del-b")).rows).toHaveLength(1);
   });
 });
+
+describe("Alles löschen", () => {
+  it("entfernt Abgleich-Daten und meldet ab", async () => {
+    await push("weg-test", [{ t: "kv", k: "stylus", ts: 1, patch: { value: 1 } }]);
+    const r = await app.request(`${ORIGIN}/api/me`, { method: "DELETE", headers: { Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", Cookie: await cookie("weg-test") } }, env);
+    expect(r.status).toBe(200);
+    expect(r.headers.get("Set-Cookie")).toContain("crate_session=;");
+    expect((await pull("weg-test")).rows).toHaveLength(0);
+    expect((await app.request(`${ORIGIN}/api/me`, { method: "DELETE" }, env)).status).toBe(401);
+  });
+});

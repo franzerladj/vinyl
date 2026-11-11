@@ -21,7 +21,8 @@ export const cachedCollectionValue = () => getKV<CollectionValue | null>(KEY, nu
 /** Gesamtwert bei Discogs abfragen (eine Anfrage), höchstens alle 12 Stunden */
 export async function refreshCollectionValue(force = false): Promise<CollectionValue | null> {
   const old = await cachedCollectionValue();
-  if (!force && old && Date.now() - old.at < 12 * 3600_000) return old;
+  // Discogs-Bedingungen: angezeigte Daten höchstens 6 Stunden alt
+  if (!force && old && Date.now() - old.at < 6 * 3600_000) return old;
   const r = await discogs<{ minimum: string; median: string; maximum: string }>(`/users/${encodeURIComponent(username())}/collection/value`, { background: true });
   const med = parseMoney(r.median);
   if (!med) return old;

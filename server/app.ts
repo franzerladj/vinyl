@@ -6,7 +6,7 @@ import { seal, SESSION_DAYS, unseal, type Session } from "./session";
 import { authHeaders, authorizeUrl, discogsFetch, DiscogsBusy, getAccessToken, getRequestToken } from "./discogs";
 import { ALL_KINDS, bundle, currentSlot, dueReminders, isPushEndpoint, loadUser, pickWants, notifyUser, saveUser, sendPush, userKey, wantChange, type Message, type PushSub, type Stat, type UserRec, type WatchedWant } from "./push";
 import { oauthHmacHeader, oauthHmacParams } from "./oauthSign";
-import { recognizeRecord, recognizeRecordFree, tagVibes, tagVibesFree, type VibeInput } from "./ai";
+import { recognizeRecordFree, tagVibesFree, type VibeInput } from "./ai";
 import { fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
 import { lastfmTags } from "./lastfm";
 import { profileEmpty, sanitizeProfile, type CrateProfile } from "../shared/profile";
@@ -67,16 +67,9 @@ const SESSION_AGE = SESSION_DAYS * 24 * 60 * 60;
 /** Sitzung frisch versiegeln (neuer Zeitstempel) */
 const setSession = async (c: C, s: Session) => setCookie(c, SESSION, await seal(c.var.cfg.sessionSecret, { ...s, iat: Date.now() }), { ...cookieOpts(c), maxAge: SESSION_AGE });
 
-/** Wer darf welche KI nutzen? Eigener Anthropic-Key auch ohne Anmeldung, Betreiber-KI nur mit bestätigter Sitzung */
-async function aiAccess(c: C): Promise<{ key: string | null; free: boolean } | null> {
-  const own = c.req.header("X-Anthropic-Key");
-  if (own && own.startsWith("sk-ant-")) return { key: own, free: false };
-  if (!(await tokenSession(c))) return null;
-  const s = await session(c);
-  const { anthropicKey, aiAllowlist, ai } = c.var.cfg;
-  // Betreiber-Key nur mit bestätigtem Namen (Allowlist), Workers AI reicht ein gültiger Zugang
-  const allowed = Boolean(s && anthropicKey) && (aiAllowlist.includes("*") || aiAllowlist.includes(s!.username.toLowerCase()));
-  return { key: allowed ? anthropicKey : null, free: Boolean(ai) };
+/** Bilderkennung und Vibes (Workers AI) nur mit gültigem Discogs-Zugang */
+async function aiAccess(c: C): Promise<boolean> {
+  return Boolean((await tokenSession(c)) && c.var.cfg.ai);
 }
 
 // ---------- Auth ----------
@@ -220,10 +213,8 @@ app.get("/api/me", async (c) => {
   const s = await session(c);
   const features = {
     oauth: Boolean(cfg.discogsKey),
-    claude: Boolean((await aiAccess(c))?.key),
     freeAi: Boolean(cfg.ai),
     lastfm: Boolean(cfg.lastfmKey),
-    keyLookup: Boolean(cfg.getSongBpmKey),
   };
   if (s) {
     // Gleitend verlängern: wer die App nutzt, bleibt angemeldet, ungenutzte Sitzungen laufen ab
@@ -299,23 +290,16 @@ app.all("/api/discogs/*", async (c) => {
 
 // ---------- Erkennung & Vibes ----------
 app.post("/api/ai/recognize", async (c) => {
-  const access = await aiAccess(c);
-  if (!access) return c.json({ message: "Bitte anmelden" }, 401);
+  if (!(await aiAccess(c))) return c.json({ message: "Bitte anmelden" }, 401);
   const { image, mediaType } = await c.req.json<{ image: string; mediaType: "image/jpeg" | "image/png" | "image/webp" }>();
   if (!image || image.length > 7_000_000) return c.json({ message: "Bild fehlt oder ist zu groß" }, 400);
-  if (access.key) return c.json({ ...(await recognizeRecord(access.key, image, mediaType ?? "image/jpeg")), engine: "claude" });
-  if (access.free && c.var.cfg.ai) return c.json({ ...(await recognizeRecordFree(c.var.cfg.ai, image, mediaType ?? "image/jpeg")), engine: "workers-ai" });
-  return c.json({ message: "Keine Bilderkennung auf dem Server eingerichtet" }, 501);
+  return c.json({ ...(await recognizeRecordFree(c.var.cfg.ai!, image, mediaType ?? "image/jpeg")), engine: "workers-ai" });
 });
 
 app.post("/api/ai/vibes", async (c) => {
-  const access = await aiAccess(c);
-  if (!access) return c.json({ message: "Bitte anmelden" }, 401);
+  if (!(await aiAccess(c))) return c.json({ message: "Bitte anmelden" }, 401);
   const { items } = await c.req.json<{ items: VibeInput[] }>();
-  const list = (items ?? []).slice(0, 60);
-  if (access.key) return c.json({ items: await tagVibes(access.key, list), engine: "claude" });
-  if (access.free && c.var.cfg.ai) return c.json({ items: await tagVibesFree(c.var.cfg.ai, list.slice(0, 25)), engine: "workers-ai" });
-  return c.json({ message: "Keine KI auf dem Server eingerichtet" }, 501);
+  return c.json({ items: await tagVibesFree(c.var.cfg.ai!, (items ?? []).slice(0, 25)), engine: "workers-ai" });
 });
 
 // ---------- Audio-Daten ----------
@@ -647,6 +631,26 @@ app.get("/api/profile/me", async (c) => {
   const s = await session(c);
   if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
   return c.json({ profile: JSON.parse((await cfg.kv.get(profKey(s.username))) ?? "null") });
+});
+
+// ---------- Alles löschen (App Store / Play Store: Konto- und Datenlöschung in der App) ----------
+app.delete("/api/me", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const u = s.username.toLowerCase();
+  // Mitteilungen, Verzeichnis, Profil, wartende Freundes-Hinweise, Abgleich
+  await Promise.all([cfg.kv.delete(userKey(u)), cfg.kv.delete(`dir:${u}`), cfg.kv.delete(profKey(u)), cfg.kv.delete(`pending:${u}`)]);
+  await rebuildNameKeys(cfg, u);
+  let cursor: string | undefined;
+  do {
+    const r = await cfg.kv.list({ prefix: `fa:${u}:`, cursor });
+    await Promise.all(r.keys.map((k) => cfg.kv.delete(k.name)));
+    cursor = r.list_complete ? undefined : r.cursor;
+  } while (cursor);
+  await syncStore(c.env ?? {}).clear(u);
+  deleteCookie(c, SESSION, { path: "/" });
+  return c.json({ ok: true });
 });
 
 // ---------- Abgleich zwischen Geräten (nur mit bestätigtem Discogs-Namen) ----------

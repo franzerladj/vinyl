@@ -13,11 +13,10 @@ WebApp fürs Handy für Vinyl-DJs, aufgebaut auf deinem Discogs-Account. Läuft 
 | **Suche** | Komplette Discogs-Datenbank mit Filtern (Vinyl, Genre, Style, Label, Katalognummer, Jahr, Land, Barcode). Direkt zur Wantlist oder Sammlung hinzufügen. |
 | **Platte hinzufügen** | Foto von Cover, Label oder Runout: die App liest Katalognummer, Barcode und Text (kostenlos auf dem Handy oder per Bildmodell) und schlägt die passende Pressung vor. Alternativ Barcode mit der Kamera scannen oder Katalognummer eintippen. |
 | **Sammlung** | Suche über Artist, Titel, Label, Tracks und Regalplatz. Filter nach BPM-Bereich, passender Tonart (Camelot), Style, „ohne Sticker“, „BPM fehlt“. Listen- und Cover-Ansicht. Regalplatz und Crates (Gig-Taschen) je Platte. |
-| **Track-Daten** | BPM und Tonart automatisch (Deezer, GetSongBPM, Analyse der Hörprobe), Tap-Tempo zum Selbermessen, Energie 1 bis 10, Vibe-Tags (Styles, Last.fm, gemessene Energie), Sterne, Notizen. 30-Sekunden-Hörproben, YouTube-Videos von Discogs. |
+| **Track-Daten** | BPM und Tonart automatisch (Deezer und Analyse der Hörprobe, gegengeprüft), Tap-Tempo zum Selbermessen, Energie 1 bis 10, Vibe-Tags (Styles, Last.fm, gemessene Energie), Sterne, Notizen. 30-Sekunden-Hörproben, YouTube-Videos von Discogs. |
 | **Setlists** | Vorschlag nach Energie-Kurve (Warm-up, Journey, Peak-Time, Bar, Closing), Start- und End-BPM, maximalem BPM-Sprung und harmonischem Mixen über das Camelot-Rad. Anzeige jedes Übergangs (BPM-Differenz, harmonisch / Energy-Boost / Key-Clash), manuell umsortieren, Tracks ergänzen, teilen. **Einpackliste** mit Regalplätzen für den Gig. |
 | **Was passt als Nächstes?** | Live-Helfer: aktuellen Track wählen, die App zeigt passende Tracks aus deiner Sammlung innerhalb deines Pitch-Bereichs. |
 | **Beschriften** | Drei Varianten für die Außenhülle: **Einleger-Karte** (A6, A5 oder Quadrat, kommt vor das Cover in die transparente Hülle, nichts klebt auf dem Original), **Obi** (als Knick-Obi um die linke Kante der Hülle gelegt: vorne Artist und Titel, hinten Tracks; oder als Einzelstreifen) und **Sticker** (A4-Etikettenbögen, 62-mm-Etikettendrucker). Inhalt: Artist, Titel, Katalognummer, Tracks nach Seite mit BPM, farbigem Camelot-Key, Energie, Styles, QR-Code. Looks: Weiß, Schwarz oder in den Farben des Covers. **Neue Platten werden automatisch vorgemerkt**, nach dem Druck als erledigt markiert. |
-| **Google Sheets** | Spiegel von Sammlung, Wantlist, Tracks und Sets in dein eigenes Sheet. BPM/Key-Änderungen aus dem Sheet lassen sich zurückholen. Siehe [google-sheets/README.md](google-sheets/README.md). |
 | **Backup** | JSON-Backup aller eigenen Daten, CSV-Export der Tracks. |
 
 ## Einrichtung
@@ -41,7 +40,7 @@ Empfohlen ist **Cloudflare Pages**: kostenlos, schläft nie ein, HTTPS und eigen
 4. **Settings → Variables and Secrets → Add** (für *Production*), jeweils als Typ **Secret**:
    - `DISCOGS_CONSUMER_KEY`, `DISCOGS_CONSUMER_SECRET`
    - `SESSION_SECRET` (zufällig, mind. 32 Zeichen)
-   - optional `LASTFM_API_KEY`, `GETSONGBPM_API_KEY`, `ANTHROPIC_API_KEY`, `AI_ALLOWLIST`
+   - optional `LASTFM_API_KEY`, für Mitteilungen `VAPID_PRIVATE_JWK` und `CRON_SECRET`
 5. Das Workers-AI-Binding für die kostenlose Foto-Erkennung steht schon in `wrangler.toml` und wird automatisch übernommen. Diese Datei ist für Bindings und normale Variablen maßgeblich, im Dashboard sind sie dann nur lesbar. Secrets lassen sich weiter im Dashboard pflegen.
 6. Neu deployen. Jeder Push auf den Branch baut die App automatisch neu.
 7. Optional unter **Custom domains** eine eigene Adresse wie `crate.deinedomain.de` verbinden und die Callback-URL bei Discogs anpassen.
@@ -50,18 +49,18 @@ Auf dem Handy die Seite öffnen und „Zum Home-Bildschirm“ wählen.
 
 ### Mit Kumpels teilen
 
-Einfach den Link schicken. Jeder meldet sich mit dem eigenen Discogs-Account an. Sammlung, BPM-Daten und Sets liegen auf dem jeweiligen Handy, auf dem Server wird nichts gespeichert. Das Discogs-Limit gilt pro Person.
+Einfach den Link schicken. Jeder meldet sich mit dem eigenen Discogs-Account an. Sammlung, BPM-Daten und Sets liegen auf dem jeweiligen Gerät und werden zwischen den eigenen Geräten abgeglichen. Das Discogs-Limit gilt pro Person.
 
-Kosten: Alles außer Claude ist kostenlos. Claude bezahlt nur, wer in `AI_ALLOWLIST` steht (dein Key) oder in der App einen eigenen Anthropic-Key einträgt.
+Kosten: alles kostenlos (Cloudflare-Gratisrahmen, Workers-AI-Tageskontingent).
 
 ### Was kostenlos läuft und was optional ist
 
-| Funktion | Kostenlos | Optional mit Claude |
-|---|---|---|
-| Platte erkennen | Barcode-Scan, Texterkennung auf dem Handy (Tesseract), Bildmodell von Workers AI (Tageskontingent) | Beste Erkennung auch bei schwierigen Covern |
-| BPM | Deezer, GetSongBPM, Analyse der Hörprobe, Tap-Tempo | |
-| Tonart | GetSongBPM, Analyse der Hörprobe (Schätzung) | |
-| Energie & Vibes | Regeln aus Styles und BPM, Last.fm-Tags, gemessene Energie der Hörprobe | KI kennt viele Tracks und schätzt genauer |
+| Funktion | Woher |
+|---|---|
+| Platte erkennen | Barcode-Scan, Texterkennung auf dem Gerät (Tesseract), Bildmodell von Workers AI |
+| BPM | Deezer, eigene Messung der Hörprobe (gegengeprüft), Tap-Tempo, Mithören |
+| Tonart | Messung der Hörprobe (Schätzung), Mithören |
+| Energie & Vibes | Regeln aus Styles und BPM, Last.fm-Tags, gemessene Energie der Hörprobe |
 
 Manuell eingetragene Werte werden von automatischen Schätzungen nie überschrieben.
 
@@ -82,19 +81,14 @@ Der Node-Server (`server/index.ts`) läuft weiterhin überall, wo Node 20+ verf�
 
 ## Händler-Optimierer: woher kommen die Angebote?
 
-Discogs liefert Marktplatz-Angebote zu einem Release **nicht** über die offizielle API, und die Marktplatz-Seiten sind für Server per Cloudflare gesperrt. Darum gibt es zwei Wege:
-
-1. **Lesezeichen „Crate holen“** (empfohlen): läuft auf discogs.com in deinem eingeloggten Browser, liest die Seite [Wantlist im Marktplatz](https://www.discogs.com/sell/mywants) (alle Angebote zu all deinen Wants, gern vorher gefiltert auf „Versand nach Deutschland“) und schickt sie an die App. Einrichtung steht in der App unter *Shoppen → Angebote holen*.
-2. **Händler-Inventar prüfen:** über die offizielle API für einen konkreten Händler, z.B. wenn du einen guten Shop gefunden hast und wissen willst, was er sonst noch aus deiner Wantlist hat.
+Discogs liefert Marktplatz-Angebote zu einem Release **nicht** über die offizielle API, und das Auslesen der Marktplatz-Seiten verbieten die API-Bedingungen. Crate prüft deshalb die Inventare deiner Lieblingshändler über die offizielle API und zeigt, wer mehrere deiner Wants hat.
 
 Der Versand wird geschätzt: Nennt ein Angebot Versandkosten, gelten diese, sonst dein Wert für die erste Platte plus Aufschlag je weiterer Platte. Die tatsächlichen Kosten zeigt Discogs im Warenkorb.
-
-Hinweis: Das Lesezeichen liest die HTML-Struktur von Discogs aus. Ändert Discogs die Seite, muss der Parser in `web/src/lib/bookmarklet.ts` angepasst werden.
 
 ## Technik
 
 - `web/`: React + Vite + TypeScript, PWA, lokale Datenbank im Browser (IndexedDB über Dexie)
-- `server/`: Hono-App, läuft als Cloudflare Pages Function (`functions/api/[[path]].ts`) und unter Node (`server/index.ts`). Discogs-OAuth 1.0a, Proxy für die Discogs-API (Session verschlüsselt im Cookie, keine Datenbank nötig), Foto-Erkennung (Claude oder Workers AI), BPM/Key-Lookup, Last.fm, Hörproben-Proxy
+- `server/`: Hono-App, läuft als Cloudflare Pages Function (`functions/api/[[path]].ts`) und unter Node (`server/index.ts`). Discogs-OAuth 1.0a, Proxy für die Discogs-API (Session verschlüsselt im Cookie, keine Datenbank nötig), Foto-Erkennung (Workers AI), BPM-Lookup (Deezer), Abgleich zwischen Geräten (D1), Last.fm, Hörproben-Proxy
 - `shared/`: Händler-Optimierer, Setlist-Algorithmus, Camelot-Tonarten, Vibe-Regeln, Audio-Analyse (Tempo, Tonart, Energie) mit Tests: `npm test`
 - Die App hält das Discogs-Limit von 60 Anfragen pro Minute ein. Beim ersten Sync einer großen Sammlung dauert das Laden aller Tracklists etwa eine Sekunde pro Platte, danach nur noch für neue Platten.
 

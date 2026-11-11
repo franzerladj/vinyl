@@ -10,7 +10,7 @@ import { GRADE_HINT, SLEEVE_HINT, MEDIA_GRADES, SLEEVE_GRADES, pressingInfo, sho
 import type { CollectionItem } from "../lib/db";
 import { discogsReleaseUrl, discogsSellUrl, formatLine, money, sideOf } from "../lib/format";
 import { askText, toast, useStore } from "../lib/store";
-import { Avatar, Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, Sparkline, TapTempo, type Preview, keepParens } from "../components/bits";
+import { Avatar, Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, Sparkline, TapTempo, type Preview, keepParens, DiscogsCredit } from "../components/bits";
 import { loadPriceInfo, setTargetPrice } from "../lib/prices";
 import { friendsFor, lendRecord, messageUrl } from "../lib/friends";
 import { MenuSheet } from "../components/ui";
@@ -68,6 +68,8 @@ export default function ReleasePage() {
     db.releases.get(id).then((r) => {
       // Ältere Einträge ohne Pressungsdaten still nachladen
       if (r?.detailFetchedAt && r.identifiers === undefined) return void fetchRelease(id, true).catch(() => undefined);
+      // Discogs-Bedingungen: Angaben höchstens 6 Stunden alt, sonst still nachladen
+      if (r?.detailFetchedAt && Date.now() - r.detailFetchedAt > 6 * 3600_000) void fetchRelease(id, true).catch(() => undefined);
       if (r?.detailFetchedAt) return;
       setLoading(true);
       fetchRelease(id)
@@ -541,6 +543,7 @@ export default function ReleasePage() {
             </div>
           </>
         ) : null}
+        <DiscogsCredit href={discogsReleaseUrl(id)} />
       </div>
       </div>
 

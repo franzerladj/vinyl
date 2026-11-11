@@ -4,7 +4,7 @@ import { MenuSheet, NavBar } from "../components/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, getKV, type DJSet, type Release, type TrackMeta } from "../lib/db";
+import { db, getKV, realTracks, type DJSet, type Release, type TrackMeta } from "../lib/db";
 import { ShareCardSheet } from "../components/ShareCard";
 import { renderSetCard } from "../lib/shareCard";
 import { encodeSet } from "../../../shared/setShare";
@@ -24,6 +24,7 @@ import { Hint } from "../components/Welcome";
 import { CalendarSheet } from "../components/CalendarSheet";
 import type { GigEvent } from "../../../shared/ics";
 import { useFolders } from "../lib/folders";
+import { fetchRelease } from "../lib/sync";
 
 /** Zuletzt gewählter Ordner gilt für das nächste neue Set */
 const lastFolder = () => {
@@ -160,6 +161,21 @@ export default function SetEditor() {
       /* egal */
     }
   };
+  // Eingepackte Platten ohne Tracklist: sofort und vor dem Hintergrund-Sync laden
+  const requested = useRef(new Set<number>());
+  // Platten, die geladen wurden, aber bei Discogs keine Tracklist haben (oder nicht erreichbar sind)
+  const [noTracks, setNoTracks] = useState<Set<number>>(new Set());
+  const crateMissing = data ? crate.filter((rid) => !noTracks.has(rid) && !data.tracks.some((t) => t.releaseId === rid)) : [];
+  const crateLoading = crateMissing.length;
+  useEffect(() => {
+    for (const rid of crateMissing) {
+      if (requested.current.has(rid)) continue;
+      requested.current.add(rid);
+      const done = () => setNoTracks((s) => new Set(s).add(rid));
+      // Hat die Platte danach immer noch keine Tracks, nicht ewig „wird geladen“ zeigen
+      void fetchRelease(rid).then((r) => (realTracks(r.tracklist).length ? undefined : done()), done);
+    }
+  }, [crateMissing.join()]); // eslint-disable-line react-hooks/exhaustive-deps
   const stats = setStats(seq);
   const durOf = (t: TrackMeta) => parseDuration(data?.rels.get(t.releaseId)?.tracklist?.find((x) => x.position === t.position)?.duration);
   // Beim Mixen überlappen Tracks: grob 80 % der Länge, nur der letzte läuft ganz
@@ -422,6 +438,7 @@ export default function SetEditor() {
               playing={playing}
               history={history}
               venue={set.venue}
+              loadingCrate={crateLoading}
             />
           </>
         ) : (
@@ -468,6 +485,7 @@ export default function SetEditor() {
             playing={playing}
             history={history}
             venue={set.venue}
+            loadingCrate={crateLoading}
             search
           />
         )}
@@ -696,6 +714,8 @@ function NextPanel(p: {
   history?: Map<string, PlayedAt[]>;
   venue?: string;
   search?: boolean;
+  /** Eingepackte Platten, deren Tracklist noch geladen wird */
+  loadingCrate?: number;
 }) {
   const [q, setQ] = useState("");
   const found = useMemo(() => {
@@ -766,7 +786,7 @@ function NextPanel(p: {
           </div>
         );
       })}
-      {!rows.length && <p className="sub" style={{ margin: "4px 0" }}>{q ? "Nichts gefunden." : p.hasCrate && !p.wide ? "Nichts mehr in der Kiste übrig. Auf „Alle“ schalten oder mehr Platten einpacken." : "Keine passenden Tracks gefunden."}</p>}
+      {!rows.length && <p className="sub" style={{ margin: "4px 0" }}>{q ? "Nichts gefunden." : p.loadingCrate ? `Tracklists von ${p.loadingCrate === 1 ? "einer Platte" : `${p.loadingCrate} Platten`} werden geladen …` : p.hasCrate && !p.wide ? "Nichts mehr in der Kiste übrig. Auf „Alle“ schalten oder mehr Platten einpacken." : "Keine passenden Tracks gefunden."}</p>}
     </div>
   );
 }

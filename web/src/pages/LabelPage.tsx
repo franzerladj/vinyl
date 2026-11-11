@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { NavBar } from "../components/ui";
-import { Cover, Empty, haptic, Seg, SkeletonRows } from "../components/bits";
+import { Cover, Empty, haptic, Seg, SkeletonRows, DiscogsCredit } from "../components/bits";
 import { db } from "../lib/db";
 import { addWant } from "../lib/sync";
 import { toast } from "../lib/store";
@@ -92,6 +92,7 @@ export default function LabelPage() {
             </div>
           </>
         )}
+        <DiscogsCredit href={`https://www.discogs.com/label/${id}`} />
       </div>
     </>
   );

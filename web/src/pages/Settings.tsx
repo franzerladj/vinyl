@@ -3,8 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV, setKV, type Release } from "../lib/db";
-import { canClaude, discogs as discogsApi, logout, ownAnthropicKey, setOwnAnthropicKey } from "../lib/api";
-import { getSheetsConfig, pullTracksFromSheets, pushToSheets, type SheetsConfig } from "../lib/sheets";
+import { discogs as discogsApi, logout } from "../lib/api";
 import { autoPipeline, fetchMissingDetails, getAutoSettings, lookupAudioFor, tagVibes, type AutoSettings } from "../lib/sync";
 import { suggestionsState } from "../lib/prices";
 import { ask, toast, useStore } from "../lib/store";
@@ -116,8 +115,6 @@ export default function Settings() {
       return <PricesPage />;
     case "sources":
       return <SourcesPage />;
-    case "sheets":
-      return <SheetsPage />;
     case "data":
       return <DataPage />;
     case "about":
@@ -162,11 +159,10 @@ function Overview() {
     wants: await db.wants.count(),
     lastSync: await getKV<number>("lastCollectionSync", 0),
     currency: await getKV("currency", "EUR"),
-    sheets: (await getSheetsConfig()).url,
     favorites: (await db.sellers.toArray()).filter((s) => s.favorite).length,
   }));
   const devLast = useLiveQuery(() => lastDevSync(), [], 0);
-  const sources = [me?.features.lastfm, me?.features.freeAi, me?.features.keyLookup, canClaude(me)].filter(Boolean).length + 3;
+  const sources = [me?.features.lastfm, me?.features.freeAi].filter(Boolean).length + 5;
 
   return (
     <>
@@ -260,7 +256,6 @@ function Overview() {
         </Group>
 
         <Group title="Daten">
-          <Row icon={<IconSheet />} label="Google Sheets" value={stats?.sheets ? "verbunden" : "aus"} to="/settings/sheets" />
           <Row icon={<IconDatabase />} label="Speicher & Backup" to="/settings/data" />
         </Group>
 
@@ -285,6 +280,36 @@ function Overview() {
                   /* egal */
                 }
                 location.href = "/";
+              }}
+            />
+            <Row
+              label="Alle meine Crate-Daten löschen"
+              sub="Server und dieses Gerät. Deine Discogs-Sammlung bleibt unberührt."
+              danger
+              onClick={async () => {
+                if (
+                  !(await ask({
+                    title: "Alle Crate-Daten löschen?",
+                    body: "Gelöscht werden dein Crate-Profil, der Eintrag im Freunde-Verzeichnis, Mitteilungen, der Abgleich zwischen deinen Geräten und alles auf diesem Gerät (Sets, eigene BPM, Notizen). Sammlung, Wantlist, Ordner und Zustand bei Discogs bleiben. Das lässt sich nicht rückgängig machen.",
+                    ok: "Alles löschen",
+                    danger: true,
+                  }))
+                )
+                  return;
+                try {
+                  await import("../lib/push").then((p) => p.disablePush()).catch(() => undefined);
+                  const r = await fetch("/api/me", { method: "DELETE", credentials: "include" });
+                  if (!r.ok && r.status !== 401) throw new Error(`Löschen ${r.status}`);
+                  await db.delete();
+                  try {
+                    for (const k of Object.keys(localStorage)) if (k.startsWith("crate")) localStorage.removeItem(k);
+                  } catch {
+                    /* egal */
+                  }
+                  location.href = "/";
+                } catch {
+                  toast("Gerade keine Verbindung. Bitte später nochmal versuchen, damit auch die Daten auf dem Server gelöscht werden.");
+                }
               }}
             />
           </div>
@@ -478,84 +503,28 @@ function PricesPage() {
 
 function SourcesPage() {
   const me = useStore((s) => s.me);
-  const [ownKey, setOwnKey] = useState(ownAnthropicKey());
   const list: [string, boolean | undefined, string][] = [
     ["Discogs", true, "Sammlung, Wantlist, Tracklists, Preise"],
     ["Deezer", true, "BPM und Hörproben, passender Mix nach Titel und Länge"],
     ["YouTube", true, "Videos von der Discogs-Seite zum Reinhören"],
-    ["Hörproben ausmessen", true, "Energie, Tempo und Tonart aus der Hörprobe, auf dem Gerät"],
+    ["Hörproben ausmessen", true, "Tempo, Tonart und Energie aus der Hörprobe, auf dem Gerät"],
     ["Texterkennung", true, "Katalognummer vom Foto lesen, auf dem Gerät"],
     ["Last.fm", me?.features.lastfm, "Vibe-Tags von Hörern"],
-    ["GetSongBPM", me?.features.keyLookup, "BPM und Tonart"],
-    ["Workers AI", me?.features.freeAi, "Fotos erkennen, Vibes schätzen (kostenlos)"],
-    ["Claude", canClaude(me), "Beste Erkennung und Vibes (optional, kostet)"],
+    ["Cloudflare Workers AI", me?.features.freeAi, "Fotos erkennen, Vibes schätzen"],
   ];
   return (
     <>
       <NavBar title="Datenquellen" backTo="/settings" backLabel="Einstellungen" />
       <div className="page settings-list">
-        <Group foot="Grau = auf dem Server nicht eingerichtet. Last.fm und GetSongBPM brauchen einen kostenlosen API-Key in Cloudflare.">
-          {list.map(([n, on, d]) => (
+        <Group foot="Alles kostenlos. Hörproben werden auf deinem Gerät ausgemessen, Fotos nur zur Erkennung kurz an den Server geschickt und nicht gespeichert.">
+          {list.filter(([, on]) => on).map(([n, , d]) => (
             <div key={n} className="set-row" style={{ cursor: "default" }}>
-              <span className="dot" style={{ background: on ? "var(--ok)" : "var(--surface-3)", width: 10, height: 10 }} />
               <span className="label">
                 {n}
                 <small>{d}</small>
               </span>
-              <span className="value">{on ? "aktiv" : "aus"}</span>
             </div>
           ))}
-        </Group>
-        <Group title="Eigener Claude-Key" foot="Optional. Damit nutzt du Claude für Fotos und Vibes auf deine Kosten. Der Key bleibt auf diesem Gerät und geht nur zur jeweiligen Anfrage durch den Server.">
-          <div className="set-row" style={{ cursor: "default" }}>
-            <input
-              className="input"
-              type="password"
-              autoComplete="off"
-              placeholder="sk-ant-…"
-              value={ownKey}
-              onChange={(e) => setOwnKey(e.target.value.trim())}
-              onBlur={() => {
-                setOwnAnthropicKey(ownKey);
-                if (ownKey) toast("Key gespeichert");
-              }}
-            />
-          </div>
-          {ownKey && <Row label="Key entfernen" danger onClick={() => (setOwnKey(""), setOwnAnthropicKey(""), toast("Key entfernt"))} />}
-        </Group>
-      </div>
-    </>
-  );
-}
-
-function SheetsPage() {
-  const [cfg, setCfg] = useState<SheetsConfig>({ url: "", secret: "" });
-  useEffect(() => {
-    getSheetsConfig().then(setCfg);
-  }, []);
-  const save = () => setKV("sheets", cfg);
-  return (
-    <>
-      <NavBar title="Google Sheets" backTo="/settings" backLabel="Einstellungen" />
-      <div className="page settings-list">
-        <p className="sub" style={{ margin: "0 4px" }}>
-          Spiegelt Sammlung, Wantlist, Tracks und Sets in dein eigenes Google Sheet. Änderungen an BPM, Key, Energie, Vibes, Sternen und Notizen im Blatt „Tracks“ kannst du zurückholen.
-        </p>
-        <Group title="Verbindung" foot="Einrichtung in 5 Minuten: siehe google-sheets/README.md im Repo (Apps Script als Web-App bereitstellen).">
-          <div className="set-row" style={{ cursor: "default", flexDirection: "column", alignItems: "stretch", gap: 8 }}>
-            <label className="field">
-              Apps-Script-URL
-              <input className="input" value={cfg.url} onChange={(e) => setCfg({ ...cfg, url: e.target.value.trim() })} onBlur={save} placeholder="https://script.google.com/macros/s/…/exec" />
-            </label>
-            <label className="field">
-              Geheimwort
-              <input className="input" type="password" value={cfg.secret} onChange={(e) => setCfg({ ...cfg, secret: e.target.value })} onBlur={save} />
-            </label>
-          </div>
-        </Group>
-        <Group foot="Reihenfolge, wenn du im Sheet etwas geändert hast: erst zurückholen, dann schreiben. Schreiben überschreibt die Blätter.">
-          <Row icon={<IconSheet />} label="In Sheets schreiben" onClick={run("Sheets", async () => { await save(); const n = await pushToSheets(); return `Gesendet: ${n.Collection} Platten, ${n.Tracks} Tracks`; })} />
-          <Row icon={<IconDownload />} label="Tracks aus Sheets zurückholen" onClick={run("Sheets", async () => { await save(); return `${await pullTracksFromSheets()} Tracks übernommen`; })} />
         </Group>
       </div>
     </>
@@ -652,7 +621,7 @@ function AboutPage() {
             Version {__APP_VERSION__} · {new Date(__BUILD_DATE__).toLocaleDateString("de-DE")}
           </div>
         </div>
-        <Group title="Datenschutz" foot="Crate speichert nichts über dich auf dem Server. Die Anmeldung läuft direkt über Discogs, dein Passwort sieht die App nie.">
+        <Group title="Datenschutz" foot="Auf dem Server liegt nur, was du zwischen deinen Geräten abgleichst, dein Crate-Profil und, wenn eingeschaltet, Mitteilungen. Alles lässt sich in den Einstellungen löschen. Dein Discogs-Passwort sieht die App nie.">
           <Row label="Deine Daten" value="nur auf dem Gerät" />
           <Row label="Discogs-Zugang" value="verschlüsselt im Cookie" />
           <Row label="Anfragen an Discogs" value="von deinem Gerät" />
@@ -661,16 +630,15 @@ function AboutPage() {
           <Row label="Discogs" sub="Datenbank, Sammlung, Marktplatz" value="↗" right={<span />} onClick={() => window.open("https://www.discogs.com", "_blank")} />
           <Row label="Deezer" sub="BPM und Hörproben" value="↗" right={<span />} onClick={() => window.open("https://www.deezer.com", "_blank")} />
           <Row label="Last.fm" sub="Vibe-Tags" value="↗" right={<span />} onClick={() => window.open("https://www.last.fm", "_blank")} />
-          <Row label="GetSongBPM" sub="BPM und Tonarten" value="↗" right={<span />} onClick={() => window.open("https://getsongbpm.com", "_blank")} />
         </Group>
         <p className="tiny" style={{ textAlign: "center" }}>
-          <a href="/credits" style={{ color: "var(--accent)" }}>Alle Datenquellen</a>
+          <Link to="/settings/sources" style={{ color: "var(--accent)" }}>Alle Datenquellen</Link>
         </p>
         <Group title="Rechtliches">
           <Row label="Impressum" onClick={() => nav("/impressum")} />
           <Row label="Datenschutz" onClick={() => nav("/datenschutz")} />
         </Group>
-        <p className="tiny" style={{ textAlign: "center" }}>Diese App nutzt die Discogs-API, ist aber nicht mit Discogs verbunden, gesponsert oder von Discogs unterstützt.</p>
+        <p className="tiny" style={{ textAlign: "center" }} lang="en">This application uses Discogs’ API but is not affiliated with, sponsored or endorsed by Discogs. ‘Discogs’ is a trademark of Zink Media, LLC.</p>
       </div>
     </>
   );

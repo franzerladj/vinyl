@@ -10,7 +10,7 @@ import { money } from "../lib/format";
 import { db } from "../lib/db";
 import { toast, useStore } from "../lib/store";
 import type { SearchResult } from "../lib/types";
-import { Cover, Seg, haptic } from "../components/bits";
+import { Cover, Seg, haptic, DiscogsCredit } from "../components/bits";
 import { IconCamera, IconHeart } from "../components/icons";
 
 interface Fields {
@@ -343,6 +343,7 @@ export default function Scan() {
                 );
               })}
             </div>
+            {results.length > 0 && <DiscogsCredit href={results.length === 1 ? `https://www.discogs.com/release/${results[0].id}` : "https://www.discogs.com/search"} />}
           </>
         )}
       </div>

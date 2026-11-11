@@ -102,7 +102,7 @@ export async function syncFriend(u: string) {
 }
 
 /** Alle Freunde aktualisieren, deren letzter Abgleich länger als maxAgeHours her ist */
-export async function syncFriends(maxAgeHours = 24) {
+export async function syncFriends(maxAgeHours = 6) {
   for (const f of await db.friends.toArray()) {
     if (f.lastSync && Date.now() - f.lastSync < maxAgeHours * 3600_000) continue;
     try {
@@ -155,7 +155,7 @@ export interface MyProfile {
   fetchedAt: number;
 }
 
-export async function refreshMyProfile(maxAgeHours = 24): Promise<MyProfile | null> {
+export async function refreshMyProfile(maxAgeHours = 6): Promise<MyProfile | null> {
   const old = await getKV<MyProfile | null>("myProfile", null);
   if (old && Date.now() - old.fetchedAt < maxAgeHours * 3600_000) return old;
   const me = username();

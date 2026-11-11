@@ -6,8 +6,8 @@ import { loadPriceInfo } from "../lib/prices";
 import { fetchMarketStats, fetchMissingDetails, syncWants } from "../lib/sync";
 import { dismissRepress, repressNews } from "../lib/repress";
 import { money } from "../lib/format";
-import { toast, useStore } from "../lib/store";
-import { DealDot, Empty, RecordRow, Sheet, SkeletonRows, useDebounced } from "../components/bits";
+import { toast, useStore, username } from "../lib/store";
+import { DealDot, Empty, RecordRow, Sheet, SkeletonRows, useDebounced, DiscogsCredit } from "../components/bits";
 import { IconCart, IconCoin, IconFolder, IconMore, IconRows, IconSearch, IconSync } from "../components/icons";
 import { matchesQuery } from "../../../shared/textSearch";
 import { stripFolder } from "../../../shared/folders";
@@ -340,6 +340,7 @@ export default function Wantlist() {
             Keine Platte passt zu Suche und Filtern.
           </Empty>
         )}
+        {all && all.length > 0 && <DiscogsCredit href={`https://www.discogs.com/wantlist?user=${encodeURIComponent(username())}`} />}
       </div>
 
       <SortSheet open={sheet === "sort"} onClose={() => setSheet(null)} options={SORTS} value={sort} onChange={setSort} />

@@ -168,27 +168,8 @@ export function discogs<T>(path: string, opts: DiscogsOptions = {}): Promise<T> 
   }, opts.background ? 0 : 10);
 }
 
-/** Eigener Anthropic-Key (optional, nur auf diesem Gerät gespeichert) */
-export const ownAnthropicKey = () => {
-  try {
-    return localStorage.getItem("crate_anthropic_key") ?? "";
-  } catch {
-    return "";
-  }
-};
-export const setOwnAnthropicKey = (k: string) => {
-  try {
-    if (k) localStorage.setItem("crate_anthropic_key", k);
-    else localStorage.removeItem("crate_anthropic_key");
-  } catch {
-    /* Speicher nicht verfügbar */
-  }
-};
-
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
-  const key = ownAnthropicKey();
-  if (key && path.startsWith("/api/ai/")) headers.set("X-Anthropic-Key", key);
   const res = await fetch(path, { credentials: "include", ...init, headers });
   if (!res.ok) {
     const msg = await res.json().then((j: { message?: string }) => j.message ?? res.statusText, () => res.statusText);
@@ -201,12 +182,9 @@ export interface Me {
   username: string | null;
   features: {
     oauth: boolean;
-    /** Claude nutzbar (Allowlist oder eigener Key) */
-    claude: boolean;
     /** Kostenlose KI über Cloudflare Workers AI */
     freeAi: boolean;
     lastfm: boolean;
-    keyLookup: boolean;
   };
   personalToken?: boolean;
   /** false: Name noch nicht vom Server bei Discogs bestätigt (wird im Hintergrund nachgeholt) */
@@ -218,5 +196,4 @@ export const getMe = () => fetch("/api/me", { credentials: "include" }).then((r)
 export const logout = () => fetch("/api/auth/logout", { method: "POST", credentials: "include" });
 
 /** Gibt es irgendeine Bilderkennung auf dem Server? */
-export const canRecognize = (m: Me | null) => Boolean(m?.features.claude || m?.features.freeAi || ownAnthropicKey());
-export const canClaude = (m: Me | null) => Boolean(m?.features.claude || ownAnthropicKey());
+export const canRecognize = (m: Me | null) => Boolean(m?.features.freeAi);

@@ -3,11 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV, setKV } from "../lib/db";
 import { money } from "../lib/format";
-import { bookmarkletCode } from "../lib/bookmarklet";
 import { loadPriceInfo, scanFavorites, scanSeller, toggleFavorite } from "../lib/prices";
 import { planBudget } from "../../../shared/deals";
 import { toast } from "../lib/store";
-import { Cover, DealDot, RecordRow, Seg } from "../components/bits";
+import { Cover, DealDot, DiscogsCredit, RecordRow, Seg } from "../components/bits";
 import { IconCoin, IconExternal, IconStar, IconX } from "../components/icons";
 import { optimizeBasket, rankSellers, type Grade, type Listing, type OptimizeOptions } from "../../../shared/optimizer";
 import { DEFAULT_SHIP, estimateShipping, type ShipConfig } from "../../../shared/shipping";
@@ -39,16 +38,11 @@ export function parseSellerNames(input: string): string[] {
   ];
 }
 
-async function importListings(list: Listing[]) {
-  const now = Date.now();
-  await db.listings.bulkPut(list.map((l) => ({ ...l, importedAt: now })));
-}
 
 export default function Shop() {
   const [tab, setTab] = useState<"basket" | "budget" | "sellers">("basket");
   const [budget, setBudget] = useState("");
   const [settings, setSettings] = useState<ShopSettings>(DEFAULTS);
-  const [paste, setPaste] = useState("");
   const [sellerName, setSellerName] = useState("");
   const [excluded, setExcluded] = useState<Set<number>>(new Set());
 
@@ -60,20 +54,6 @@ export default function Shop() {
     setSettings(s);
     void setKV("shopSettings", s);
   };
-
-  // Empfang vom Lesezeichen-Skript (discogs.com → App)
-  useEffect(() => {
-    if (!new URLSearchParams(location.search).get("import")) return;
-    const onMsg = async (e: MessageEvent) => {
-      if (e.origin !== "https://www.discogs.com" || e.data?.type !== "crate-listings") return;
-      await importListings(e.data.listings as Listing[]);
-      toast(`${e.data.listings.length} Angebote importiert`);
-      history.replaceState(null, "", "/shop");
-    };
-    window.addEventListener("message", onMsg);
-    window.opener?.postMessage("crate-ready", "https://www.discogs.com");
-    return () => window.removeEventListener("message", onMsg);
-  }, []);
 
   const data = useLiveQuery(async () => {
     const [listings, wants, owned] = await Promise.all([db.listings.toArray(), db.wants.toCollection().primaryKeys(), db.collection.toArray()]);
@@ -121,21 +101,6 @@ export default function Shop() {
       toast((e as Error).message);
     }
   };
-
-  const doPaste = async () => {
-    try {
-      const parsed = JSON.parse(paste);
-      const list = (Array.isArray(parsed) ? parsed : parsed.listings) as Listing[];
-      await importListings(list);
-      toast(`${list.length} Angebote importiert`);
-      setPaste("");
-    } catch {
-      toast("Das ist kein gültiger Export aus dem Lesezeichen");
-    }
-  };
-
-  const appUrl = location.origin;
-  const code = bookmarkletCode(appUrl);
 
   return (
     <>
@@ -355,7 +320,7 @@ export default function Shop() {
                       </div>
                     </div>
                     <button className="icon-btn" aria-label={fav ? "Kein Lieblingshändler" : "Als Lieblingshändler merken"} onClick={() => toggleFavorite(s.seller)} style={{ color: fav ? "var(--accent)" : "var(--text-3)", fontSize: 20 }}>
-                      {fav ? "★" : "☆"}
+                      <IconStar />
                     </button>
                     <a className="icon-btn" href={`https://www.discogs.com/sell/mywants?seller=${encodeURIComponent(s.seller)}`} target="_blank" rel="noreferrer" aria-label="Auf Discogs öffnen">
                       <IconExternal />
@@ -364,56 +329,6 @@ export default function Shop() {
                 );
               })}
             </div>
-            <details className="card" style={{ marginTop: 12 }}>
-              <summary style={{ cursor: "pointer", fontWeight: 600 }}>Profi: den ganzen Marktplatz einlesen</summary>
-              <p className="sub">
-                Discogs gibt Marktplatz-Angebote aller Händler nicht über die Schnittstelle heraus und sperrt Server, die die Seiten abrufen. Wer trotzdem den ganzen Markt will, kann am Rechner ein Lesezeichen nutzen, das auf discogs.com in deinem eigenen Browser läuft. In der späteren App aus dem App Store geht das ohne Lesezeichen über einen eingebauten Browser.
-              </p>
-              <div className="stack">
-            <div className="stack" style={{ paddingTop: 8 }}>
-              <b>1. Lesezeichen „Crate holen“ einrichten (einmalig)</b>
-              <span className="sub">
-                Discogs gibt Marktplatz-Angebote nicht über die API heraus. Das Lesezeichen läuft deshalb direkt auf discogs.com in deinem Browser, liest die Seite „Wantlist im Marktplatz“ und schickt die Angebote hierher.
-              </span>
-              <span className="sub">
-                <b>Am Rechner:</b> diesen Link in die Lesezeichenleiste ziehen:{" "}
-                {/* React blockt javascript:-Links im JSX, daher per ref setzen */}
-                <a className="badge accent" ref={(el) => el?.setAttribute("href", code)} onClick={(e) => e.preventDefault()}>
-                  Crate holen
-                </a>
-              </span>
-              <span className="sub">
-                <b>Am Handy:</b> beliebige Seite als Lesezeichen speichern, Lesezeichen bearbeiten, Name „Crate holen“, als Adresse den Code unten einfügen.
-              </span>
-              <div className="code">{code.slice(0, 160)}…</div>
-              <button className="btn small" onClick={() => navigator.clipboard.writeText(code).then(() => toast("Code kopiert"))}>
-                Code kopieren
-              </button>
-            </div>
-            <div className="stack" style={{ paddingTop: 8 }}>
-              <b>2. Auf Discogs ausführen</b>
-              <span className="sub">
-                Öffne <a href="https://www.discogs.com/sell/mywants" target="_blank" rel="noreferrer" style={{ color: "var(--accent)" }}>discogs.com/sell/mywants</a> (eingeloggt, gern mit Filter „Versand nach Deutschland“ und Währung EUR). Dann das Lesezeichen antippen. Am Handy: in die Adressleiste „Crate holen“ tippen und das Lesezeichen auswählen.
-              </span>
-            </div>
-            <details>
-              <summary style={{ cursor: "pointer" }}>Export einfügen (falls Pop-up blockiert war)</summary>
-              <textarea className="input" rows={4} value={paste} onChange={(e) => setPaste(e.target.value)} style={{ marginTop: 8 }} />
-              <button className="btn small" style={{ marginTop: 8 }} onClick={doPaste}>
-                Importieren
-              </button>
-            </details>
-            <button
-              className="btn small ghost"
-              onClick={async () => {
-                await db.listings.clear();
-                toast("Alte Angebote gelöscht");
-              }}
-            >
-              Alle importierten Angebote löschen
-            </button>
-              </div>
-            </details>
           </>
         )}
 
@@ -470,6 +385,7 @@ export default function Shop() {
           </>
         )}
 
+        <DiscogsCredit href="https://www.discogs.com/sell/mywants" />
       </div>
     </>
   );

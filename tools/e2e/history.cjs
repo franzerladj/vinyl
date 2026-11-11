@@ -35,6 +35,9 @@ const install = require("./mock.cjs");
   await page.waitForTimeout(500);
   await page.click(".seg >> text=/Reihenfolge/");
   await page.waitForTimeout(500);
+  // Vorschläge aus der ganzen Sammlung, damit die Platten aus dem alten Set dabei sind
+  await page.locator(".next-panel .seg button:has-text('Alle')").first().click().catch(() => {});
+  await page.waitForTimeout(800);
   const chips = (await page.locator(".next-panel .next-reasons i").allTextContents()).filter((x) => x.startsWith("gespielt"));
   await page.screenshot({ path: `${__dirname}/history-next.png` });
   console.log("Chips:", chips.slice(0, 3), "| errors", errors);
