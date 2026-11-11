@@ -24,7 +24,9 @@ export function DjOverview() {
     const byRelease = new Map<number, typeof tracks>();
     tracks.forEach((t) => byRelease.set(t.releaseId, [...(byRelease.get(t.releaseId) ?? []), t]));
     const withBpm = tracks.filter((t) => t.bpm);
-    const measured = withBpm.filter((t) => t.bpmSource === "Analyse").length;
+    const measured = withBpm.filter((t) => t.bpmSource === "Analyse" || t.bpmSource === "Messung").length;
+    const unsure = withBpm.filter((t) => t.tempoCheck === "unsicher").length;
+    const checked = withBpm.filter((t) => t.tempoCheck === "sicher").length;
     const missing = tracks.filter((t) => !t.bpm);
     const searching = missing.filter((t) => !t.lookedUpAt || !t.analyzedAt).length;
     const withKey = tracks.filter((t) => t.key);
@@ -49,7 +51,8 @@ export function DjOverview() {
     const slots = { warmup: 0, build: 0, peak: 0 };
     for (const t of tracks) if (t.energy != null) slots[slotFor(t.energy) as keyof typeof slots]++;
     const recordsMissing = [...byRelease.values()].filter((ts) => ts.some((t) => !t.bpm)).length;
-    return { total: tracks.length, withBpm: withBpm.length, measured, missing: missing.length, searching, withKey: withKey.length, keyMeasured, buckets, below, above, keys, slots, recordsMissing };
+    const unsureRecords = new Set(withBpm.filter((t) => t.tempoCheck === "unsicher").map((t) => t.releaseId)).size;
+    return { unsure, checked, unsureRecords, total: tracks.length, withBpm: withBpm.length, measured, missing: missing.length, searching, withKey: withKey.length, keyMeasured, buckets, below, above, keys, slots, recordsMissing };
   });
 
   if (!d || !d.total) return null;
@@ -97,12 +100,22 @@ export function DjOverview() {
           )}
         </div>
         <p className="djo-note">
+          {d.checked > 0 && `${d.checked} Tempi sind doppelt geprüft (Datenbank und Messung stimmen überein). `}
           {d.withKey} Tracks haben eine Tonart{d.keyMeasured ? `, davon ${d.keyMeasured} gemessen (nach Gehör prüfen)` : ""}.
           {d.missing > 0 &&
             (running && d.searching > 0
               ? ` ${d.searching} werden gerade noch gesucht.`
               : " Für den Rest gibt es online keine Hörprobe, das ist bei seltenen Pressungen normal.")}
         </p>
+        {d.unsure > 0 && (
+          <button className="djo-action press" onClick={() => go("/collection?tempo=1")}>
+            <span>
+              <b>{d.unsure === 1 ? "1 Tempo prüfen" : `${d.unsure} Tempi prüfen`}</b>
+              <small>Datenbank und Messung sind sich nicht einig, auf {d.unsureRecords} {d.unsureRecords === 1 ? "Platte" : "Platten"}</small>
+            </span>
+            <span className="chev">›</span>
+          </button>
+        )}
         {d.recordsMissing > 0 && (
           <button className="djo-action press" onClick={() => go("/collection?nobpm=1")}>
             <span>

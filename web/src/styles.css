@@ -1256,3 +1256,11 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 @media (min-width: 1024px) { .ask-backdrop { padding-left: calc(var(--side) + 24px); } }
 /* Ein Wort als Seitentitel nie mitten im Wort brechen, lieber den Knopf daneben in die nächste Zeile */
 .page-head h1 { white-space: nowrap; }
+
+/* Tempo-Gegenprüfung */
+.bpm-unsure { color: var(--warn, #d98a00); }
+.bpm-unsure i { font-style: normal; font-size: 0.75em; margin-left: 1px; vertical-align: super; }
+.tempo-check { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--warn, #d98a00) 12%, transparent); }
+.tempo-check.einfach { background: var(--surface-2); }
+.tempo-check > span { font-size: 14px; color: var(--text-2); }
+.tool-n { font: 600 11px/1 "JetBrains Mono Variable", ui-monospace, monospace; opacity: 0.7; margin-left: 2px; }

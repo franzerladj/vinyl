@@ -204,6 +204,8 @@ async function startupSync() {
   await migrateAudioMatching();
   await migrateAlbumMatching();
   await migrateTempoV2();
+  // Vorhandene Tempi nach den neuen Regeln prüfen (lokal, ohne Downloads)
+  await import("./lib/tempo").then((m) => m.migrateTempoCheck()).catch((e) => console.warn("Tempo", e));
   void import("./lib/friends").then((f) => f.refreshMyProfile()).catch(() => undefined);
   const run = async () => {
     if (!navigator.onLine) return;

@@ -362,7 +362,14 @@ export default function ReleasePage() {
                   </td>
                   <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                     <div className="row" style={{ gap: 6, justifyContent: "flex-end" }}>
-                      {m?.bpm ? <span className="bpm">{m.bpm}</span> : <span className="tiny">–</span>}
+                      {m?.bpm ? (
+                        <span className={`bpm${m.tempoCheck === "unsicher" ? " bpm-unsure" : ""}`} title={m.tempoNote}>
+                          {m.bpm}
+                          {m.tempoCheck === "unsicher" && <i aria-label="Tempo unsicher">?</i>}
+                        </span>
+                      ) : (
+                        <span className="tiny">–</span>
+                      )}
                       <KeyBadge k={m?.key} />
                     </div>
                     <div style={{ marginTop: 4 }}>
@@ -667,6 +674,10 @@ function TrackEdit({
   onSave: (p: Partial<TrackMeta>) => void;
 }) {
   const [bpm, setBpm] = useState(String(t.bpm ?? ""));
+  /** Tempo ausdrücklich bestätigt oder aus den Vorschlägen gewählt: zählt als eigener Wert */
+  const [confirmed, setConfirmed] = useState(false);
+  // Vorschläge, wenn Datenbank und Messung nicht einig sind: beide Werte und ihr Doppeltes/Halbes
+  const tempoChoices = [...new Set([t.measuredBpm, t.dbBpm, t.dbBpm ? t.dbBpm / 2 : null, t.dbBpm ? t.dbBpm * 2 : null, t.measuredBpm ? t.measuredBpm * 2 : null, t.measuredBpm ? t.measuredBpm / 2 : null].filter((v): v is number => Boolean(v && v >= 60 && v <= 200)).map((v) => Math.round(v * 10) / 10))].slice(0, 5);
   const [key, setKey] = useState(t.key ?? "");
   const [energy, setEnergy] = useState(t.energy ?? 5);
   const [moods, setMoods] = useState((t.moods ?? []).join(", "));
@@ -740,7 +751,23 @@ function TrackEdit({
           <input className="input" value={key} onChange={(e) => setKey(e.target.value)} />
         </label>
       </div>
-      <TapTempo onBpm={(b) => setBpm(String(b))} />
+      {t.tempoCheck && t.tempoCheck !== "sicher" && t.bpm && !confirmed && (
+        <div className={`tempo-check ${t.tempoCheck}`}>
+          <b>{t.tempoCheck === "unsicher" ? "Tempo unsicher" : "Tempo nicht gegengeprüft"}</b>
+          <span>{t.tempoNote}</span>
+          {tempoChoices.length > 0 && (
+            <div className="chips" style={{ margin: 0, padding: 0 }}>
+              {tempoChoices.map((v) => (
+                <button key={v} type="button" className={`chip ${String(v) === bpm ? "on" : ""}`} onClick={() => (setBpm(String(v)), setConfirmed(true), haptic(6))}>
+                  {v}
+                </button>
+              ))}
+            </div>
+          )}
+          <span className="tiny">Antippen, was du hörst, oder unten mittappen. Gewählte Werte zählen als deine und werden nicht mehr überschrieben.</span>
+        </div>
+      )}
+      <TapTempo onBpm={(b) => (setBpm(String(b)), setConfirmed(true))} />
       <Listen
         hints={hints}
         onTake={(b, k) => {
@@ -798,7 +825,8 @@ function TrackEdit({
             notes,
             cueIn: cueIn.trim() || undefined,
             cueOut: cueOut.trim() || undefined,
-            bpmSource: bpm === String(t.bpm ?? "") ? t.bpmSource : heard && bpm === heard.bpm ? "Mithören" : "manuell",
+            bpmSource: heard && bpm === heard.bpm ? "Mithören" : confirmed || bpm !== String(t.bpm ?? "") ? "manuell" : t.bpmSource,
+            ...(confirmed || bpm !== String(t.bpm ?? "") ? { tempoCheck: "sicher" as const, tempoNote: "Von dir eingetragen" } : {}),
             keySource: key.trim() === (t.key ?? "") ? t.keySource : heard && key === heard.key ? "Mithören" : "manuell",
             vibeSource: energy !== (t.energy ?? 5) || moods !== (t.moods ?? []).join(", ") ? "manuell" : t.vibeSource,
           })

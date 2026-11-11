@@ -43,8 +43,10 @@ interface Filters {
   noSticker: boolean;
   noBpm: boolean;
   noShelf: boolean;
+  /** Platten mit mindestens einem Track, dessen Tempo unsicher ist */
+  unsureBpm?: boolean;
 }
-const NO_FILTERS: Filters = { styles: [], decades: [], formats: [], crates: [], keys: [], bpmMin: "", bpmMax: "", minRating: 0, noSticker: false, noBpm: false, noShelf: false };
+const NO_FILTERS: Filters = { styles: [], decades: [], formats: [], crates: [], keys: [], bpmMin: "", bpmMax: "", minRating: 0, noSticker: false, noBpm: false, noShelf: false, unsureBpm: false };
 
 const BPM_PRESETS: [string, number, number][] = [
   ["Downtempo", 80, 110],
@@ -91,8 +93,9 @@ export default function Collection() {
     const bpm = params.get("bpm")?.match(/^(\d+)-(\d+)$/);
     const key = params.get("key");
     const noBpm = params.get("nobpm") === "1";
-    if (!bpm && !key && !noBpm) return;
-    setF({ ...NO_FILTERS, ...(bpm ? { bpmMin: bpm[1], bpmMax: bpm[2] } : {}), ...(key ? { keys: [key] } : {}), noBpm });
+    const unsureBpm = params.get("tempo") === "1";
+    if (!bpm && !key && !noBpm && !unsureBpm) return;
+    setF({ ...NO_FILTERS, ...(bpm ? { bpmMin: bpm[1], bpmMax: bpm[2] } : {}), ...(key ? { keys: [key] } : {}), noBpm, unsureBpm });
     setParams({}, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
@@ -162,6 +165,7 @@ export default function Collection() {
       if (f.noSticker && meta?.stickerPrintedAt) return false;
       if (f.noShelf && meta?.shelf) return false;
       if (f.noBpm && tracks.length && tracks.every((t) => t.bpm)) return false;
+      if (f.unsureBpm && !tracks.some((t) => t.tempoCheck === "unsicher")) return false;
       if ((f.bpmMin || f.bpmMax) && !tracks.some((t) => t.bpm && t.bpm >= min && t.bpm <= max)) return false;
       if (keys.length && !tracks.some((t) => keys.some((k) => keyDistance(k, parseKey(t.key)) <= 1))) return false;
       return true;
@@ -256,7 +260,8 @@ export default function Collection() {
     ...(f.minRating ? [{ key: "r", label: `ab ${"★".repeat(f.minRating)}`, remove: () => setF((p) => ({ ...p, minRating: 0 })) }] : []),
     ...(f.noShelf ? [{ key: "ns", label: "Ohne Regalplatz", remove: () => setF((p) => ({ ...p, noShelf: false })) }] : []),
   ];
-  const filterCount = chips.length + (f.noSticker ? 1 : 0) + (f.noBpm ? 1 : 0);
+  const filterCount = chips.length + (f.noSticker ? 1 : 0) + (f.noBpm ? 1 : 0) + (f.unsureBpm ? 1 : 0);
+  const unsureRecords = data?.filter((d) => d.tracks.some((t) => t.tempoCheck === "unsicher")).length ?? 0;
   const totalTracks = data?.reduce((n, d) => n + d.tracks.length, 0) ?? 0;
 
   return (
@@ -299,6 +304,11 @@ export default function Collection() {
           <button className={`tool-btn ${f.noBpm ? "on" : ""}`} onClick={() => setF((p) => ({ ...p, noBpm: !p.noBpm }))}>
             BPM fehlt
           </button>
+          {(unsureRecords > 0 || f.unsureBpm) && (
+            <button className={`tool-btn ${f.unsureBpm ? "on" : ""}`} onClick={() => setF((p) => ({ ...p, unsureBpm: !p.unsureBpm }))}>
+              Tempo prüfen <span className="tool-n">{unsureRecords}</span>
+            </button>
+          )}
           <ActiveChips items={chips} onClear={() => setF(NO_FILTERS)} />
         </div>
         {data && (dq || filterCount > 0) && (

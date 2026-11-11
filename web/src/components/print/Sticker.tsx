@@ -27,7 +27,7 @@ export function Sticker({ s, w, h, o }: { s: StickerData; w: number; h: number; 
 
   const meta = (t: StickerData["tracks"][0]) => {
     const parts: string[] = [];
-    if (o.showBpm && t.meta?.bpm) parts.push(String(Math.round(t.meta.bpm)));
+    if (o.showBpm && t.meta?.bpm) parts.push(`${t.meta.tempoCheck === "unsicher" ? "~" : ""}${Math.round(t.meta.bpm)}`);
     const c = parseKey(t.meta?.key);
     if (o.showCamelot && c) parts.push(camelotString(c));
     else if (o.showKey && t.meta?.key) parts.push(t.meta.key);

@@ -1,5 +1,7 @@
 // Kostenlose Anreicherung ohne Claude: Texterkennung auf dem Gerät, Vibe-Regeln,
 // Last.fm-Tags und Analyse der Deezer-Hörprobe im Browser.
+import { retempo, isManualTempo } from "./tempo";
+import { rangeCenter } from "../../../shared/bpmCheck";
 import { db, type TrackMeta, autoUpdateTrack } from "./db";
 import { api } from "./api";
 import { getState, jobUpdate } from "./store";
@@ -116,18 +118,27 @@ export interface FreeOptions {
   audio: boolean;
   /** Vorhandene, automatisch geschätzte Werte überschreiben */
   refresh?: boolean;
+  /** Nur Tempo/Tonart messen, Vibes nicht anfassen (wenn Claude die Vibes macht) */
+  measureOnly?: boolean;
 }
+
+const rank = (t: TrackMeta) => (t.tempoCheck === "unsicher" ? 0 : t.tempoCheck === "einfach" ? 1 : 2);
 
 export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptions) {
   const all = trackIds ? ((await db.tracks.bulkGet(trackIds)).filter(Boolean) as TrackMeta[]) : await db.tracks.toArray();
   const collIds = new Set((await db.collection.toArray()).map((c) => c.releaseId));
-  const todo = all.filter((t) => (trackIds || collIds.has(t.releaseId)) && (opts.refresh || t.energy == null || (opts.audio && !t.analyzedAt && (t.analyzeTries ?? 0) < 3)));
+  // Messen, wenn noch nie gemessen oder (ältere Einträge) nur ohne gespeichertes Mess-Tempo; eigene Tempi nicht
+  const wantsMeasure = (t: TrackMeta) => opts.audio && (t.analyzeTries ?? 0) < 3 && (!t.analyzedAt || (t.measuredBpm === undefined && !isManualTempo(t)));
+  const todo = all
+    .filter((t) => (trackIds || collIds.has(t.releaseId)) && (opts.measureOnly ? wantsMeasure(t) : opts.refresh || t.energy == null || wantsMeasure(t)))
+    // Unsichere zuerst, dann die mit nur einer Quelle
+    .sort((a, b) => rank(a) - rank(b));
   if (!todo.length) return 0;
   const rels = new Map((await db.releases.bulkGet([...new Set(todo.map((t) => t.releaseId))])).filter(Boolean).map((r) => [r!.id, r!]));
   const lastfm = getState().me?.features.lastfm;
   const durationOf = (t: TrackMeta) => parseDuration(rels.get(t.releaseId)?.tracklist?.find((x) => x.position === t.position)?.duration);
   const job = "free-vibes";
-  jobUpdate(job, { label: opts.audio ? "Vibes, Energie & Audio-Analyse" : "Vibes & Energie", done: 0, total: todo.length });
+  jobUpdate(job, { label: opts.measureOnly ? "Tempo gegenprüfen" : opts.audio ? "Vibes, Energie & Tempo prüfen" : "Vibes & Energie", done: 0, total: todo.length });
   let changed = 0;
   try {
     let done = 0;
@@ -135,7 +146,7 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
     await pool(todo, 2, async (t) => {
       const patch: Partial<TrackMeta> = {};
       let tags: TagsResp["tags"] = [];
-      if (lastfm) {
+      if (lastfm && !opts.measureOnly) {
         try {
           tags = (await api<TagsResp>(`/api/lastfm/tags?artist=${encodeURIComponent(t.artist)}&track=${encodeURIComponent(t.title)}`)).tags;
         } catch {
@@ -143,12 +154,13 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
         }
       }
       let analysis: AudioAnalysis | null = null;
-      if (opts.audio && !t.analyzedAt && (t.analyzeTries ?? 0) < 3) {
+      if (wantsMeasure(t)) {
         let failed = false;
         try {
-          // Erwartetes Tempo aus den anderen Tracks der Platte oder den Styles: verhindert Halb-/Doppel-Fehler
-          const siblings = all.filter((x) => x.releaseId === t.releaseId && x.id !== t.id && x.bpm).map((x) => x.bpm!);
-          const expectedBpm = estimateBpm(rels.get(t.releaseId)?.styles ?? [], siblings);
+          // Erwartung aus dem Style-Bereich, nicht aus Datenbank-Werten: die Messung soll unabhängig gegenprüfen
+          const styles = rels.get(t.releaseId)?.styles ?? [];
+          const siblings = all.filter((x) => x.releaseId === t.releaseId && x.id !== t.id && x.tempoCheck === "sicher" && x.bpm).map((x) => x.bpm!);
+          const expectedBpm = rangeCenter(styles) ?? estimateBpm(styles, siblings);
           analysis = await analyzePreview(t.artist, t.title, durationOf(t), t.deezerId, { expectedBpm });
         } catch (e) {
           failed = true;
@@ -158,11 +170,9 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
         else patch.analyzeTries = (t.analyzeTries ?? 0) + 1;
         if (analysis) {
           patch.audioEnergy = analysis.energy;
-          // Gemessene Werte nur übernehmen, wenn sie sicher genug sind und nichts Besseres da ist
-          if (!t.bpm && analysis.bpm && analysis.bpmConfidence >= 0.35) {
-            patch.bpm = Math.round(analysis.bpm);
-            patch.bpmSource = "Analyse";
-          }
+          // Messung immer merken; welches Tempo gilt, entscheidet retempo() zusammen mit dem Datenbank-Wert
+          patch.measuredBpm = analysis.bpm ? Math.round(analysis.bpm * 10) / 10 : null;
+          patch.measuredConf = Math.round(analysis.bpmConfidence * 100) / 100;
           if (!t.key && analysis.key && analysis.keyConfidence >= 0.3) {
             patch.key = analysis.key;
             patch.keySource = "Analyse (Schätzung)";
@@ -170,7 +180,7 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
         }
       }
       const manual = t.vibeSource === "manuell";
-      if (!manual) {
+      if (!manual && !opts.measureOnly) {
         const v = estimateVibe({
           styles: rels.get(t.releaseId)?.styles ?? [],
           bpm: patch.bpm ?? t.bpm,
@@ -182,6 +192,7 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
         patch.vibeSource = v.sources.join(" + ");
       }
       await autoUpdateTrack(t.id, patch);
+      if ("measuredBpm" in patch) await retempo([t.id]);
       changed++;
       jobUpdate(job, { done: ++done });
     });

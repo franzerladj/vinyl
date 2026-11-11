@@ -1,7 +1,8 @@
 // Abgleich mit Discogs + Anreicherung (Tracklists, BPM/Key, Vibes, Preise)
 import { api, canClaude, discogs } from "./api";
 import { autoUpdateTrack, db, realTracks, setKV, getKV, trackId, type Release, type TrackMeta } from "./db";
-import { checkBpm, checkKey } from "../../../shared/bpmCheck";
+import { checkKey } from "../../../shared/bpmCheck";
+import { retempo } from "./tempo";
 import { artistName } from "./format";
 import { parseDuration } from "../../../shared/match";
 import { logError, pool } from "./pool";
@@ -182,9 +183,6 @@ export async function lookupAudioFor(trackIds?: string[]) {
   for (const r of rels.values()) realTracks(r.tracklist).forEach((x, i) => durations.set(trackId(r.id, x.position, i), x.duration));
   const byRelease = new Map<number, TrackMeta[]>();
   todo.forEach((t) => byRelease.set(t.releaseId, [...(byRelease.get(t.releaseId) ?? []), t]));
-  // Für die Plausibilität: Tempi der anderen Tracks derselben Platte und ihre Styles
-  const known = await db.tracks.where("releaseId").anyOf([...byRelease.keys()]).toArray();
-  const ctxOf = (t: TrackMeta) => ({ styles: rels.get(t.releaseId)?.styles ?? [], siblings: known.filter((x) => x.releaseId === t.releaseId && x.id !== t.id && x.bpm).map((x) => x.bpm!) });
 
   const job = "audio";
   jobUpdate(job, { label: "BPM & Key suchen", done: 0, total: todo.length });
@@ -210,12 +208,11 @@ export async function lookupAudioFor(trackIds?: string[]) {
               continue;
             }
             const patch: Partial<TrackMeta> = { deezerId: m.deezerId };
-            // Deezer liefert oft das halbe Tempo: zur Platte passend drehen, Unpassendes selbst messen
-            const chk = checkBpm(m.bpm, ctxOf(t));
-            if (!t.bpm && chk.bpm) {
-              patch.bpm = chk.bpm;
-              patch.bpmSource = chk.fixed ? `Deezer (Album, ${chk.fixed})` : "Deezer (Album)";
-              found++;
+            // Rohwert merken, geprüft und mit der eigenen Messung abgeglichen wird in retempo()
+            if (m.bpm && t.dbBpm == null) {
+              patch.dbBpm = m.bpm;
+              patch.dbSource = "Deezer (Album)";
+              if (!t.bpm) found++;
             }
             // Ohne Tonart weiter einzeln suchen, falls GetSongBPM eingerichtet ist
             if (keyLookup && !t.key) rest.push({ ...t, ...patch });
@@ -237,19 +234,17 @@ export async function lookupAudioFor(trackIds?: string[]) {
           const dur = parseDuration(durations.get(t.id));
           const info = await api<AudioInfo>(`/api/audio/lookup?artist=${encodeURIComponent(t.artist)}&title=${encodeURIComponent(t.title)}${dur ? `&duration=${dur}` : ""}`);
           const patch: Partial<TrackMeta> = { lookedUpAt: Date.now() };
-          const chk = checkBpm(info.bpm, ctxOf(t));
           const key = checkKey(info.key);
           const src = info.source.join(", ");
-          // Quelle nur für das, was wirklich neu kommt (sonst stünde bei einem eigenen Tempo plötzlich „Deezer“)
-          if (!t.bpm && chk.bpm) {
-            patch.bpm = chk.bpm;
-            patch.bpmSource = chk.fixed ? `${src} (${chk.fixed})` : src;
+          if (info.bpm && t.dbBpm == null) {
+            patch.dbBpm = info.bpm;
+            patch.dbSource = src;
           }
           if (!t.key && key) {
             patch.key = key;
             patch.keySource = src;
           }
-          if (patch.bpm || patch.key) found++;
+          if ((patch.dbBpm && !t.bpm) || patch.key) found++;
           await autoUpdateTrack(t.id, patch);
         } catch (e) {
           // Netzfehler: nicht als erledigt markieren, beim nächsten Durchlauf erneut versuchen
@@ -258,6 +253,8 @@ export async function lookupAudioFor(trackIds?: string[]) {
         jobUpdate(job, { done: ++done });
       }
     });
+    // Datenbank-Werte prüfen und mit vorhandenen Messungen abgleichen
+    await retempo(todo.map((t) => t.id));
   } finally {
     jobUpdate(job, null);
   }
@@ -269,10 +266,10 @@ export async function lookupAudioFor(trackIds?: string[]) {
  * sonst kostenlos über Regeln, Last.fm und Audio-Analyse.
  */
 export async function tagVibes(trackIds?: string[], opts: { audio?: boolean } = {}) {
-  if (!canClaude(getState().me)) {
-    const { enrichFree } = await import("./free");
-    return enrichFree(trackIds, { audio: opts.audio ?? true });
-  }
+  const { enrichFree } = await import("./free");
+  if (!canClaude(getState().me)) return enrichFree(trackIds, { audio: opts.audio ?? true });
+  // Mit Claude für die Vibes: Tempo trotzdem selbst messen und gegenprüfen
+  if (opts.audio ?? true) await enrichFree(trackIds, { audio: true, measureOnly: true });
   return tagVibesClaude(trackIds);
 }
 

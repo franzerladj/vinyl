@@ -211,7 +211,7 @@ export function InsertCard({ s, w, h, o, theme }: { s: PrintItem; w: number; h: 
                       <TitleLines artist={tr.meta?.artist && tr.meta.artist !== r.artist ? tr.meta.artist : null} title={tr.title} muted={t.muted} lineH={lineH * 0.92} />
                     </span>
                     {hasDur && <span style={{ color: t.muted, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{tr.duration}</span>}
-                    {hasBpm && <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums", minWidth: mm(fs * 1.9), textAlign: "right" }}>{tr.meta?.bpm ? Math.round(tr.meta.bpm) : ""}</span>}
+                    {hasBpm && <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums", minWidth: mm(fs * 1.9), textAlign: "right" }}>{tr.meta?.bpm ? `${tr.meta.tempoCheck === "unsicher" ? "~" : ""}${Math.round(tr.meta.bpm)}` : ""}</span>}
                     {hasKey && <span style={{ minWidth: mm(fs * 2.4), textAlign: "right" }}>{o.showCamelot ? <Pill k={tr.meta?.key} size={fs} /> : <span style={{ fontWeight: 700 }}>{tr.meta?.key}</span>}</span>}
                     {hasEnergy && (
                       <span style={{ paddingTop: mm(fs * 0.15) }}>
@@ -297,7 +297,7 @@ export function ObiStrip({ s, w, h, o, theme, front }: { s: PrintItem; w: number
                     <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
                       <InlineVersion title={tr.title} />
                     </span>
-                    {o.showBpm && <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{tr.meta?.bpm ? Math.round(tr.meta.bpm) : ""}</span>}
+                    {o.showBpm && <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{tr.meta?.bpm ? `${tr.meta.tempoCheck === "unsicher" ? "~" : ""}${Math.round(tr.meta.bpm)}` : ""}</span>}
                     {(o.showCamelot || o.showKey) && <Pill k={tr.meta?.key} size={fs} />}
                   </div>
                 ))}
