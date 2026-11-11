@@ -691,8 +691,10 @@ function NotificationsPage() {
   const [prefs, setPrefs] = useState<PushPrefs>(DEFAULT_PREFS);
   const [busy, setBusy] = useState(false);
   const [available, setAvailable] = useState(true);
+  const [blocked, setBlocked] = useState(false);
   useEffect(() => {
     void (async () => {
+      if ("Notification" in window && Notification.permission === "denied") setBlocked(true);
       const local = await getKV("pushOn", false);
       const st = await pushStatus().catch(() => null);
       setAvailable(st?.available ?? true);
@@ -715,6 +717,7 @@ function NotificationsPage() {
       setOn(v);
     } catch (e) {
       toast((e as Error).message);
+      if ("Notification" in window && Notification.permission === "denied") setBlocked(true);
     } finally {
       setBusy(false);
     }
@@ -729,6 +732,7 @@ function NotificationsPage() {
     <>
       <NavBar title="Mitteilungen" backTo="/settings" backLabel="Einstellungen" />
       <div className="page settings-list">
+        {blocked && <PushBlockedHelp />}
         {support === "install" ? (
           <Group title="Zuerst installieren" foot="Apple erlaubt Mitteilungen nur für Web-Apps auf dem Home-Bildschirm (ab iOS 16.4).">
             <div style={{ padding: "12px 14px" }} className="stack">
@@ -1195,5 +1199,35 @@ function DevicesPage() {
         </Group>
       </div>
     </>
+  );
+}
+
+/** Hilfe, wenn der Browser Mitteilungen blockiert (vor allem in der Android-App) */
+function PushBlockedHelp() {
+  const ua = navigator.userAgent;
+  const android = /Android/i.test(ua);
+  const samsung = /SamsungBrowser/i.test(ua);
+  const chrome = ua.match(/Chrome\/(\d+)/)?.[1];
+  const app = window.matchMedia?.("(display-mode: standalone)").matches;
+  const tech = [
+    `Erlaubnis: ${"Notification" in window ? Notification.permission : "fehlt"}`,
+    app ? "als App" : "im Browser",
+    samsung ? "Samsung Internet" : chrome ? `Chrome ${chrome}` : "anderer Browser",
+    ua.match(/Android [\d.]+/)?.[0] ?? "",
+  ].filter(Boolean).join(" · ");
+  return (
+    <div className="tempo-check unsicher" style={{ marginBottom: 16 }}>
+      <b>Mitteilungen sind blockiert</b>
+      {android ? (
+        <ol className="getapp-steps">
+          <li>Crate ganz schließen: in der App-Übersicht wegwischen, dann neu öffnen. Erst dann übernimmt die App die Erlaubnis aus den Android-Einstellungen.</li>
+          <li>Hilft das nicht: Chrome öffnen, oben rechts ⋮ → Einstellungen → Website-Einstellungen → Benachrichtigungen → crate-8vf.pages.dev auf „Zulassen“ stellen.</li>
+          {samsung && <li>Crate läuft gerade in Samsung Internet. Mitteilungen gehen in der App nur mit Chrome: in den Android-Einstellungen unter Apps → Standard-Apps → Browser Chrome wählen, dann Crate neu öffnen.</li>}
+        </ol>
+      ) : (
+        <span>In den Einstellungen des Browsers bei dieser Seite Mitteilungen erlauben, dann neu laden.</span>
+      )}
+      <span className="tiny mono">{tech}</span>
+    </div>
   );
 }
