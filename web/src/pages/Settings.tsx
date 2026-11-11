@@ -187,6 +187,7 @@ function Overview() {
           <Row icon={<IconSync />} label="Abgleich & Ergänzen" value={stats?.lastSync ? relDay(stats.lastSync) : "nie"} to="/settings/sync" />
           <Row icon={<IconCoin />} label="Preise & Shopping" value={stats?.currency} to="/settings/prices" />
           <Row icon={<IconWave />} label="Datenquellen" value={`${sources} aktiv`} to="/settings/sources" />
+          <Row icon={<IconDownload />} label="App aufs Handy holen" sub="Android-App, iPhone, Link für Freunde" to="/app" />
           <Row icon={<IconSync />} label="Handy und Computer" sub="BPM, Keys, Sets und Notizen auf allen Geräten gleich" value={devLast ? relTime(devLast) : "gleich"} to="/settings/devices" />
         </Group>
 

@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "de.feuerpfeil.crate",
+    "sha256_cert_fingerprints": ["B4:20:24:55:43:5A:65:A2:F5:BD:C6:DF:8F:CE:82:EA:FC:A2:B7:F7:D5:87:C3:8A:D3:75:CC:BB:02:C5:D9:D8"]
+  }
+}]

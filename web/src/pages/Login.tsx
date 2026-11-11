@@ -61,7 +61,7 @@ export default function Login({ me }: { me: Me | null }) {
           <p className="tiny" style={{ marginTop: 8 }}>
             This application uses Discogs’ API but is not affiliated with, sponsored or endorsed by Discogs. ‘Discogs’ is a trademark of Zink Media, LLC.
             <br />
-            <a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a>
+            <a href="/app">App holen</a> · <a href="/impressum">Impressum</a> · <a href="/datenschutz">Datenschutz</a>
           </p>
         </div>
       </div>

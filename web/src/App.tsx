@@ -29,11 +29,12 @@ const Stickers = lazy(() => import("./pages/Stickers"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Friends = lazy(() => import("./pages/Friends"));
 const Dig = lazy(() => import("./pages/Dig"));
+const GetApp = lazy(() => import("./pages/GetApp"));
 const Impressum = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Impressum })));
 const Datenschutz = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Datenschutz })));
 
 /** Seiten, die auch ohne Anmeldung erreichbar sein müssen (App-Store-Prüfung, Login-Seite) */
-const PUBLIC = new Set(["/impressum", "/datenschutz"]);
+const PUBLIC = new Set(["/impressum", "/datenschutz", "/app"]);
 
 /** Alle Seiten der App (Data-Router, damit Seitenübergänge und Zurück-Animationen funktionieren) */
 export const routes: RouteObject[] = [
@@ -57,6 +58,7 @@ export const routes: RouteObject[] = [
   { path: "settings/:section", element: <Settings /> },
   { path: "friends", element: <Friends /> },
   { path: "friends/:username", element: <Friends /> },
+  { path: "app", element: <GetApp /> },
   { path: "impressum", element: <Impressum /> },
   { path: "datenschutz", element: <Datenschutz /> },
   { path: "*", element: <NotFound /> },

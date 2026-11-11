@@ -1,0 +1,45 @@
+// Crate als Trusted Web Activity (Chrome im Vollbild). Signierschlüssel liegt NICHT im Repo:
+// Pfad und Passwörter kommen aus ~/.gradle/gradle.properties (CRATE_KEYSTORE, CRATE_KEYSTORE_PASSWORD, CRATE_KEY_ALIAS, CRATE_KEY_PASSWORD).
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "de.feuerpfeil.crate"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "de.feuerpfeil.crate"
+        minSdk 21
+        targetSdk 35
+        versionCode 1
+        versionName "1.0"
+    }
+
+    signingConfigs {
+        release {
+            if (project.hasProperty("CRATE_KEYSTORE")) {
+                storeFile file(CRATE_KEYSTORE)
+                storePassword CRATE_KEYSTORE_PASSWORD
+                keyAlias CRATE_KEY_ALIAS
+                keyPassword CRATE_KEY_PASSWORD
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation "com.google.androidbrowserhelper:androidbrowserhelper:2.5.0"
+}

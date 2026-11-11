@@ -58,7 +58,7 @@ export default defineConfig({
       workbox: {
         // Push-Mitteilungen anzeigen und öffnen (web/public/push-sw.js)
         importScripts: ["/push-sw.js"],
-        navigateFallbackDenylist: [/^\/api\//, /^\/credits/],
+        navigateFallbackDenylist: [/^\/api\//, /^\/credits/, /^\/download\//, /^\/\.well-known\//],
         runtimeCaching: [
           {
             // Selbst gehostete Schriften (alle Sprachbereiche, daher nicht vorab gecacht)
