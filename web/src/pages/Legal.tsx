@@ -1,30 +1,18 @@
 import { NavBar } from "../components/ui";
 
-/**
- * Angaben zum Anbieter. VOR DER VERÖFFENTLICHUNG AUSFÜLLEN.
- * Solange Platzhalter drinstehen, zeigt die Seite einen Hinweis.
- */
+/** Angaben zum Anbieter (Impressum und Datenschutz) */
 export const OPERATOR = {
   name: "Franz Kralik",
   street: "Mainstr. 8",
   city: "95444 Bayreuth",
   country: "Deutschland",
-  email: "[E-Mail-Adresse]",
+  email: "hallo.franzerla@gmail.com",
   phone: "",
   /** Nur bei Firmen: Registergericht, Registernummer, USt-IdNr. */
   register: "",
   vatId: "",
 };
 
-const unfinished = Object.values(OPERATOR).some((v) => v.startsWith("["));
-
-function Draft() {
-  return unfinished ? (
-    <div className="card" style={{ borderColor: "var(--warn)" }}>
-      <b>Entwurf:</b> Die Angaben in eckigen Klammern müssen vor der Veröffentlichung ausgefüllt werden.
-    </div>
-  ) : null;
-}
 
 export function Impressum() {
   const o = OPERATOR;
@@ -32,7 +20,6 @@ export function Impressum() {
     <>
       <NavBar title="Impressum" backTo="/settings/about" backLabel="Zurück" />
       <article className="page legal">
-        <Draft />
         <h1>Impressum</h1>
         <h2>Angaben gemäß § 5 DDG</h2>
         <p>
@@ -46,7 +33,7 @@ export function Impressum() {
         </p>
         <h2>Kontakt</h2>
         <p>
-          E-Mail: {o.email}
+          E-Mail: <a href={`mailto:${o.email}`}>{o.email}</a>
           {o.phone && (
             <>
               <br />
@@ -87,13 +74,12 @@ export function Datenschutz() {
     <>
       <NavBar title="Datenschutz" backTo="/settings/about" backLabel="Zurück" />
       <article className="page legal">
-        <Draft />
         <h1>Datenschutz</h1>
         <p>Kurz gesagt: Crate hat kein Nutzerkonto, kein Tracking und keine Werbung. Deine Sammlung, Sets und Notizen liegen auf deinem Gerät. Damit sie auf Handy und Computer gleich sind, gleicht der Server das, was du in Crate selbst einträgst, zwischen deinen Geräten ab (siehe Punkt 11). Wenn du Mitteilungen einschaltest, liegt ein kleiner Teil davon zusätzlich auf dem Server (siehe Punkt 10).</p>
 
         <h2>1. Verantwortlicher</h2>
         <p>
-          {o.name}, {o.street}, {o.city}, {o.country}. E-Mail: {o.email}
+          {o.name}, {o.street}, {o.city}, {o.country}. E-Mail: <a href={`mailto:${o.email}`}>{o.email}</a>
         </p>
 
         <h2>2. Hosting</h2>
@@ -151,7 +137,7 @@ export function Datenschutz() {
 
         <h2>13. Deine Rechte</h2>
         <p>
-          Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch (Art. 15 bis 21 DSGVO). Wende dich dafür an {o.email}. Du kannst dich außerdem bei einer Datenschutz-Aufsichtsbehörde beschweren, in Bayern beim Bayerischen Landesamt für Datenschutzaufsicht (BayLDA), Promenade 18, 91522 Ansbach.
+          Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch (Art. 15 bis 21 DSGVO). Wende dich dafür an <a href={`mailto:${o.email}`}>{o.email}</a>. Du kannst dich außerdem bei einer Datenschutz-Aufsichtsbehörde beschweren, in Bayern beim Bayerischen Landesamt für Datenschutzaufsicht (BayLDA), Promenade 18, 91522 Ansbach.
         </p>
         <p className="tiny">Stand: {new Date(__BUILD_DATE__).toLocaleDateString("de-DE", { month: "long", year: "numeric" })}</p>
       </article>

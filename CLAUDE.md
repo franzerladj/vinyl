@@ -130,7 +130,6 @@ Gesetzte Secrets in Cloudflare (nur Namen): `DISCOGS_CONSUMER_KEY`, `DISCOGS_CON
 ## Offen
 
 - `GETSONGBPM_API_KEY` eintragen, sobald Franz ihn hat. Dann Keys-Abdeckung prüfen.
-- Impressum/Datenschutz: Anschrift in `web/src/pages/Legal.tsx` (`OPERATOR`) ausfüllen.
 - Feed: Filter Format, Position merken.
 - Kamera auf echtem iPhone testen lassen. Nativer Scanner erst mit Capacitor.
 - Store-Screenshots mit echter Sammlung, eigene Domain, Discogs-App umbenennen (siehe `docs/app-store.md`).
