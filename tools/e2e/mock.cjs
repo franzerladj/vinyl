@@ -51,6 +51,31 @@ module.exports = async function install(page) {
     if (p.startsWith("/api/profile/")) return json({ profile: null });
     if (/\/instances\/\d+\/fields\/\d+$/.test(p)) { globalThis.__fields = [...(globalThis.__fields || []), { p, body: route.request().postData() }]; return route.fulfill({ status: 204, body: "" }); }
     const method = route.request().method();
+    // Abgleich zwischen Geräten: ein Speicher für alle Seiten dieses Testlaufs (zwei Kontexte = zwei Geräte)
+    if (p.startsWith("/api/sync/")) {
+      // Standard: jede Seite ihr eigenes Konto. devsync.cjs teilt den Speicher (globalThis.__devsyncShared)
+      const S = globalThis.__devsyncShared ? (globalThis.__devsync ??= { rows: new Map(), seq: 0, pushes: 0 }) : (page.__devsync ??= { rows: new Map(), seq: 0, pushes: 0 });
+      if (p === "/api/sync/pull") {
+        const since = Number(url.searchParams.get("since") || 0);
+        const rows = [...S.rows.values()].filter((r) => r.seq > since).sort((a, b) => a.seq - b.seq);
+        return json({ seq: S.seq, more: false, rows: rows.map(({ t, k, v, ts }) => ({ t, k, v, ts })) });
+      }
+      const MAN = ["manuell", "Mithören", "Tap"];
+      for (const op of JSON.parse(route.request().postData() || "{}").ops || []) {
+        const id = `${op.t}:${op.k}`;
+        const r = S.rows.get(id) || { t: op.t, k: op.k, v: {}, fts: {}, ts: 0 };
+        if (op.del) { if (op.ts > r.ts) S.rows.set(id, { ...r, v: null, fts: {}, ts: op.ts, seq: ++S.seq }); continue; }
+        const v = { ...(r.v || {}) };
+        for (const [f, val] of Object.entries(op.patch || {})) {
+          if (op.t === "tracks" && (f === "bpm" || f === "bpmSource") && MAN.includes(v.bpmSource) && !MAN.includes(op.patch.bpmSource ?? v.bpmSource)) continue;
+          if ((r.fts[f] ?? 0) > op.ts || (r.fts[f] === op.ts && f in v)) continue;
+          v[f] = val; r.fts[f] = op.ts;
+        }
+        S.rows.set(id, { ...r, v, ts: Math.max(r.ts, op.ts), seq: ++S.seq });
+      }
+      S.pushes++;
+      return json({ seq: S.seq, written: 1 });
+    }
     const body = () => { try { return JSON.parse(route.request().postData() || "{}"); } catch { return {}; } };
     if (/\/users\/franzerladj\//.test(p)) {
       let fm;

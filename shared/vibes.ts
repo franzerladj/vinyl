@@ -181,7 +181,12 @@ const STYLE_BPM: Record<string, number> = {
 
 /** BPM schätzen: andere Tracks derselben Platte, sonst typisches Tempo der Styles */
 export function estimateBpm(styles: string[], siblingBpms: number[]): number | null {
-  if (siblingBpms.length) return Math.round(siblingBpms.reduce((a, b) => a + b, 0) / siblingBpms.length);
+  // Median statt Mittelwert: ein einzelner Halb-/Doppel-Ausreißer verschiebt sonst die Erwartung
+  if (siblingBpms.length) {
+    const s = [...siblingBpms].sort((a, b) => a - b);
+    const m = s.length >> 1;
+    return Math.round(s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2);
+  }
   const known = styles.map((s) => STYLE_BPM[s.toLowerCase()]).filter(Boolean);
   return known.length ? Math.round(known.reduce((a, b) => a + b, 0) / known.length) : null;
 }

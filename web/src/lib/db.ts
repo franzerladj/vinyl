@@ -233,3 +233,32 @@ export const realTracks = (tl: DTrack[] = []) => tl.filter((t) => (t.type_ ?? "t
 
 /** Track-ID für eigene Metadaten */
 export const trackId = (releaseId: number, position: string, index: number) => `${releaseId}:${position || `#${index + 1}`}`;
+
+const MANUAL = new Set(["manuell", "Mithören", "Tap"]);
+/**
+ * Automatisch ermittelte Werte eintragen, ohne Vorhandenes zu überschreiben: liegt schon ein Tempo oder eine
+ * Tonart vor (auch von einem anderen Gerät abgeglichen), bleibt sie samt Quelle. Eigene Energie/Moods bleiben.
+ */
+export async function autoUpdateTrack(id: string, patch: Partial<TrackMeta>) {
+  await db.transaction("rw", db.tracks, async () => {
+    const cur = await db.tracks.get(id);
+    if (!cur) return;
+    const p: Partial<TrackMeta> = { ...patch };
+    if (cur.bpm != null && (p.bpm != null || "bpmSource" in p)) {
+      delete p.bpm;
+      delete p.bpmSource;
+    }
+    if (cur.key && (p.key != null || "keySource" in p)) {
+      delete p.key;
+      delete p.keySource;
+    }
+    if (MANUAL.has(cur.vibeSource ?? "") || cur.vibeSource === "Claude") {
+      if (patch.vibeSource !== "Claude") {
+        delete p.energy;
+        delete p.moods;
+        delete p.vibeSource;
+      }
+    }
+    if (Object.keys(p).length) await db.tracks.update(id, p);
+  });
+}

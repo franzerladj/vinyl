@@ -89,7 +89,7 @@ export function Datenschutz() {
       <article className="page legal">
         <Draft />
         <h1>Datenschutz</h1>
-        <p>Kurz gesagt: Crate hat kein Nutzerkonto, kein Tracking und keine Werbung. Deine Sammlung, Sets und Notizen liegen auf deinem Gerät. Nur wenn du Mitteilungen einschaltest, liegt ein kleiner Teil davon auf dem Server (siehe Punkt 10).</p>
+        <p>Kurz gesagt: Crate hat kein Nutzerkonto, kein Tracking und keine Werbung. Deine Sammlung, Sets und Notizen liegen auf deinem Gerät. Damit sie auf Handy und Computer gleich sind, gleicht der Server das, was du in Crate selbst einträgst, zwischen deinen Geräten ab (siehe Punkt 11). Wenn du Mitteilungen einschaltest, liegt ein kleiner Teil davon zusätzlich auf dem Server (siehe Punkt 10).</p>
 
         <h2>1. Verantwortlicher</h2>
         <p>
@@ -141,10 +141,15 @@ export function Datenschutz() {
           Wenn du Mitteilungen einschaltest, speichert der Server bei Cloudflare (KV-Speicher): die Push-Adresse deines Geräts, deinen Discogs-Zugangsschlüssel (verschlüsselt), deine Wants mit Wunschpreisen, verliehene Platten und Set-Termine. Damit prüft er alle 10 Minuten bei Discogs Preise und Verfügbarkeit und erinnert dich an Termine. Fügt dich jemand als Freund hinzu, merkt sich der Server das bis zu 60 Tage, um dir Bescheid zu geben. Zugestellt werden Mitteilungen über den Push-Dienst deines Browsers (Apple, Google oder Mozilla). Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs. 1 lit. a DSGVO). Schaltest du Mitteilungen aus, werden diese Daten gelöscht.
         </p>
 
-        <h2>11. Schriften</h2>
+        <h2>11. Abgleich zwischen deinen Geräten</h2>
+        <p>
+          Damit BPM, Tonarten, Energie, Sterne, Notizen, Cue-Punkte, Sets, Regalplätze, Kisten-Vorlagen, Wunschpreise, Lieblingshändler, Freundesliste, Likes und Nadel-Stunden auf allen deinen Geräten gleich sind, speichert der Server diese Angaben unter deinem Discogs-Namen in einer Datenbank bei Cloudflare (Cloudflare D1). Nur du kannst sie abrufen, wenn du mit deinem Discogs-Konto angemeldet bist. Rechtsgrundlage ist die Bereitstellung der App (Art. 6 Abs. 1 lit. b DSGVO). Unter Einstellungen, „Handy und Computer“ kannst du den Abgleich ausschalten und die Daten vom Server löschen.
+        </p>
+
+        <h2>12. Schriften</h2>
         <p>Alle Schriften werden von der App selbst ausgeliefert. Es besteht keine Verbindung zu Google Fonts oder anderen Schriftanbietern.</p>
 
-        <h2>12. Deine Rechte</h2>
+        <h2>13. Deine Rechte</h2>
         <p>
           Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Datenübertragbarkeit und Widerspruch (Art. 15 bis 21 DSGVO). Wende dich dafür an {o.email}. Du kannst dich außerdem bei einer Datenschutz-Aufsichtsbehörde beschweren, in Bayern beim Bayerischen Landesamt für Datenschutzaufsicht (BayLDA), Promenade 18, 91522 Ansbach.
         </p>

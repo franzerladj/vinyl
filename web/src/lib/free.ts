@@ -1,6 +1,6 @@
 // Kostenlose Anreicherung ohne Claude: Texterkennung auf dem Gerät, Vibe-Regeln,
 // Last.fm-Tags und Analyse der Deezer-Hörprobe im Browser.
-import { db, type TrackMeta } from "./db";
+import { db, type TrackMeta, autoUpdateTrack } from "./db";
 import { api } from "./api";
 import { getState, jobUpdate } from "./store";
 import { analyzeSamples, type AnalysisHints, type AudioAnalysis } from "../../../shared/audioAnalysis";
@@ -181,7 +181,7 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
         patch.moods = [...new Set([...v.moods, v.slot])];
         patch.vibeSource = v.sources.join(" + ");
       }
-      await db.tracks.update(t.id, patch);
+      await autoUpdateTrack(t.id, patch);
       changed++;
       jobUpdate(job, { done: ++done });
     });

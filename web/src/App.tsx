@@ -10,6 +10,8 @@ import { LogoMark, Wordmark } from "./components/Logo";
 import Home from "./pages/Home";
 import Login, { LoginFinish } from "./pages/Login";
 import { claimIdentity, verifyInBackground } from "./lib/auth";
+// Früh laden: die Hooks schreiben jede eigene Änderung für den Geräte-Abgleich mit
+import { startDevSync } from "./lib/devsync";
 // Detailseite direkt laden, damit die Cover-Animation sofort ein Ziel hat
 import ReleasePage from "./pages/Release";
 const Collection = lazy(() => import("./pages/Collection"));
@@ -355,12 +357,19 @@ export default function App() {
         // Das Gerät fragt den Namen selbst, der Server bestätigt ihn im Hintergrund.
         if (m.needIdentity) {
           if (!m.username) m = { ...m, username: (await claimIdentity()) ?? cached?.username ?? null };
-          verifyInBackground((name) => setState({ me: { ...m, username: name, verified: true, needIdentity: false } }));
+          verifyInBackground((name) => {
+            setState({ me: { ...m, username: name, verified: true, needIdentity: false } });
+            void startDevSync();
+          });
         }
         // Anderes Konto als zuletzt auf diesem Gerät: lokale Daten des vorherigen Kontos entfernen
         if (m.username && (await claimDevice(m.username).catch(() => false))) toast("Neues Konto auf diesem Gerät: die Daten des vorherigen Kontos wurden entfernt.");
         setState({ me: m });
-        if (m.username) void startupSync();
+        // Erst die Änderungen der anderen Geräte holen (höchstens ein paar Sekunden warten), dann den Discogs-Sync
+        if (m.username) {
+          const ready = m.verified !== false ? Promise.race([startDevSync().catch(() => undefined), new Promise((r) => setTimeout(r, 6000))]) : Promise.resolve();
+          void ready.then(() => startupSync());
+        }
         try {
           localStorage.setItem("crate_me", JSON.stringify(m.username ? m : null));
         } catch {

@@ -12,3 +12,9 @@ binding = "AI"
 [[kv_namespaces]]
 binding = "PUSH"
 id = "f33e0e0df2c64fe1a72aafd163992684"
+
+# Abgleich eigener Daten zwischen Geräten (BPM, Sets, Notizen …), Schema in server/devsync.ts (SCHEMA)
+[[d1_databases]]
+binding = "SYNC"
+database_name = "crate-sync"
+database_id = "9779ba0a-92e1-4d44-96a3-b8d4cb553e02"

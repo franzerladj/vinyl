@@ -42,6 +42,7 @@ import {
   IconRecord,
 } from "../components/icons";
 import { computeStylus, hoursText, saveStylus, today } from "../lib/stylus";
+import { deleteDevSyncData, devSyncOff, lastDevSync, pushEverything, setDevSync, syncNow } from "../lib/devsync";
 
 const TABLES = ["releases", "collection", "wants", "tracks", "recordMeta", "sets", "marketStats", "listings", "kv", "priceHistory", "priceSuggestions", "wantMeta", "sellers", "friends", "friendItems"] as const;
 
@@ -128,6 +129,8 @@ export default function Settings() {
       return <ProfileEditPage />;
     case "stylus":
       return <StylusPage />;
+    case "devices":
+      return <DevicesPage />;
     default:
       return <Overview />;
   }
@@ -161,6 +164,7 @@ function Overview() {
     sheets: (await getSheetsConfig()).url,
     favorites: (await db.sellers.toArray()).filter((s) => s.favorite).length,
   }));
+  const devLast = useLiveQuery(() => lastDevSync(), [], 0);
   const sources = [me?.features.lastfm, me?.features.freeAi, me?.features.keyLookup, canClaude(me)].filter(Boolean).length + 3;
 
   return (
@@ -186,6 +190,7 @@ function Overview() {
           <Row icon={<IconSync />} color="#30d158" label="Abgleich & Ergänzen" value={stats?.lastSync ? relDay(stats.lastSync) : "nie"} to="/settings/sync" />
           <Row icon={<IconCoin />} color="#ff9f0a" label="Preise & Shopping" value={stats?.currency} to="/settings/prices" />
           <Row icon={<IconWave />} color="#5e5ce6" label="Datenquellen" value={`${sources} aktiv`} to="/settings/sources" />
+          <Row icon={<IconSync />} color="#0a84ff" label="Handy und Computer" sub="BPM, Keys, Sets und Notizen auf allen Geräten gleich" value={devLast ? relTime(devLast) : "gleich"} to="/settings/devices" />
         </Group>
 
         <Group title="Freunde">
@@ -1145,6 +1150,76 @@ function StylusPage() {
               if (!(await ask({ title: "Neue Nadel eingebaut?", body: "Die Stunden zählen ab heute neu.", ok: "Ja, neu" }))) return;
               haptic(15);
               void saveStylus({ since: today(), lifeHours: Number(life) || undefined, extraMinutes: 0 }).then(() => toast("Neue Nadel, frischer Klang"));
+            }}
+          />
+        </Group>
+      </div>
+    </>
+  );
+}
+
+const relTime = (t: number) => {
+  const m = Math.round((Date.now() - t) / 60000);
+  return m < 1 ? "gerade" : m < 60 ? `vor ${m} Min.` : relDay(t);
+};
+
+/** Abgleich zwischen Geräten: was wandert mit, wann zuletzt, dieses Gerät als Vorlage */
+function DevicesPage() {
+  const last = useLiveQuery(() => lastDevSync(), [], 0);
+  const off = useLiveQuery(() => devSyncOff(), [], false);
+  const [busy, setBusy] = useState(false);
+  const run = async (fn: () => Promise<void>, done: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      toast(done);
+    } catch (e) {
+      toast((e as Error).message.includes("401") ? "Bitte kurz warten, die Anmeldung wird noch bestätigt" : "Gerade keine Verbindung, Crate versucht es später nochmal");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <NavBar title="Geräte" backTo="/settings" backLabel="Einstellungen" />
+      <div className="page settings-list">
+        <Group foot="Sammlung, Wantlist, Ordner, Zustand und Kaufpreis kommen ohnehin von Discogs. Hier geht es um das, was du in Crate selbst einträgst.">
+          <div className="set-row" style={{ cursor: "default", alignItems: "flex-start" }}>
+            <span className="ico" style={{ background: "#0a84ff" }}>
+              <IconSync />
+            </span>
+            <div style={{ flex: 1 }}>
+              <b>Läuft automatisch</b>
+              <div className="sub" style={{ marginTop: 4 }}>
+                BPM, Keys, Energie, Sterne, Notizen und Cue-Punkte, Sets, Regalplätze, Kisten-Vorlagen, Wunschpreise, Händler, Freunde, Likes und Nadel-Stunden sind auf allen Geräten gleich, auf denen du mit deinem Discogs-Konto angemeldet bist.
+              </div>
+              <div className="sub" style={{ marginTop: 8 }}>Zuletzt abgeglichen: {last ? relTime(last) : "noch nie"}</div>
+            </div>
+          </div>
+          <div className="set-row" style={{ cursor: "default" }}>
+            <span style={{ flex: 1 }}>Auf diesem Gerät abgleichen</span>
+            <Switch label="Auf diesem Gerät abgleichen" checked={!off} onChange={(v) => void setDevSync(v).then(() => toast(v ? "Abgleich eingeschaltet" : "Abgleich auf diesem Gerät aus"))} />
+          </div>
+          {!off && <Row label="Jetzt abgleichen" onClick={() => !busy && void run(syncNow, "Abgeglichen")} right={<span />} />}
+        </Group>
+        <Group title="Wenn zwei Geräte verschiedene Werte haben" foot="Von Hand eingetragene BPM, Keys und Energie werden nie durch eine automatische Messung eines anderen Geräts ersetzt. Sonst gilt die neuere Änderung.">
+          <Row
+            label="Dieses Gerät als Vorlage nehmen"
+            sub="Schickt alles von hier an deine anderen Geräte"
+            onClick={async () => {
+              if (busy || !(await ask({ title: "Dieses Gerät als Vorlage?", body: "Deine anderen Geräte übernehmen BPM, Sets und Notizen von hier. Werte, die nur dort stehen, bleiben erhalten.", ok: "Übernehmen" }))) return;
+              await run(pushEverything, "Deine anderen Geräte übernehmen den Stand beim nächsten Öffnen");
+            }}
+            right={<span />}
+          />
+        </Group>
+        <Group foot="Löscht die abgeglichenen Daten auf dem Server. Auf deinen Geräten bleibt alles, der Abgleich wird auf diesem Gerät ausgeschaltet.">
+          <Row
+            label="Daten vom Server löschen"
+            danger
+            onClick={async () => {
+              if (busy || !(await ask({ title: "Abgleich-Daten löschen?", body: "Auf deinen Geräten bleibt alles. Auf dem Server wird nichts mehr gespeichert, bis du den Abgleich wieder einschaltest.", ok: "Löschen", danger: true }))) return;
+              await run(deleteDevSyncData, "Vom Server gelöscht");
             }}
           />
         </Group>

@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { analyzeSamples } from "../shared/audioAnalysis";
 
+// Fester Zufall: gleiche Testdaten bei jedem Lauf (sonst schwankt das Rauschen der Hi-Hats)
+let seed = 12345;
+const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
+
 /** Testsignal: A-Moll-Akkord plus Kick-artige Impulse in festem Tempo */
 function synth(bpm: number, seconds = 20, sr = 22050, chord = [220, 261.63, 329.63, 110]) {
   const out = new Float32Array(sr * seconds);
@@ -43,7 +47,7 @@ describe("Tempo mit Bassdrum und Hi-Hats", () => {
       for (let i = 0; i < 2500 && k + i < s.length; i++) s[k + i] += Math.sin((2 * Math.PI * 55 * i) / sr) * Math.exp(-i / 600) * 0.9;
       for (const [off, amp] of [[0.5, 0.5], [0.25, 0.15], [0.75, 0.15]] as const) {
         const h = Math.round((b + off) * beatLen);
-        for (let i = 0; i < 400 && h + i < s.length; i++) s[h + i] += (Math.random() * 2 - 1) * Math.exp(-i / 80) * amp;
+        for (let i = 0; i < 400 && h + i < s.length; i++) s[h + i] += (rnd() * 2 - 1) * Math.exp(-i / 80) * amp;
       }
     }
     return s;

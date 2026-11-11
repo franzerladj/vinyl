@@ -2,6 +2,7 @@
 // lokal unter Node aus process.env (.env-Datei).
 import { memoryKV, type KV, type PushConfig } from "./push";
 import { VAPID_PUBLIC_KEY } from "../shared/pushKey";
+import { d1Store, memoryStore, type D1Like, type SyncStore } from "./devsync";
 
 /** Minimaler Typ für das Workers-AI-Binding (Cloudflare) */
 export interface AiBinding {
@@ -25,9 +26,14 @@ export interface Env {
   VAPID_PRIVATE_JWK?: string;
   /** Gemeinsames Geheimnis für den Zeitplan-Worker */
   CRON_SECRET?: string;
+  /** D1-Datenbank für den Abgleich zwischen Geräten */
+  SYNC?: D1Like;
 }
 
 let localKV: KV | null = null;
+let localSync: SyncStore | null = null;
+/** Abgleich-Speicher: D1 auf Cloudflare, sonst Arbeitsspeicher (lokal, Tests) */
+export const syncStore = (env: Env): SyncStore => (env.SYNC ? d1Store(env.SYNC) : (localSync ??= memoryStore()));
 
 export interface Config {
   appUrl: string;

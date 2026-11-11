@@ -11,6 +11,8 @@ import { fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type Release
 import { lastfmTags } from "./lastfm";
 import { profileEmpty, sanitizeProfile, type CrateProfile } from "../shared/profile";
 import { buildIcs } from "../shared/ics";
+import { pushOps } from "./devsync";
+import { syncStore } from "./env";
 
 type C = Context<{ Bindings: Env; Variables: { cfg: Config } }>;
 
@@ -645,6 +647,31 @@ app.get("/api/profile/me", async (c) => {
   const s = await session(c);
   if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
   return c.json({ profile: JSON.parse((await cfg.kv.get(profKey(s.username))) ?? "null") });
+});
+
+// ---------- Abgleich zwischen Geräten (nur mit bestätigtem Discogs-Namen) ----------
+const syncUser = (s: Session) => s.username!.toLowerCase();
+app.post("/api/sync/push", async (c) => {
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const body = (await c.req.json().catch(() => null)) as { ops?: unknown } | null;
+  const r = await pushOps(syncStore(c.env ?? {}), syncUser(s), body?.ops);
+  if ("error" in r) return c.json({ message: r.error }, 400);
+  return c.json(r);
+});
+app.delete("/api/sync", async (c) => {
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  await syncStore(c.env ?? {}).clear(syncUser(s));
+  return c.json({ ok: true });
+});
+app.get("/api/sync/pull", async (c) => {
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const since = Math.max(0, Number(c.req.query("since")) || 0);
+  const { rows, seq } = await syncStore(c.env ?? {}).since(syncUser(s), since, 800);
+  c.header("Cache-Control", "no-store");
+  return c.json({ seq, more: rows.length === 800, rows: rows.map((r) => ({ t: r.t, k: r.k, v: r.v, ts: r.ts })) });
 });
 
 app.post("/api/profile/me", async (c) => {
