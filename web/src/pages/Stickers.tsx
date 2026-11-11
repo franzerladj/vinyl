@@ -6,7 +6,7 @@ import QRCode from "qrcode";
 import { db, getKV, realTracks, setKV, trackId } from "../lib/db";
 import { discogsReleaseUrl } from "../lib/format";
 import { fetchMissingDetails, lookupAudioFor } from "../lib/sync";
-import { toast } from "../lib/store";
+import { ask, toast } from "../lib/store";
 import { Empty, haptic, Seg } from "../components/bits";
 import { IconPrint } from "../components/icons";
 import { Sticker } from "../components/print/Sticker";
@@ -170,7 +170,7 @@ export default function Stickers() {
   const print = async () => {
     haptic();
     window.print();
-    if (selected.length && confirm(`${selected.length} Platten als beschriftet markieren?`)) {
+    if (selected.length && (await ask({ title: selected.length === 1 ? "Als beschriftet markieren?" : `${selected.length} Platten als beschriftet markieren?`, body: "Dann tauchen sie bei „Neue“ nicht mehr auf.", ok: "Markieren" }))) {
       const now = Date.now();
       await db.transaction("rw", db.recordMeta, async () => {
         for (const s of selected) {

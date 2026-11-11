@@ -7,7 +7,7 @@ import { canClaude, discogs as discogsApi, logout, ownAnthropicKey, setOwnAnthro
 import { getSheetsConfig, pullTracksFromSheets, pushToSheets, type SheetsConfig } from "../lib/sheets";
 import { autoPipeline, fetchMissingDetails, getAutoSettings, lookupAudioFor, tagVibes, type AutoSettings } from "../lib/sync";
 import { suggestionsState } from "../lib/prices";
-import { toast, useStore } from "../lib/store";
+import { ask, toast, useStore } from "../lib/store";
 import { getTheme, hapticsEnabled, setHaptics, setTheme, setYtConsent, ytConsent, type Theme } from "../lib/theme";
 import { Avatar, Cover, haptic, Seg, useDebounced } from "../components/bits";
 import { matchesQuery, matchScore as textScore, queryTokens } from "../../../shared/textSearch";
@@ -269,7 +269,7 @@ function Overview() {
               label="Abmelden"
               danger
               onClick={async () => {
-                if (!confirm("Von Discogs abmelden? Mitteilungen werden auf diesem Gerät ausgeschaltet. Deine Platten, Sets und Notizen bleiben hier, bis sich ein anderes Konto anmeldet.")) return;
+                if (!(await ask({ title: "Von Discogs abmelden?", body: "Mitteilungen werden auf diesem Gerät ausgeschaltet. Deine Platten, Sets und Notizen bleiben hier, bis sich ein anderes Konto anmeldet.", ok: "Abmelden", danger: true }))) return;
                 // Server soll den Discogs-Zugang für Mitteilungen nicht weiter nutzen
                 await import("../lib/push").then((p) => p.disablePush()).catch(() => undefined);
                 await logout();
@@ -621,7 +621,7 @@ function DataPage() {
             label="Alle lokalen Daten löschen"
             danger
             onClick={async () => {
-              if (!confirm("Wirklich alle lokalen Daten löschen? Eigene BPM, Sets und Regalplätze gehen verloren, wenn es kein Backup gibt.")) return;
+              if (!(await ask({ title: "Alle lokalen Daten löschen?", body: "Eigene BPM, Sets und Regalplätze gehen verloren, wenn es kein Backup gibt.", ok: "Löschen", danger: true }))) return;
               await db.delete();
               nav("/");
               location.reload();
@@ -1141,8 +1141,8 @@ function StylusPage() {
           <Row
             label="Neue Nadel eingebaut"
             sub="Zählt ab heute neu"
-            onClick={() => {
-              if (!confirm("Neue Nadel eingebaut? Die Stunden zählen ab heute neu.")) return;
+            onClick={async () => {
+              if (!(await ask({ title: "Neue Nadel eingebaut?", body: "Die Stunden zählen ab heute neu.", ok: "Ja, neu" }))) return;
               haptic(15);
               void saveStylus({ since: today(), lifeHours: Number(life) || undefined, extraMinutes: 0 }).then(() => toast("Neue Nadel, frischer Klang"));
             }}

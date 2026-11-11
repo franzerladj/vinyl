@@ -46,7 +46,7 @@ export default function LabelPage() {
         <div className="page-head" style={{ padding: 0 }}>
           <div>
             <span className="eyebrow">Label</span>
-            <h1>{data?.name.replace(/\s\(\d+\)$/, "") ?? " "}</h1>
+            <h1 style={{ whiteSpace: "normal" }}>{data?.name.replace(/\s\(\d+\)$/, "") ?? " "}</h1>
           </div>
         </div>
         {error && <Empty title="Label nicht geladen">{error}</Empty>}

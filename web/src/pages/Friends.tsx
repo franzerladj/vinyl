@@ -13,7 +13,7 @@ import type { MyProfile } from "../lib/friends";
 import { loadMyProfile, loadProfile } from "../lib/profile";
 import type { CrateProfile } from "../../../shared/profile";
 import { addFriend, collectionUrl, friendFeed, friendMatches, inviteLink, lentRecords, messageUrl, profileUrl, removeFriend, syncFriend, tasteMatch, type FriendMatch } from "../lib/friends";
-import { toast, useStore } from "../lib/store";
+import { ask, toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, RecordRow, Seg, SkeletonRows, useDebounced } from "../components/bits";
 import { IconMore, IconPlus, IconSearch, IconShare, IconSync, IconTrash, IconUser } from "../components/icons";
 import { matchesQuery } from "../../../shared/textSearch";
@@ -444,7 +444,7 @@ function FriendDetail({ u }: { u: string }) {
             icon: <IconTrash />,
             danger: true,
             onClick: async () => {
-              if (!confirm(`${u} aus deinen Freunden entfernen?`)) return;
+              if (!(await ask({ title: `${u} entfernen?`, body: "Die Sammlung und Wantlist von " + u + " verschwinden aus deiner Freundesliste.", ok: "Entfernen", danger: true }))) return;
               await removeFriend(u);
               nav("/friends", { viewTransition: true });
             },

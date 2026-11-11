@@ -9,7 +9,7 @@ import { formatPaid, paidOf, parsePaidInput, stripPaid } from "../../../shared/p
 import { GRADE_HINT, SLEEVE_HINT, MEDIA_GRADES, SLEEVE_GRADES, pressingInfo, shortGrade } from "../../../shared/vinyl";
 import type { CollectionItem } from "../lib/db";
 import { discogsReleaseUrl, discogsSellUrl, formatLine, money, sideOf } from "../lib/format";
-import { toast, useStore } from "../lib/store";
+import { askText, toast, useStore } from "../lib/store";
 import { Avatar, Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, Sparkline, TapTempo, type Preview, keepParens } from "../components/bits";
 import { loadPriceInfo, setTargetPrice } from "../lib/prices";
 import { friendsFor, lendRecord, messageUrl } from "../lib/friends";
@@ -596,9 +596,9 @@ export default function ReleasePage() {
           ...friendNames.filter((n) => n !== meta?.lentTo).map((n) => ({ label: n, onClick: () => lendRecord(id, n).then(() => toast(`An ${n} verliehen`)) })),
           {
             label: "Jemand anderes …",
-            onClick: () => {
-              const n = prompt("An wen verleihst du die Platte?");
-              if (n?.trim()) void lendRecord(id, n.trim()).then(() => toast(`An ${n.trim()} verliehen`));
+            onClick: async () => {
+              const n = await askText({ title: "An wen verleihst du die Platte?", input: { placeholder: "Name" }, ok: "Verleihen" });
+              if (n) void lendRecord(id, n).then(() => toast(`An ${n} verliehen`));
             },
           },
         ]}

@@ -7,7 +7,7 @@ import { buildQueue, digDetail, likedCards, loadWeights, markSeen, markSkipped, 
 import { previewUrl } from "../lib/free";
 import { addToCollection, addWant } from "../lib/sync";
 import { discogsSellUrl, money } from "../lib/format";
-import { toast } from "../lib/store";
+import { ask, toast } from "../lib/store";
 import { getKV, setKV } from "../lib/db";
 import { ytConsent } from "../lib/theme";
 import { haptic, keepParens } from "../components/bits";
@@ -200,7 +200,7 @@ export default function Dig() {
   };
 
   const collect = async (c: DigCard) => {
-    if (!confirm(`„${c.title}“ zur Sammlung hinzufügen?`)) return;
+    if (!(await ask({ title: "In die Sammlung?", body: `„${c.title}“ kommt bei Discogs in deine Sammlung.`, ok: "Hinzufügen" }))) return;
     haptic(20);
     void recordAction(c, "collect");
     try {

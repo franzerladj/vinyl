@@ -104,6 +104,7 @@ export function Jobs() {
   const list = Object.values(jobs);
   return (
     <>
+      <AskDialog />
       {update && list.length === 0 && (
         <button className="toast" style={{ border: 0, cursor: "pointer", animation: "island .55s var(--spring) both" }} onClick={() => update()}>
           Neue Version da · Tippen zum Aktualisieren
@@ -464,5 +465,58 @@ export function keepParens(text: string | null | undefined): React.ReactNode {
     ) : (
       part
     ),
+  );
+}
+
+/** Rückfrage im Crate-Stil (ersetzt confirm/prompt des Browsers) */
+function AskDialog() {
+  const a = useStore((s) => s.ask);
+  const [text, setText] = useState("");
+  const okRef = useRef<HTMLButtonElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!a) return;
+    setText(a.input?.value ?? "");
+    haptic(8);
+    setTimeout(() => (a.input ? inputRef.current?.focus() : okRef.current?.focus()), 30);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        a.resolve(null);
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [a]);
+  if (!a) return null;
+  const confirmIt = () => (a.input ? text.trim() && a.resolve(text.trim()) : a.resolve(""));
+  return (
+    <div className="ask-backdrop" onClick={() => a.resolve(null)}>
+      <form
+        className="ask"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="ask-title"
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={(e) => {
+          e.preventDefault();
+          confirmIt();
+        }}
+      >
+        <b id="ask-title" className="ask-title">
+          {a.title}
+        </b>
+        {a.body && <p className="ask-body">{a.body}</p>}
+        {a.input && <input ref={inputRef} className="input" value={text} placeholder={a.input.placeholder} onChange={(e) => setText(e.target.value)} enterKeyHint="done" />}
+        <div className="ask-actions">
+          <button type="button" className="btn tinted" onClick={() => a.resolve(null)}>
+            {a.cancel ?? "Abbrechen"}
+          </button>
+          <button ref={okRef} type="submit" className={`btn ${a.danger ? "danger" : "primary"}`} disabled={Boolean(a.input) && !text.trim()}>
+            {a.ok ?? "Okay"}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 }

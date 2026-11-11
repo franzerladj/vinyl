@@ -2,6 +2,7 @@
 // Alle Maße in mm, damit Vorschau und Druck exakt gleich aussehen.
 import { camelotString, parseKey } from "../../../../shared/music";
 import { sideOf } from "../../lib/format";
+import { splitVersion } from "../../../../shared/trackTitle";
 import { CAMELOT_COLORS } from "../bits";
 import { FONTS, onColor, stars, type PrintItem, type PrintOpts, type PrintTrack } from "./types";
 
@@ -27,6 +28,35 @@ function themeFor(theme: CardTheme, accent = DEFAULT_ACCENT): ThemeColors {
 const barColor = (theme: CardTheme, t: ThemeColors, accent = DEFAULT_ACCENT) => (theme === "accent" ? t.fg : accent);
 
 const mm = (v: number) => `${v.toFixed(2)}mm`;
+
+/** Version in Klammern: etwas kleiner, aber gut lesbar (Mixe sind beim Auflegen wichtig) */
+export const VERSION_SCALE = 0.86;
+const clamp = (n: number): React.CSSProperties => ({ display: "-webkit-box", WebkitLineClamp: n, WebkitBoxOrient: "vertical", overflow: "hidden" });
+
+/** Titel mit Version in eigener Zeile: „Keep Pushin'“ / „(Grant's Bouncing Dub Mix)“ */
+function TitleLines({ artist, title, muted, lineH }: { artist: string | null; title: string; muted: string; lineH: number }) {
+  const { main, version } = splitVersion(title);
+  return (
+    <>
+      <span style={clamp(2)}>
+        {artist ? <span style={{ color: muted }}>{artist} – </span> : null}
+        {main}
+      </span>
+      {version && <span style={{ ...clamp(2), fontSize: `${VERSION_SCALE}em`, lineHeight: mm(lineH * VERSION_SCALE), opacity: 0.8 }}>{version}</span>}
+    </>
+  );
+}
+
+/** Einzeilig (Rückseite, Sticker): Version kleiner direkt dahinter */
+export function InlineVersion({ title }: { title: string }) {
+  const { main, version } = splitVersion(title);
+  if (!version) return <>{title}</>;
+  return (
+    <>
+      {main} <span style={{ fontSize: `${VERSION_SCALE}em`, opacity: 0.8 }}>{version}</span>
+    </>
+  );
+}
 
 function groupSides(tracks: PrintTrack[]) {
   const sides = new Map<string, PrintTrack[]>();
@@ -117,7 +147,13 @@ export function InsertCard({ s, w, h, o, theme }: { s: PrintItem; w: number; h: 
     const metaW = (hasBpm ? f * 2.2 : 0) + (hasKey ? f * 2.6 : 0) + (hasEnergy ? f * 1.4 : 0) + (hasDur ? f * 2.6 : 0) + 2;
     const textW = Math.max(8, colW - sideW - posW - metaW - (sides.length > 1 ? 3 : 0));
     const perLine = textW / (f * 0.53);
-    const sideH = sides.map(([, ts]) => ts.reduce((a, t) => a + Math.min(2, Math.ceil(fullTitle(t).length / perLine)) * lh * 0.92 + lh * 0.12, 0) + lh * 0.35);
+    // Version in Klammern steht immer in eigener Zeile, etwas kleiner (VERSION_SCALE)
+    const lines = (t: PrintTrack) => {
+      const { main, version } = splitVersion(fullTitle(t));
+      const m = Math.min(2, Math.ceil(main.length / perLine));
+      return version ? m + Math.min(2, Math.ceil(version.length / (perLine / VERSION_SCALE))) * VERSION_SCALE : m;
+    };
+    const sideH = sides.map(([, ts]) => ts.reduce((a, t) => a + lines(t) * lh * 0.92 + lh * 0.12, 0) + lh * 0.35);
     // Seiten der Reihe nach auf Spalten verteilen, höchste Spalte zählt
     const per = Math.ceil(sides.length / cols);
     let total = 0;
@@ -171,9 +207,8 @@ export function InsertCard({ s, w, h, o, theme }: { s: PrintItem; w: number; h: 
                 {ts.map((tr) => (
                   <div key={tr.position} style={{ display: "flex", alignItems: "flex-start", gap: mm(1.6), minHeight: mm(lineH), fontSize: mm(fs), lineHeight: mm(lineH * 0.92) }}>
                     <span style={{ width: mm(posW), flex: "none", fontWeight: 700, color: t.muted, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{tr.position}</span>
-                    <span style={{ flex: 1, minWidth: 0, fontWeight: 500, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-                      {tr.meta?.artist && tr.meta.artist !== r.artist ? <span style={{ color: t.muted }}>{tr.meta.artist} – </span> : null}
-                      {tr.title}
+                    <span style={{ flex: 1, minWidth: 0, fontWeight: 500 }}>
+                      <TitleLines artist={tr.meta?.artist && tr.meta.artist !== r.artist ? tr.meta.artist : null} title={tr.title} muted={t.muted} lineH={lineH * 0.92} />
                     </span>
                     {hasDur && <span style={{ color: t.muted, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>{tr.duration}</span>}
                     {hasBpm && <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums", minWidth: mm(fs * 1.9), textAlign: "right" }}>{tr.meta?.bpm ? Math.round(tr.meta.bpm) : ""}</span>}
@@ -259,7 +294,9 @@ export function ObiStrip({ s, w, h, o, theme, front }: { s: PrintItem; w: number
                 {ts.map((tr) => (
                   <div key={tr.position} style={{ display: "flex", alignItems: "center", gap: mm(1.2), height: mm(lineH), fontSize: mm(fs), whiteSpace: "nowrap" }}>
                     <span style={{ width: mm(Math.max(...s.tracks.map((x) => x.position.length)) * fs * 0.7 + 0.8), flex: "none", fontWeight: 800, color: t.muted }}>{tr.position}</span>
-                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{tr.title}</span>
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>
+                      <InlineVersion title={tr.title} />
+                    </span>
                     {o.showBpm && <span style={{ fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{tr.meta?.bpm ? Math.round(tr.meta.bpm) : ""}</span>}
                     {(o.showCamelot || o.showKey) && <Pill k={tr.meta?.key} size={fs} />}
                   </div>

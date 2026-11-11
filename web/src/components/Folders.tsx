@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
 import { createFolder, deleteFolder, folderIdFor, moveToFolder, renameFolder, runFolderJob, setWantFolder, useFolders, useWantFolderNames } from "../lib/folders";
-import { toast } from "../lib/store";
+import { ask, toast } from "../lib/store";
 import { matchesQuery } from "../../../shared/textSearch";
 import { cleanFolderName, NO_FOLDER, sameFolder, wantFolderOf } from "../../../shared/folders";
 import { Cover, haptic, Sheet } from "./bits";
@@ -227,7 +227,7 @@ function FolderSorter({ kind, name, recs, folderId, onBack, onSaved, onRenamed, 
     }
   };
   const remove = async () => {
-    if (!confirm(`Ordner „${name}“ löschen? Die Platten bleiben in Sammlung und Wantlist, nur ohne Ordner.`)) return;
+    if (!(await ask({ title: `Ordner „${name}“ löschen?`, body: "Die Platten bleiben in Sammlung und Wantlist, nur ohne Ordner.", ok: "Löschen", danger: true }))) return;
     runFolderJob("Ordner wird gelöscht", async () => {
       if (folderId) await deleteFolder(folderId);
       else await setWantFolder([...initial], null);

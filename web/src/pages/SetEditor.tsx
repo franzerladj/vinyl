@@ -9,7 +9,7 @@ import { ShareCardSheet } from "../components/ShareCard";
 import { renderSetCard } from "../lib/shareCard";
 import { encodeSet } from "../../../shared/setShare";
 import { playedHistory, playedText, type PlayedAt } from "../lib/setHistory";
-import { toast, username } from "../lib/store";
+import { ask, toast, username } from "../lib/store";
 import { deleteTemplate, saveTemplate, stillOwned, useTemplates } from "../lib/crateTemplates";
 import { Cover, haptic, Seg, Sheet, keepParens } from "../components/bits";
 import { IconPlay, IconPlus, IconX } from "../components/icons";
@@ -439,7 +439,7 @@ export default function SetEditor() {
             className="btn ghost"
             style={{ color: "var(--bad)", marginTop: 16 }}
             onClick={async () => {
-              if (!confirm("Set löschen?")) return;
+              if (!(await ask({ title: "Set löschen?", body: "Reihenfolge, Kiste und Mix-Notizen sind dann weg.", ok: "Löschen", danger: true }))) return;
               await db.sets.delete(Number(id));
               nav("/sets", { viewTransition: true });
             }}
@@ -922,8 +922,8 @@ function TemplateSheet({ crate, suggestedName, onLoad }: { crate: number[]; sugg
               <button
                 className="icon-btn"
                 aria-label={`Vorlage ${t.name} löschen`}
-                onClick={() => {
-                  if (confirm(`Vorlage „${t.name}“ löschen?`)) void deleteTemplate(t.name);
+                onClick={async () => {
+                  if (await ask({ title: `Vorlage „${t.name}“ löschen?`, ok: "Löschen", danger: true })) void deleteTemplate(t.name);
                 }}
               >
                 <IconX />
@@ -972,11 +972,11 @@ function AutoHelp({ data, set, seq, toSetTrack, fromSource, folderName, onApply 
     onApply(buildSetlist(seq, { ...opts, length: seq.length, maxPerRecord: 3 }), crate);
     toast("Reihenfolge geordnet. Deine Auswahl bleibt gleich.");
   };
-  const fill = () => {
+  const fill = async () => {
     if (!data) return;
     const pool = (crate.length ? data.tracks.filter((t) => crate.includes(t.releaseId)) : data.tracks.filter((t) => fromSource(t.releaseId))).map(toSetTrack);
     if (!pool.length) return toast("Keine Tracks gefunden");
-    if (seq.length && !confirm("Das ersetzt deine aktuelle Reihenfolge. Weiter?")) return;
+    if (seq.length && !(await ask({ title: "Reihenfolge ersetzen?", body: "Der Vorschlag ersetzt deine aktuelle Reihenfolge.", ok: "Ersetzen" }))) return;
     const ids = buildSetlist(pool, { ...opts, length, maxPerRecord: perRecord });
     const rids = [...new Set(ids.map((i) => data.byId.get(i)?.releaseId).filter((x): x is number => x != null))];
     onApply(ids, [...new Set([...crate, ...rids])]);

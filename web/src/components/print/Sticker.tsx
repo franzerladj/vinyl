@@ -1,3 +1,4 @@
+import { InlineVersion } from "./InsertCard";
 import { camelotString, parseKey } from "../../../../shared/music";
 import { sideOf } from "../../lib/format";
 import { FONTS, stars, type PrintItem, type PrintOpts } from "./types";
@@ -61,7 +62,7 @@ export function Sticker({ s, w, h, o }: { s: StickerData; w: number; h: number; 
               <span style={{ width: `${Math.max(2.2, Math.max(...s.tracks.map((x) => x.position.length)) * 0.72 + 0.3) * fs}mm`, flex: "none", fontWeight: 700 }}>{t.position}</span>
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
                 {t.meta?.artist && t.meta.artist !== r.artist ? `${t.meta.artist} – ` : ""}
-                {t.title}
+                <InlineVersion title={t.title} />
               </span>
               <span style={{ flex: "none", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{meta(t)}</span>
             </div>

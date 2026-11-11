@@ -16,9 +16,26 @@ interface State {
   toast: string | null;
   /** Gesetzt, wenn eine neue App-Version bereitsteht */
   updateReady: (() => void) | null;
+  /** Offene Rückfrage im Crate-Stil (statt confirm/prompt des Browsers) */
+  ask: AskState | null;
 }
 
-let state: State = { me: null, jobs: {}, toast: null, updateReady: null };
+export interface AskOptions {
+  title: string;
+  body?: string;
+  ok?: string;
+  cancel?: string;
+  /** Rote Bestätigung für Löschen, Abmelden … */
+  danger?: boolean;
+  /** Mit Eingabefeld (ersetzt prompt) */
+  input?: { placeholder?: string; value?: string };
+}
+export interface AskState extends AskOptions {
+  id: number;
+  resolve: (v: string | null) => void;
+}
+
+let state: State = { me: null, jobs: {}, toast: null, updateReady: null, ask: null };
 const listeners = new Set<() => void>();
 
 export const getState = () => state;
@@ -53,3 +70,27 @@ export function toast(msg: string) {
 }
 
 export const username = () => state.me?.username ?? "";
+
+let askId = 0;
+function openAsk(o: AskOptions): Promise<string | null> {
+  return new Promise((resolve) => {
+    // Eine ältere, noch offene Frage gilt als abgebrochen
+    state.ask?.resolve(null);
+    const id = ++askId;
+    setState({
+      ask: {
+        ...o,
+        id,
+        resolve: (v) => {
+          if (state.ask?.id === id) setState({ ask: null });
+          resolve(v);
+        },
+      },
+    });
+  });
+}
+
+/** Ja/Nein-Frage im Crate-Stil. Ergebnis true = bestätigt. */
+export const ask = (o: AskOptions) => openAsk(o).then((v) => v !== null);
+/** Frage mit Eingabefeld. Ergebnis: eingegebener Text oder null (abgebrochen). */
+export const askText = (o: AskOptions) => openAsk({ ...o, input: o.input ?? {} });
