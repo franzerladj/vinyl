@@ -36,7 +36,16 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
 /** Mitteilungen einschalten (muss aus einem Tipp heraus aufgerufen werden) */
 export async function enablePush(prefs: PushPrefs = DEFAULT_PREFS): Promise<PushPrefs> {
   const perm = await Notification.requestPermission();
-  if (perm !== "granted") throw new Error(perm === "denied" ? "Mitteilungen sind für Crate blockiert. Bitte in den Einstellungen des Handys erlauben." : "Ohne Erlaubnis gehen keine Mitteilungen.");
+  if (perm !== "granted") {
+    const android = /Android/i.test(navigator.userAgent);
+    throw new Error(
+      perm === "denied"
+        ? android
+          ? "Mitteilungen sind blockiert. In den Android-Einstellungen unter Apps → Crate → Benachrichtigungen erlauben, dann nochmal versuchen."
+          : "Mitteilungen sind für Crate blockiert. Bitte in den Einstellungen des Handys erlauben."
+        : "Ohne Erlaubnis gehen keine Mitteilungen.",
+    );
+  }
   const reg = await navigator.serviceWorker.ready;
   const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) }));
   const r = await json<{ prefs: PushPrefs }>("/api/push/subscribe", { subscription: sub.toJSON(), prefs });
