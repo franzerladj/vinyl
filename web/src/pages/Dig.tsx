@@ -11,7 +11,7 @@ import { ask, toast } from "../lib/store";
 import { getKV, setKV } from "../lib/db";
 import { ytConsent } from "../lib/theme";
 import { haptic, keepParens } from "../components/bits";
-import { IconBack, IconCart, IconFilter, IconHeart, IconPlay, IconPlus, IconShare, IconMore, IconSleeves, IconThumb, IconX } from "../components/icons";
+import { IconBack, IconCart, IconFilter, IconHeart, IconPause, IconPlay, IconPlus, IconShare, IconMore, IconSleeves, IconThumb, IconX } from "../components/icons";
 import { DECADES, decadeLabel, passesPrice, top, type DigCard } from "../../../shared/dig";
 import { parseDuration } from "../../../shared/match";
 
@@ -411,7 +411,7 @@ export default function Dig() {
                         {c.styles.slice(0, 3).map((st) => (
                           <span key={st}>{st}</span>
                         ))}
-                        {c.want ? <span>♥ {c.want} wollen sie</span> : null}
+                        {c.want ? <span className="dig-want"><IconHeart /> {c.want} wollen sie</span> : null}
                       </div>
                       {i === active && (
                         <div className="dig-sound">
@@ -425,7 +425,8 @@ export default function Dig() {
                             )
                           ) : (
                             <button onClick={toggleSound}>
-                              {audioState === "playing" ? "❚❚ Pause" : audioState === "loading" ? "Lädt …" : unlocked ? "▶ Abspielen" : "▶ Tippen zum Hören"}
+                              {audioState === "playing" ? <IconPause /> : audioState === "loading" ? null : <IconPlay />}
+                              {audioState === "playing" ? "Pause" : audioState === "loading" ? "Lädt …" : unlocked ? "Abspielen" : "Tippen zum Hören"}
                               {d?.tracks[0] && <small> · {d.tracks[0].position} {d.tracks[0].title}</small>}
                             </button>
                           )}

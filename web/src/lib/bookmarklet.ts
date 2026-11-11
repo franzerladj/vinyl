@@ -80,7 +80,7 @@ function crateCollector(appUrl: string) {
     const onMsg = (e: MessageEvent) => {
       if (e.origin === appUrl && e.data === "crate-ready" && win) {
         win.postMessage(payload, appUrl);
-        box.textContent = "Crate: " + all.length + " Angebote übertragen ✓";
+        box.textContent = "Crate: " + all.length + " Angebote übertragen";
         window.removeEventListener("message", onMsg);
       }
     };

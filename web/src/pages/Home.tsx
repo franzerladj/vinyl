@@ -254,21 +254,21 @@ export default function Home() {
 
             <div className="grid2" style={{ marginTop: 10 }}>
               <Link to="/scan" viewTransition className="widget">
-                <div className="ico" style={{ background: "#ff5b14" }}>
+                <div className="ico">
                   <IconCamera />
                 </div>
                 <b>Platte scannen</b>
                 <span className="sub">Foto, Barcode oder Katalognr.</span>
               </Link>
               <Link to="/shop" viewTransition className="widget">
-                <div className="ico" style={{ background: "#2f8f57" }}>
+                <div className="ico">
                   <IconCart />
                 </div>
                 <b>Versand sparen</b>
                 <span className="sub">{stats?.listings ? `${stats.listings} Angebote geladen` : "Händler-Optimierer"}</span>
               </Link>
               <Link to="/stickers" viewTransition className="widget">
-                <div className="ico" style={{ background: "#c2410c" }}>
+                <div className="ico">
                   <IconTag />
                 </div>
                 {stats?.noSticker ? <span className="badge accent count">{stats.noSticker} neu</span> : null}
@@ -276,7 +276,7 @@ export default function Home() {
                 <span className="sub">{stats?.noSticker ? `${stats.noSticker} Platten warten` : "Alles beschriftet"}</span>
               </Link>
               <Link to={stats?.nextSet ? `/sets/${stats.nextSet.id}` : "/sets/new"} viewTransition className="widget">
-                <div className="ico" style={{ background: "#2d5b8c" }}>
+                <div className="ico">
                   <IconList />
                 </div>
                 <b>{stats?.nextSet ? stats.nextSet.name : "Set planen"}</b>

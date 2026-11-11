@@ -7,6 +7,7 @@ import { ask, toast } from "../lib/store";
 import { matchesQuery } from "../../../shared/textSearch";
 import { cleanFolderName, NO_FOLDER, sameFolder, wantFolderOf } from "../../../shared/folders";
 import { Cover, haptic, Sheet } from "./bits";
+import { IconCheck, IconPlus } from "./icons";
 
 export type FolderKind = "coll" | "want";
 /** Auswahl in der Leiste: "" = alle, "-" = ohne Ordner, sonst der Ordnername */
@@ -285,7 +286,7 @@ function FolderSorter({ kind, name, recs, folderId, onBack, onSaved, onRenamed, 
                 <b>{r.title}</b>
                 <span>{[r.artist, elsewhere ? `in „${elsewhere}“` : r.styles[0]].filter(Boolean).join(" · ")}</span>
               </span>
-              <span className={`pick-check${on ? " on" : ""}`}>{on ? "✓" : "+"}</span>
+              <span className={`pick-check${on ? " on" : ""}`}>{on ? <IconCheck /> : <IconPlus />}</span>
             </button>
           );
         })}
@@ -319,14 +320,14 @@ export function FolderChooser({ open, onClose, current, kind, onPick }: { open: 
         {names.map((n) => (
           <button key={n} className="option" onClick={() => pick(n)}>
             <span style={{ flex: 1 }}>{n}</span>
-            {sameFolder(n, current) && <span style={{ color: "var(--accent)", fontWeight: 700 }}>✓</span>}
+            {sameFolder(n, current) && <span className="opt-check"><IconCheck /></span>}
           </button>
         ))}
         <button className="option" onClick={() => pick(null)}>
           <span style={{ flex: 1 }} className="sub">
             Ohne Ordner
           </span>
-          {!current && <span style={{ color: "var(--accent)", fontWeight: 700 }}>✓</span>}
+          {!current && <span className="opt-check"><IconCheck /></span>}
         </button>
       </div>
       <form

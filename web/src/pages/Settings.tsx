@@ -30,6 +30,7 @@ import {
   IconChevron,
   IconCoin,
   IconDatabase,
+  IconX,
   IconDownload,
   IconHelp,
   IconInfo,
@@ -62,11 +63,11 @@ const run = (label: string, fn: () => Promise<unknown>) => () =>
 const when = (ts?: number | null) => (ts ? new Date(ts).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" }) : "noch nie");
 
 /** Eine Zeile in einer Einstellungsgruppe */
-function Row({ icon, color, label, sub, value, to, onClick, right, danger }: { icon?: React.ReactNode; color?: string; label: React.ReactNode; sub?: React.ReactNode; value?: React.ReactNode; to?: string; onClick?: () => void; right?: React.ReactNode; danger?: boolean }) {
+function Row({ icon, label, sub, value, to, onClick, right, danger }: { icon?: React.ReactNode; label: React.ReactNode; sub?: React.ReactNode; value?: React.ReactNode; to?: string; onClick?: () => void; right?: React.ReactNode; danger?: boolean }) {
   const inner = (
     <>
       {icon && (
-        <span className="ico" style={{ background: color }}>
+        <span className="ico">
           {icon}
         </span>
       )}
@@ -187,21 +188,21 @@ function Overview() {
         </div>
 
         <Group title="Bibliothek">
-          <Row icon={<IconSync />} color="#30d158" label="Abgleich & Ergänzen" value={stats?.lastSync ? relDay(stats.lastSync) : "nie"} to="/settings/sync" />
-          <Row icon={<IconCoin />} color="#ff9f0a" label="Preise & Shopping" value={stats?.currency} to="/settings/prices" />
-          <Row icon={<IconWave />} color="#5e5ce6" label="Datenquellen" value={`${sources} aktiv`} to="/settings/sources" />
-          <Row icon={<IconSync />} color="#0a84ff" label="Handy und Computer" sub="BPM, Keys, Sets und Notizen auf allen Geräten gleich" value={devLast ? relTime(devLast) : "gleich"} to="/settings/devices" />
+          <Row icon={<IconSync />} label="Abgleich & Ergänzen" value={stats?.lastSync ? relDay(stats.lastSync) : "nie"} to="/settings/sync" />
+          <Row icon={<IconCoin />} label="Preise & Shopping" value={stats?.currency} to="/settings/prices" />
+          <Row icon={<IconWave />} label="Datenquellen" value={`${sources} aktiv`} to="/settings/sources" />
+          <Row icon={<IconSync />} label="Handy und Computer" sub="BPM, Keys, Sets und Notizen auf allen Geräten gleich" value={devLast ? relTime(devLast) : "gleich"} to="/settings/devices" />
         </Group>
 
         <Group title="Freunde">
-          <Row icon={<IconUser />} color="#bf5af2" label="Freunde" value={stats?.friends ?? 0} to="/friends" />
-          <Row icon={<IconShare />} color="#ff9f0a" label="Verliehene Platten" value={stats?.lent ?? 0} to="/friends?tab=lent" />
-          <Row icon={<IconRecord />} color="#8a5a2b" label="Nadel-Stunden" value={stylus ? hoursText(stylus.minutes) : "einrichten"} to="/settings/stylus" />
+          <Row icon={<IconUser />} label="Freunde" value={stats?.friends ?? 0} to="/friends" />
+          <Row icon={<IconShare />} label="Verliehene Platten" value={stats?.lent ?? 0} to="/friends?tab=lent" />
+          <Row icon={<IconRecord />} label="Nadel-Stunden" value={stylus ? hoursText(stylus.minutes) : "einrichten"} to="/settings/stylus" />
         </Group>
 
         <Group title="Darstellung" foot="„System“ folgt der Einstellung deines Handys.">
           <div className="set-row" style={{ cursor: "default" }}>
-            <span className="ico" style={{ background: "#0a84ff" }}>
+            <span className="ico">
               <IconSun />
             </span>
             <span className="label">Erscheinungsbild</span>
@@ -222,7 +223,7 @@ function Overview() {
           </div>
           <Row
             icon={<IconBolt />}
-            color="#ff375f"
+           
             label="Haptisches Feedback"
             sub="Kurzes Vibrieren bei Aktionen (Android)"
             right={
@@ -238,7 +239,7 @@ function Overview() {
           />
           <Row
             icon={<IconPlay />}
-            color="#ff3b30"
+           
             label="YouTube-Videos direkt laden"
             sub="Sonst erst nach Antippen. YouTube erfährt dabei deine IP-Adresse."
             right={
@@ -255,17 +256,17 @@ function Overview() {
         </Group>
 
         <Group title="Mitteilungen">
-          <Row icon={<IconBell />} color="#ff3b30" label="Mitteilungen" value={pushOn ? "an" : "aus"} to="/settings/notifications" />
+          <Row icon={<IconBell />} label="Mitteilungen" value={pushOn ? "an" : "aus"} to="/settings/notifications" />
         </Group>
 
         <Group title="Daten">
-          <Row icon={<IconSheet />} color="#34c759" label="Google Sheets" value={stats?.sheets ? "verbunden" : "aus"} to="/settings/sheets" />
-          <Row icon={<IconDatabase />} color="#8e8e93" label="Speicher & Backup" to="/settings/data" />
+          <Row icon={<IconSheet />} label="Google Sheets" value={stats?.sheets ? "verbunden" : "aus"} to="/settings/sheets" />
+          <Row icon={<IconDatabase />} label="Speicher & Backup" to="/settings/data" />
         </Group>
 
         <Group title="Info">
-          <Row icon={<IconHelp />} color="#ff9f0a" label="Tipps & Hilfe" to="/settings/help" />
-          <Row icon={<IconInfo />} color="#64d2ff" label="Über Crate" value={`v${__APP_VERSION__}`} to="/settings/about" />
+          <Row icon={<IconHelp />} label="Tipps & Hilfe" to="/settings/help" />
+          <Row icon={<IconInfo />} label="Über Crate" value={`v${__APP_VERSION__}`} to="/settings/about" />
         </Group>
 
         {!me?.personalToken && (
@@ -395,11 +396,11 @@ function SyncPage() {
         )}
 
         <Group title="Einzelne Schritte">
-          <Row icon={<IconDownload />} color="#0a84ff" label="Fehlende Tracklists laden" onClick={run("Tracklists", () => fetchMissingDetails("collection"))} />
-          <Row icon={<IconWave />} color="#5e5ce6" label="BPM & Key aus Datenbanken" onClick={run("BPM/Key", async () => `${await lookupAudioFor()} Tracks ergänzt`)} />
+          <Row icon={<IconDownload />} label="Fehlende Tracklists laden" onClick={run("Tracklists", () => fetchMissingDetails("collection"))} />
+          <Row icon={<IconWave />} label="BPM & Key aus Datenbanken" onClick={run("BPM/Key", async () => `${await lookupAudioFor()} Tracks ergänzt`)} />
           <Row
             icon={<IconBolt />}
-            color="#ff9f0a"
+           
             label="Stimmung & Energie ergänzen"
             onClick={run("Vibes", async () => `${await tagVibes(undefined, { audio: auto.audio })} Tracks ergänzt`)}
           />
@@ -553,8 +554,8 @@ function SheetsPage() {
           </div>
         </Group>
         <Group foot="Reihenfolge, wenn du im Sheet etwas geändert hast: erst zurückholen, dann schreiben. Schreiben überschreibt die Blätter.">
-          <Row icon={<IconSheet />} color="#34c759" label="In Sheets schreiben" onClick={run("Sheets", async () => { await save(); const n = await pushToSheets(); return `Gesendet: ${n.Collection} Platten, ${n.Tracks} Tracks`; })} />
-          <Row icon={<IconDownload />} color="#0a84ff" label="Tracks aus Sheets zurückholen" onClick={run("Sheets", async () => { await save(); return `${await pullTracksFromSheets()} Tracks übernommen`; })} />
+          <Row icon={<IconSheet />} label="In Sheets schreiben" onClick={run("Sheets", async () => { await save(); const n = await pushToSheets(); return `Gesendet: ${n.Collection} Platten, ${n.Tracks} Tracks`; })} />
+          <Row icon={<IconDownload />} label="Tracks aus Sheets zurückholen" onClick={run("Sheets", async () => { await save(); return `${await pullTracksFromSheets()} Tracks übernommen`; })} />
         </Group>
       </div>
     </>
@@ -608,9 +609,9 @@ function DataPage() {
           <Row label="Preis-Messpunkte" value={counts?.history ?? "–"} />
         </Group>
         <Group title="Backup" foot={`Letztes Backup: ${when(lastBackup)}`}>
-          <Row icon={<IconDownload />} color="#0a84ff" label="Backup herunterladen" onClick={() => exportBackup().catch((e) => toast(e.message))} />
+          <Row icon={<IconDownload />} label="Backup herunterladen" onClick={() => exportBackup().catch((e) => toast(e.message))} />
           <label className="set-row press" style={{ cursor: "pointer" }}>
-            <span className="ico" style={{ background: "#5e5ce6" }}>
+            <span className="ico">
               <IconSync />
             </span>
             <span className="label">Backup einspielen</span>
@@ -619,7 +620,7 @@ function DataPage() {
             </span>
             <input type="file" accept="application/json" hidden onChange={(e) => importBackup(e.target.files?.[0]).catch((err) => toast(err.message))} />
           </label>
-          <Row icon={<IconSheet />} color="#34c759" label="Tracks als CSV (Excel)" onClick={() => exportCsv().catch((e) => toast(e.message))} />
+          <Row icon={<IconSheet />} label="Tracks als CSV (Excel)" onClick={() => exportCsv().catch((e) => toast(e.message))} />
         </Group>
         <div className="group">
           <Row
@@ -776,7 +777,7 @@ function NotificationsPage() {
             <Group foot={available ? "Für Wantlist und Erinnerungen prüft Crate alle 10 Minuten bei Discogs. Dafür liegen deine Wants, Wunschpreise und Termine verschlüsselt auf dem Server, nur solange Mitteilungen an sind." : "Mitteilungen sind auf dem Server noch nicht eingerichtet."}>
               <Row
                 icon={<IconBell />}
-                color="#ff3b30"
+               
                 label="Mitteilungen erlauben"
                 sub={on ? "Auf diesem Gerät an" : "Auf diesem Gerät aus"}
                 right={<Switch checked={Boolean(on)} label="Mitteilungen erlauben" onChange={(v) => !busy && on !== null && toggle(v)} />}
@@ -927,7 +928,7 @@ function ProfileEditPage() {
                 <small>{LINK_LABEL[l.kind]}</small>
               </span>
               <button className="icon-btn" aria-label="Link entfernen" onClick={() => set({ links: p.links.filter((x) => x.url !== l.url) })}>
-                ✕
+                <IconX />
               </button>
             </div>
           ))}
@@ -998,7 +999,7 @@ function ProfileEditPage() {
                 <small>{p.spotlight.artist}</small>
               </span>
               <button className="icon-btn" aria-label="Entfernen" onClick={() => set({ spotlight: undefined })}>
-                ✕
+                <IconX />
               </button>
             </div>
           ) : null}
@@ -1185,7 +1186,7 @@ function DevicesPage() {
       <div className="page settings-list">
         <Group foot="Sammlung, Wantlist, Ordner, Zustand und Kaufpreis kommen ohnehin von Discogs. Hier geht es um das, was du in Crate selbst einträgst.">
           <div className="set-row" style={{ cursor: "default", alignItems: "flex-start" }}>
-            <span className="ico" style={{ background: "#0a84ff" }}>
+            <span className="ico">
               <IconSync />
             </span>
             <div style={{ flex: 1 }}>

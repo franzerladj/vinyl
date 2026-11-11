@@ -322,7 +322,7 @@ export default function Wantlist() {
                   {(p.deal.change ?? 0) < -0.5 && <span className="badge accent">↓ {money(-(p.deal.change ?? 0))}</span>}
                   {repress?.has(r.id) && <span className="badge accent">Repress {String(repress.get(r.id)!.version.released ?? "").slice(0, 4)}</span>}
                   {owned && <span className="badge ok">schon da</span>}
-                  {friends.length > 0 && <span className="badge" style={{ background: "rgba(191,90,242,.16)", color: "#bf5af2" }}>bei {friends[0]}{friends.length > 1 ? ` +${friends.length - 1}` : ""}</span>}
+                  {friends.length > 0 && <span className="badge">bei {friends[0]}{friends.length > 1 ? ` +${friends.length - 1}` : ""}</span>}
                 </div>
               }
             />

@@ -11,7 +11,7 @@ import { db } from "../lib/db";
 import { toast, useStore } from "../lib/store";
 import type { SearchResult } from "../lib/types";
 import { Cover, Seg, haptic } from "../components/bits";
-import { IconCamera } from "../components/icons";
+import { IconCamera, IconHeart } from "../components/icons";
 
 interface Fields {
   artist: string;
@@ -335,7 +335,7 @@ export default function Scan() {
                       )}
                       {!have && !wanted?.has(r.id) && (
                         <button className="btn small ghost" onClick={() => addWant(r.id).then(() => toast("Auf die Wantlist gesetzt"), (e) => toast(e.message))}>
-                          ♡ Want
+                          <IconHeart /> Want
                         </button>
                       )}
                     </div>

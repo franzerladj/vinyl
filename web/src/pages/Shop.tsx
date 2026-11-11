@@ -8,7 +8,7 @@ import { loadPriceInfo, scanFavorites, scanSeller, toggleFavorite } from "../lib
 import { planBudget } from "../../../shared/deals";
 import { toast } from "../lib/store";
 import { Cover, DealDot, RecordRow, Seg } from "../components/bits";
-import { IconExternal, IconX } from "../components/icons";
+import { IconCoin, IconExternal, IconStar, IconX } from "../components/icons";
 import { optimizeBasket, rankSellers, type Grade, type Listing, type OptimizeOptions } from "../../../shared/optimizer";
 import { DEFAULT_SHIP, estimateShipping, type ShipConfig } from "../../../shared/shipping";
 import { ShippingEditor } from "../components/ShippingEditor";
@@ -278,13 +278,13 @@ export default function Shop() {
               <div className="group">
                 {(
                   [
-                    ["sellers", "★", "#ff9f0a", "Lieblingshändler anlegen", "Ihr Inventar wird nach jedem Sync automatisch durchsucht"],
-                    ["sellers", "↗", "#0a84ff", "Shop-Link einfügen", "Auf Discogs beim Händler „Teilen“ antippen und den Link hier einfügen"],
-                    ["budget", "€", "#30d158", "Budget planen", "Was bekomme ich für mein Geld? Geht auch ohne Angebote"],
+                    ["sellers", <IconStar key="s" />, "", "Lieblingshändler anlegen", "Ihr Inventar wird nach jedem Sync automatisch durchsucht"],
+                    ["sellers", <IconExternal key="e" />, "", "Shop-Link einfügen", "Auf Discogs beim Händler „Teilen“ antippen und den Link hier einfügen"],
+                    ["budget", <IconCoin key="c" />, "", "Budget planen", "Was bekomme ich für mein Geld? Geht auch ohne Angebote"],
                   ] as const
-                ).map(([t, i, c, l, d]) => (
+                ).map(([t, i, , l, d]) => (
                   <button key={t} className="set-row press" onClick={() => setTab(t)}>
-                    <span className="ico" style={{ background: c, fontWeight: 800 }}>{i}</span>
+                    <span className="ico">{i}</span>
                     <span className="label">
                       {l}
                       <small>{d}</small>

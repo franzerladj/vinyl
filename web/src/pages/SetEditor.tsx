@@ -12,7 +12,7 @@ import { playedHistory, playedText, type PlayedAt } from "../lib/setHistory";
 import { ask, toast, username } from "../lib/store";
 import { deleteTemplate, saveTemplate, stillOwned, useTemplates } from "../lib/crateTemplates";
 import { Cover, haptic, Seg, Sheet, keepParens } from "../components/bits";
-import { IconPlay, IconPlus, IconX } from "../components/icons";
+import { IconCheck, IconPlay, IconPlus, IconX } from "../components/icons";
 import { TrackLine } from "./Sets";
 import { previewUrl } from "../lib/free";
 import { buildSetlist, setStats, suggestNext, targetEnergy, type Curve, type SetTrack, type Suggestion } from "../../../shared/setlist";
@@ -296,7 +296,7 @@ export default function SetEditor() {
               <input className="input" type="time" value={set.end ?? ""} onChange={(e) => update({ end: e.target.value || undefined })} />
             </label>
             <button className="btn tinted gig-cal" onClick={() => setCalOpen(true)}>
-              {set.calendarAt ? "Kalender ✓" : "In den Kalender"}
+              {set.calendarAt ? <><IconCheck /> Im Kalender</> : "In den Kalender"}
             </button>
           </div>
         )}
@@ -875,7 +875,7 @@ function RecordPicker({ data, crate, fromSource, folderName, onToggle, onDone }:
                 <b>{r.title}</b>
                 <span>{[r.artist, bpmText(r.id), r.styles[0]].filter(Boolean).join(" · ")}</span>
               </span>
-              <span className={`pick-check${on ? " on" : ""}`}>{on ? "✓" : "+"}</span>
+              <span className={`pick-check${on ? " on" : ""}`}>{on ? <IconCheck /> : <IconPlus />}</span>
             </button>
           );
         })}
@@ -1114,7 +1114,7 @@ function LiveMode({ tracks, rels, notes, played, onPlayed, onClose }: { tracks: 
           {next ? "Gespielt, weiter" : "Set beenden"}
         </button>
       </div>
-      <MenuSheet open={menu} onClose={() => setMenu(false)} title="Springen zu" items={tracks.map((t, j) => ({ label: `${j + 1}. ${t.title} · ${t.artist}${played.has(t.id) ? " ✓" : ""}`, onClick: () => (setI(j), setMenu(false)) }))} />
+      <MenuSheet open={menu} onClose={() => setMenu(false)} title="Springen zu" items={tracks.map((t, j) => ({ label: `${j + 1}. ${t.title} · ${t.artist}${played.has(t.id) ? " · gespielt" : ""}`, onClick: () => (setI(j), setMenu(false)) }))} />
     </div>
   );
 }

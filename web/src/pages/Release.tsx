@@ -19,7 +19,7 @@ import { setYtConsent, ytConsent } from "../lib/theme";
 import { Hint } from "../components/Welcome";
 import { playedHistory, playedText } from "../lib/setHistory";
 import { matchVideo, parseDuration, youtubeId } from "../../../shared/match";
-import { IconBack, IconCart, IconExternal, IconShare, IconHeart, IconPlay, IconPlus, IconMic, IconPrint, IconWave } from "../components/icons";
+import { IconBack, IconCart, IconCheck, IconExternal, IconShare, IconHeart, IconPause, IconPlay, IconPlus, IconMic, IconPrint, IconWave } from "../components/icons";
 import { Listen } from "../components/Listen";
 import { estimateBpm } from "../../../shared/vibes";
 import { FolderChooser } from "../components/Folders";
@@ -353,7 +353,7 @@ export default function ReleasePage() {
               lastSide = side;
               rows.push(
                 <tr key={t.position + i} onClick={() => m && openTrack(m, t)} style={{ cursor: "pointer", background: edit?.id === m?.id ? "var(--accent-soft)" : undefined }}>
-                  <td className="pos" style={{ color: edit?.id === m?.id ? "var(--accent)" : undefined }}>{edit?.id === m?.id && playing ? "♪" : t.position}</td>
+                  <td className="pos" style={{ color: edit?.id === m?.id ? "var(--accent)" : undefined }}>{edit?.id === m?.id && playing ? <span className="pos-ico"><IconWave /></span> : t.position}</td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{keepParens(t.title)}</div>
                     <div className="sub" style={{ fontSize: 13 }}>
@@ -571,7 +571,7 @@ export default function ReleasePage() {
                   >
                     <b className="mono">{short}</b>
                     <span>{(grading.which === "media" ? GRADE_HINT : SLEEVE_HINT)[short] ?? long}</span>
-                    {on && <span className="grade-check">✓</span>}
+                    {on && <span className="grade-check"><IconCheck /></span>}
                   </button>
                 );
               })}
@@ -710,7 +710,7 @@ function TrackEdit({
       {media?.type === "deezer" && (
         <div className="card row" style={{ background: "var(--surface-2)" }}>
           <button className="btn primary" style={{ width: 48, height: 48, padding: 0, borderRadius: "50%", flex: "none" }} onClick={onToggleAudio} aria-label={playing ? "Pause" : "Abspielen"}>
-            {playing ? "❚❚" : <IconPlay />}
+            {playing ? <IconPause /> : <IconPlay />}
           </button>
           <div>
             <b>30-Sekunden-Hörprobe</b>

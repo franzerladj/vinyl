@@ -49,4 +49,6 @@ export const IconSheet = P("M4 4h16v16H4zM4 10h16M4 15h16M10 4v16");
 export const IconUser = P("M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0");
 export const IconMic = P("M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3zM5 11a7 7 0 0 0 14 0M12 18v3M8 21h8");
 export const IconThumb = P("M7 10v11H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zM7 10l4-7a2 2 0 0 1 2.9 2.2L13 9h6a2 2 0 0 1 2 2.3l-1.3 7.2A3 3 0 0 1 16.8 21H7");
+export const IconPause = P("M8 5v14M16 5v14");
+export const IconStar = P("M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z");
 export const IconFolder = P("M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z");
