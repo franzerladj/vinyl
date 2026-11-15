@@ -102,15 +102,20 @@ export default function SetEditor() {
     const coll = await db.collection.toArray();
     const ids = [...new Set(coll.map((c) => c.releaseId))];
     const [tracks, rels, metas] = await Promise.all([db.tracks.where("releaseId").anyOf(ids).toArray(), db.releases.bulkGet(ids), db.recordMeta.bulkGet(ids)]);
+    const byId = new Map(tracks.map((t) => [t.id, t]));
+    // Tracks im Set, deren Platte nicht (mehr) in der Sammlung ist: trotzdem zeigen, sonst verrutscht die Reihenfolge
+    const gone = (await db.tracks.bulkGet(set.trackIds.filter((tid) => !byId.has(tid)))).filter(Boolean) as TrackMeta[];
+    gone.forEach((t) => byId.set(t.id, t));
+    const goneRels = await db.releases.bulkGet([...new Set(gone.map((t) => t.releaseId))]);
     return {
       tracks,
-      byId: new Map(tracks.map((t) => [t.id, t])),
-      rels: new Map(rels.filter(Boolean).map((r) => [r!.id, r!])),
+      byId,
+      rels: new Map([...rels, ...goneRels].filter(Boolean).map((r) => [r!.id, r!])),
       metas: new Map(metas.filter(Boolean).map((m) => [m!.releaseId, m!])),
       ratings: new Map(coll.map((c) => [c.releaseId, c.rating])),
       folders: coll.reduce((m, c) => m.set(c.releaseId, [...(m.get(c.releaseId) ?? []), c.folderId]), new Map<number, number[]>()),
     };
-  });
+  }, [set.trackIds.join()]);
 
   // Fehlendes Tempo schätzen (andere Tracks der Platte oder typisches Tempo des Styles)
   const estBpm = useMemo(() => {
@@ -144,7 +149,7 @@ export default function SetEditor() {
   };
 
   const tracks = set.trackIds.map((tid) => data?.byId.get(tid)).filter(Boolean) as TrackMeta[];
-  const seq = useMemo(() => tracks.map(toSetTrack), [tracks, data, estBpm]); // eslint-disable-line react-hooks/exhaustive-deps
+  const seq = useMemo(() => tracks.map(toSetTrack), [set.trackIds, data, estBpm]); // eslint-disable-line react-hooks/exhaustive-deps
   const crate = set.crateIds ?? [];
   const crateSet = new Set(crate);
   // Quelle: ganze Sammlung oder ein Ordner (z. B. nur Platten zum Auflegen)
@@ -219,6 +224,32 @@ export default function SetEditor() {
     if (isNew) nav(`/sets/${newId}`, { replace: true });
     setSet({ ...s, id: newId });
   };
+
+  // Verlässt man den Editor mit ungespeicherten Änderungen (Zurück, Tab-Leiste, App geschlossen), geht nichts verloren
+  const latest = useRef({ set, dirty });
+  latest.current = { set, dirty };
+  useEffect(() => {
+    const keep = () => {
+      const { set: s, dirty: d } = latest.current;
+      if (!d || !(s.name || s.trackIds.length || s.crateIds?.length)) return;
+      latest.current = { set: s, dirty: false };
+      void db.sets.put({ ...s, name: s.name || `Set ${new Date().toLocaleDateString("de-DE")}` }).then((newId) => {
+        // Neues Set hat jetzt eine Nummer: merken, sonst legt „Speichern“ es ein zweites Mal an
+        if (alive) setSet((cur) => (cur.id ? cur : { ...cur, id: newId }));
+        if (document.visibilityState === "visible") toast("Set gespeichert");
+      });
+    };
+    let alive = true;
+    const onHide = () => document.visibilityState === "hidden" && keep();
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", keep);
+    return () => {
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", keep);
+      alive = false;
+      keep();
+    };
+  }, []);
 
   // Reinhören: ein Audio-Element für alles (iOS spielt nur nach Tippen)
   const togglePreview = (t: TrackMeta) => {
@@ -458,6 +489,8 @@ export default function SetEditor() {
             style={{ color: "var(--bad)", marginTop: 16 }}
             onClick={async () => {
               if (!(await ask({ title: "Set löschen?", body: "Reihenfolge, Kiste und Mix-Notizen sind dann weg.", ok: "Löschen", danger: true }))) return;
+              latest.current = { set, dirty: false }; // gelöscht bleibt gelöscht
+              setDirty(false);
               await db.sets.delete(Number(id));
               nav("/sets", { viewTransition: true });
             }}
