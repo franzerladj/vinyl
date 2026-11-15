@@ -172,13 +172,23 @@ export function discogs<T>(path: string, opts: DiscogsOptions = {}): Promise<T> 
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
-  const res = await fetch(path, { credentials: "include", ...init, headers });
-  if (!res.ok) {
-    const msg = await res.json().then((j: { message?: string }) => j.message ?? res.statusText, () => res.statusText);
-    throw new ApiError(res.status, msg);
+  // Zeitlimit bis der Inhalt da ist: eine hängende Verbindung hielte sonst den ganzen Durchlauf (Tempo-Suche) für immer an
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), API_TIMEOUT_MS);
+  try {
+    const res = await fetch(path, { credentials: "include", signal: ac.signal, ...init, headers });
+    if (!res.ok) {
+      const msg = await res.json().then((j: { message?: string }) => j.message ?? res.statusText, () => res.statusText);
+      throw new ApiError(res.status, msg);
+    }
+    return (await res.json()) as T;
+  } catch (e) {
+    throw isAbort(e) && !init?.signal?.aborted ? new ApiError(408, "Der Server antwortet gerade nicht") : e;
+  } finally {
+    clearTimeout(timer);
   }
-  return res.json() as Promise<T>;
 }
+const API_TIMEOUT_MS = 45_000;
 
 export interface Me {
   username: string | null;
