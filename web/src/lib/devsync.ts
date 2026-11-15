@@ -5,6 +5,7 @@
 import Dexie, { type Table } from "dexie";
 import { db, getKV, setKV, type DJSet } from "./db";
 import { jobUpdate, username } from "./store";
+import { fetchWithTimeout } from "./api";
 import { compact, definedOnly, SYNC_KV, type Patch, type SyncOp, type SyncTable } from "../../../shared/devsync";
 
 const OUTBOX = "devsyncOutbox";
@@ -137,7 +138,7 @@ export function flush(): Promise<void> {
         const ops = all.slice(0, 300);
         const body = JSON.stringify({ ops });
         // keepalive (Senden beim Schließen der App) erlaubt höchstens 64 KB, sonst schlägt die Anfrage immer fehl
-        const r = await fetch("/api/sync/push", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body, keepalive: body.length < 30_000 });
+        const r = await fetchWithTimeout("/api/sync/push", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body, keepalive: body.length < 30_000 });
         // 400: kaputte Daten nicht ewig wiederholen; andere Fehler (offline, 401, 5xx): später nochmal
         if (!r.ok && r.status !== 400) break;
         outbox = [...all.slice(300), ...outbox.slice(taken)];
@@ -165,7 +166,7 @@ export async function pull(): Promise<number> {
   let since = await getKV<number>(SEQ, 0);
   let applied = 0;
   for (let round = 0; round < 50; round++) {
-    const r = await fetch(`/api/sync/pull?since=${since}`, { credentials: "include" });
+    const r = await fetchWithTimeout(`/api/sync/pull?since=${since}`, { credentials: "include" }, 30_000);
     if (!r.ok) throw new Error(`Abgleich ${r.status}`);
     const res = (await r.json()) as { seq: number; more: boolean; rows: PullRow[] };
     if (!Array.isArray(res.rows) || typeof res.seq !== "number") break;

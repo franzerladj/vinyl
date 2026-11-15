@@ -3,7 +3,7 @@
 import { retempo, isManualTempo } from "./tempo";
 import { rangeCenter } from "../../../shared/bpmCheck";
 import { db, type TrackMeta, autoUpdateTrack } from "./db";
-import { api } from "./api";
+import { api, fetchWithTimeout } from "./api";
 import { getState, jobUpdate } from "./store";
 import { analyzeSamples, type AnalysisHints, type AudioAnalysis } from "../../../shared/audioAnalysis";
 import { estimateBpm, estimateVibe } from "../../../shared/vibes";
@@ -89,7 +89,8 @@ export const previewUrl = (artist: string, title: string, duration?: number | nu
   `/api/audio/preview?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}${duration ? `&duration=${duration}` : ""}`;
 
 export async function analyzePreview(artist: string, title: string, duration?: number | null, deezerId?: number | null, hints: AnalysisHints = {}): Promise<AudioAnalysis | null> {
-  const res = await fetch(deezerId ? `/api/audio/preview/${deezerId}` : previewUrl(artist, title, duration), { credentials: "include" });
+  // Mit Zeitlimit: eine hängende Hörprobe hielte sonst die ganze Messung an
+  const res = await fetchWithTimeout(deezerId ? `/api/audio/preview/${deezerId}` : previewUrl(artist, title, duration), { credentials: "include" }, 30_000);
   // 404 = keine passende Hörprobe (endgültig); andere Fehler = später nochmal versuchen
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`Hörprobe ${res.status}`);

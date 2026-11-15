@@ -60,9 +60,9 @@ let remaining: number | null = null;
  * Die Zeitgrenze gilt bis der Inhalt komplett da ist, nicht nur bis zur Kopfzeile:
  * stockt die Verbindung mitten in der Antwort (WLAN-Wechsel, App im Hintergrund), wird trotzdem abgebrochen.
  */
-async function fetchWithTimeout(url: string, init: RequestInit = {}): Promise<Response> {
+export async function fetchWithTimeout(url: string, init: RequestInit = {}, ms = REQUEST_TIMEOUT_MS): Promise<Response> {
   const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), REQUEST_TIMEOUT_MS);
+  const t = setTimeout(() => ac.abort(), ms);
   try {
     const r = await fetch(url, { ...init, signal: ac.signal });
     const body = r.status === 204 || r.status === 304 ? null : await r.arrayBuffer();
