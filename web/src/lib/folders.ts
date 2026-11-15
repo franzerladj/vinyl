@@ -93,7 +93,21 @@ type Pending = ({ t: "move"; instanceId: number; releaseId: number; from: number
 const QKEY = "folderQueue";
 export const pendingFolderOps = () => getKV<Pending[]>(QKEY, []);
 
+// Die Warteschlange wird gelesen, geändert und zurückgeschrieben. Passiert das an zwei Stellen gleichzeitig
+// (neues Einsortieren, während ein Schritt gerade fertig wird), ginge sonst ein Schritt verloren: nacheinander ausführen.
+let queueLock: Promise<unknown> = Promise.resolve();
+function locked<T>(fn: () => Promise<T>): Promise<T> {
+  const p = queueLock.then(fn, fn);
+  queueLock = p.catch(() => undefined);
+  return p;
+}
+
 async function push(items: Pending[]) {
+  await locked(() => pushLocked(items));
+  void resumeFolderQueue();
+}
+
+async function pushLocked(items: Pending[]) {
   const q = await pendingFolderOps();
   for (const it of items) {
     if (it.t === "move") {
@@ -121,7 +135,6 @@ async function push(items: Pending[]) {
     q.push(it);
   }
   await setKV(QKEY, q);
-  void resumeFolderQueue();
 }
 
 let running = false;
@@ -150,14 +163,16 @@ export async function resumeFolderQueue() {
         const transient = status === 0 || status === 408 || status === 429 || status >= 500;
         if (transient && (it.tries ?? 0) < 8) {
           drop = false;
-          const cur = await pendingFolderOps();
-          if (cur[0] && JSON.stringify(cur[0]) === JSON.stringify(it)) await setKV(QKEY, [{ ...it, tries: (it.tries ?? 0) + 1 }, ...cur.slice(1)]);
+          await locked(async () => {
+            const cur = await pendingFolderOps();
+            if (cur[0] && JSON.stringify(cur[0]) === JSON.stringify(it)) await setKV(QKEY, [{ ...it, tries: (it.tries ?? 0) + 1 }, ...cur.slice(1)]);
+          });
           retryTimer = setTimeout(() => void resumeFolderQueue(), 30_000);
           break;
         }
         await logError("Ordner", e);
       } finally {
-        if (drop) await settle(it);
+        if (drop) await locked(() => settle(it));
       }
     }
   } finally {
