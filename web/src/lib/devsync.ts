@@ -28,6 +28,9 @@ const quiet = () => applyingTx !== null && Dexie.currentTransaction === applying
 let off = false;
 function record(op: SyncOp) {
   if (quiet() || off) return;
+  enqueue(op);
+}
+function enqueue(op: SyncOp) {
   outbox.push(op);
   // Außerhalb der laufenden Transaktion speichern und später hochladen
   clearTimeout(persistTimer);
@@ -59,12 +62,28 @@ function hook(name: Exclude<SyncTable, "kv">) {
     const k = keyOf[name](pk, obj);
     if (k) record({ t: name, k, ts: Date.now(), patch: definedOnly(obj, DROP[name]) });
   });
-  table.hook("updating", (mods, pk, obj) => {
+  table.hook("updating", function (mods, pk, obj) {
     const k = keyOf[name](pk, obj);
-    if (!k) return;
+    if (!k || quiet() || off) return;
     const patch: Patch = {};
-    for (const [f, v] of Object.entries(mods)) if (!f.includes(".") && !(DROP[name] ?? []).includes(f)) patch[f] = v === undefined ? null : v;
-    if (Object.keys(patch).length) record({ t: name, k, ts: Date.now(), patch });
+    // Dexie meldet Änderungen in verschachtelten Objekten als Pfad ("calendar.at"): dann das ganze Feld neu schicken
+    const nested = new Set<string>();
+    for (const [f, v] of Object.entries(mods)) {
+      const dot = f.indexOf(".");
+      const top = dot < 0 ? f : f.slice(0, dot);
+      if ((DROP[name] ?? []).includes(top)) continue;
+      if (dot < 0) patch[f] = v === undefined ? null : v;
+      else nested.add(top);
+    }
+    const ts = Date.now();
+    if (!nested.size) {
+      if (Object.keys(patch).length) enqueue({ t: name, k, ts, patch });
+      return;
+    }
+    this.onsuccess = (updated: Record<string, unknown>) => {
+      for (const top of nested) patch[top] = updated?.[top] ?? null;
+      enqueue({ t: name, k, ts, patch });
+    };
   });
   table.hook("deleting", (pk, obj) => {
     const k = keyOf[name](pk, obj ?? {});
@@ -80,8 +99,13 @@ function hookKV() {
   db.kv.hook("creating", (pk, obj) => {
     onWrite(pk ?? obj.key, obj.value);
   });
-  db.kv.hook("updating", (mods, pk) => {
-    if ("value" in mods) onWrite(pk, (mods as { value?: unknown }).value);
+  db.kv.hook("updating", function (mods, pk) {
+    if (!SYNC_KV.has(String(pk)) || quiet() || off) return;
+    if ("value" in mods) return onWrite(pk, (mods as { value?: unknown }).value);
+    // Objekt-Werte (Nadel, Shop, Druck …): Dexie meldet nur die geänderten Pfade ("value.hours"), gebraucht wird der ganze Wert
+    if (!Object.keys(mods).some((f) => f.startsWith("value."))) return;
+    const ts = Date.now();
+    this.onsuccess = (updated: { value?: unknown }) => enqueue({ t: "kv", k: String(pk), ts, patch: { value: updated?.value ?? null } });
   });
   db.kv.hook("deleting", (pk) => {
     if (SYNC_KV.has(String(pk))) record({ t: "kv", k: String(pk), ts: Date.now(), del: true });
@@ -111,7 +135,9 @@ export function flush(): Promise<void> {
         const taken = outbox.length;
         const all = compact(outbox.slice(0, taken));
         const ops = all.slice(0, 300);
-        const r = await fetch("/api/sync/push", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ops }), keepalive: ops.length < 60 });
+        const body = JSON.stringify({ ops });
+        // keepalive (Senden beim Schließen der App) erlaubt höchstens 64 KB, sonst schlägt die Anfrage immer fehl
+        const r = await fetch("/api/sync/push", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body, keepalive: body.length < 30_000 });
         // 400: kaputte Daten nicht ewig wiederholen; andere Fehler (offline, 401, 5xx): später nochmal
         if (!r.ok && r.status !== 400) break;
         outbox = [...all.slice(300), ...outbox.slice(taken)];

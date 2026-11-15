@@ -100,7 +100,7 @@ export function Datenschutz() {
 
         <h2>5. Musikdaten von Drittanbietern</h2>
         <p>
-          Um BPM, Tonart und Stimmung zu ergänzen, fragt der Server der App mit Artist und Titel bei Deezer (Deezer SA, Frankreich), und Last.fm (Last.fm Ltd., Großbritannien) an. Dabei werden keine Daten über dich übertragen, nur die Namen der Tracks. Hörproben werden über den Server der App geladen und auf deinem Gerät analysiert.
+          Um BPM, Tonart und Stimmung zu ergänzen, fragt der Server der App mit Artist und Titel bei Deezer (Deezer SA, Frankreich), und Last.fm (Last.fm Ltd., Großbritannien) an. Dabei werden keine Daten über dich übertragen, nur die Namen der Tracks. Hörproben werden über den Server der App geladen und auf deinem Gerät ausgewertet.
         </p>
 
         <h2>6. Videos von YouTube</h2>

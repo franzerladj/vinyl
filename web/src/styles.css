@@ -280,7 +280,7 @@ details[open] > summary::after { transform: rotate(270deg); }
 @keyframes sheet-in { from { transform: translateY(100%); } }
 
 /* --------- FAB --------- */
-.fab { position: fixed; right: 18px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 18px); width: 58px; height: 58px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); border: 0; display: grid; place-items: center; box-shadow: 0 8px 20px -6px rgba(22, 18, 15, 0.35); z-index: 16; transition: transform 0.4s var(--spring); animation: pop 0.6s var(--spring) 0.2s both; }
+.fab { position: fixed; right: 18px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 18px); width: 58px; height: 58px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); border: 0; display: grid; place-items: center; box-shadow: 0 8px 20px -6px rgba(22, 18, 15, 0.35); z-index: 16; transition: transform 0.4s var(--spring), translate 0.4s var(--spring); animation: pop 0.6s var(--spring) 0.2s both; }
 .fab:active { transform: scale(0.9); }
 .fab svg { width: 26px; height: 26px; }
 
@@ -528,7 +528,7 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .ptr svg { width: 20px; height: 20px; }
 
 /* Läuft ein Hintergrund-Job, rückt der runde Knopf über die Fortschrittsanzeige */
-.app:has(.jobs) .fab { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 64px); transition: bottom 0.4s var(--spring); }
+.app:has(.jobs) .fab { translate: 0 -46px; }
 
 .video-facade { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; border: 0; padding: 16px; background: linear-gradient(160deg, var(--surface-2), var(--surface)); color: var(--text); cursor: pointer; text-align: center; }
 .video-play { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; }
@@ -1185,8 +1185,7 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
   .jobs { left: var(--side); right: 0; bottom: 22px; }
   .toast { left: calc(50% + var(--side) / 2); }
   .offline-bar { left: calc(50% + var(--side) / 2); }
-  .fab, .app:has(.jobs) .fab { right: max(28px, calc((100vw - var(--side) - var(--content)) / 2 + 28px)); bottom: 28px; }
-  .app:has(.jobs) .fab { bottom: 76px; }
+  .fab { right: max(28px, calc((100vw - var(--side) - var(--content)) / 2 + 28px)); bottom: 28px; }
 
   .page-head { padding-top: 30px; }
   .page-head h1 { font-size: 44px; }

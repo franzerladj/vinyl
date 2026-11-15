@@ -97,7 +97,7 @@ export default function Home() {
     haptic();
     try {
       await autoPipeline({ force: true });
-      toast("Alles synchron und analysiert");
+      toast("Alles abgeglichen und ergänzt");
     } catch (e) {
       toast(`Sync fehlgeschlagen: ${(e as Error).message}`);
     }

@@ -2,6 +2,7 @@
 import { api, discogs } from "./api";
 import { autoUpdateTrack, db, realTracks, setKV, getKV, trackId, type Release, type TrackMeta } from "./db";
 import { checkKey } from "../../../shared/bpmCheck";
+import { MANUAL_SOURCES } from "../../../shared/devsync";
 import { retempo } from "./tempo";
 import { artistName } from "./format";
 import { parseDuration } from "../../../shared/match";
@@ -59,6 +60,7 @@ export async function syncCollection() {
   jobUpdate(job, { label: "Sammlung laden", done: 0, total: 1 });
   try {
     const seen = new Set<number>();
+    const startedAt = Date.now();
     let page = 1;
     let pages = 1;
     const known = new Set((await db.collection.toArray()).map((c) => c.releaseId));
@@ -80,11 +82,12 @@ export async function syncCollection() {
       page++;
     } while (page <= pages);
     // Entfernte Einträge löschen
-    const stale = (await db.collection.toArray()).filter((c) => !seen.has(c.instanceId)).map((c) => c.instanceId);
+    // (was während des Abgleichs hinzugefügt wurde, stand noch nicht in der schon geladenen Seite: behalten)
+    const stale = (await db.collection.toArray()).filter((c) => !seen.has(c.instanceId) && !(Date.parse(c.dateAdded) >= startedAt - 60_000)).map((c) => c.instanceId);
     await db.collection.bulkDelete(stale);
     await import("./folders").then((f) => f.reapplyPending()).catch(() => undefined);
     await setKV("lastCollectionSync", Date.now());
-    if (known.size > 0 && added > 0) toast(`${added} neue Platte(n) in der Sammlung`);
+    if (known.size > 0 && added > 0) toast(added === 1 ? "1 neue Platte in der Sammlung" : `${added} neue Platten in der Sammlung`);
   } finally {
     jobUpdate(job, null);
   }
@@ -95,6 +98,7 @@ export async function syncWants() {
   jobUpdate(job, { label: "Wantlist laden", done: 0, total: 1 });
   try {
     const seen = new Set<number>();
+    const startedAt = Date.now();
     let page = 1;
     let pages = 1;
     do {
@@ -106,7 +110,7 @@ export async function syncWants() {
       jobUpdate(job, { done: page, total: pages });
       page++;
     } while (page <= pages);
-    const stale = (await db.wants.toCollection().primaryKeys()).filter((id) => !seen.has(id));
+    const stale = (await db.wants.toArray()).filter((w) => !seen.has(w.releaseId) && !(Date.parse(w.dateAdded) >= startedAt - 60_000)).map((w) => w.releaseId);
     await db.wants.bulkDelete(stale);
     await import("./folders").then((f) => f.reapplyPending()).catch(() => undefined);
     await setKV("lastWantsSync", Date.now());
@@ -342,14 +346,16 @@ export async function addToCollection(id: number, folder?: number) {
 export async function removeFromCollection(instanceId: number) {
   const item = await db.collection.get(instanceId);
   if (!item) return;
-  await discogs(`/users/${u()}/collection/folders/${item.folderId}/releases/${item.releaseId}/instances/${instanceId}`, { method: "DELETE" });
+  const folder = await import("./folders").then((f) => f.discogsFolderOf(instanceId, item.folderId));
+  await discogs(`/users/${u()}/collection/folders/${folder}/releases/${item.releaseId}/instances/${instanceId}`, { method: "DELETE" });
   await db.collection.delete(instanceId);
 }
 
 export async function rateRelease(releaseId: number, rating: number) {
   const items = await db.collection.where("releaseId").equals(releaseId).toArray();
   for (const it of items) {
-    await discogs(`/users/${u()}/collection/folders/${it.folderId}/releases/${releaseId}/instances/${it.instanceId}`, { method: "POST", body: { rating } });
+    const folder = await import("./folders").then((f) => f.discogsFolderOf(it.instanceId, it.folderId));
+    await discogs(`/users/${u()}/collection/folders/${folder}/releases/${releaseId}/instances/${it.instanceId}`, { method: "POST", body: { rating }, retry: true });
     await db.collection.update(it.instanceId, { rating });
   }
 }
@@ -474,12 +480,12 @@ export async function migrateAudioMatching() {
   if (await getKV("migration-match-v1", false)) return;
   await db.transaction("rw", db.tracks, async () => {
     await db.tracks.toCollection().modify((t) => {
-      if (t.bpmSource && t.bpmSource !== "manuell") {
+      if (t.bpmSource && !MANUAL_SOURCES.has(t.bpmSource)) {
         t.bpm = null;
         t.bpmSource = undefined;
       }
       // Keys kamen nur aus GetSongBPM oder der Audio-Analyse; manuelle Keys bleiben
-      const autoKey = t.keySource ? t.keySource !== "manuell" : Boolean(t.bpmSource?.includes("GetSongBPM"));
+      const autoKey = t.keySource ? !MANUAL_SOURCES.has(t.keySource) : Boolean(t.bpmSource?.includes("GetSongBPM"));
       if (t.key && autoKey) {
         t.key = null;
         t.keySource = undefined;

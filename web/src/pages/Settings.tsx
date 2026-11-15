@@ -360,7 +360,7 @@ function SyncPage() {
       <NavBar title="Abgleich" backTo="/settings" backLabel="Einstellungen" />
       <div className="page settings-list">
         <div>
-          <button className="btn primary block lg" disabled={busy} onClick={run("Sync", async () => (await autoPipeline({ force: true }), "Alles synchron und analysiert"))}>
+          <button className="btn primary block lg" disabled={busy} onClick={run("Sync", async () => (await autoPipeline({ force: true }), "Alles abgeglichen und ergänzt"))}>
             {busy ? "Läuft gerade …" : "Jetzt abgleichen & ergänzen"}
           </button>
           <p className="tiny" style={{ textAlign: "center" }}>
@@ -379,7 +379,7 @@ function SyncPage() {
               [
                 ["Tracklists", info.withDetail, info.records],
                 ["BPM & Key gesucht", info.lookedUp, info.tracks],
-                ["Hörproben analysiert", info.analyzed, info.tracks],
+                ["Hörproben gemessen", info.analyzed, info.tracks],
                 ["Vibes & Energie", info.vibes, info.tracks],
                 ["Preise der Wants", info.priced, info.wants],
               ] as [string, number, number][]

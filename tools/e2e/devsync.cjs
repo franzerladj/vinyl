@@ -37,8 +37,16 @@ async function device(b, opts) {
   await phone.fill("input[placeholder^='Name']", "Freitag Glashaus");
   await phone.click("button:has-text('Speichern')");
   await phone.waitForTimeout(600);
+  // Nadel-Stunden: erst anlegen, dann ändern (Änderung in einem Objekt-Wert muss auch ankommen)
+  await phone.goto(`${B}/settings/stylus`);
+  await phone.waitForSelector("text=+1 Std.");
+  await phone.waitForTimeout(800);
+  await phone.click("button:has-text('+1 Std.')");
+  await phone.waitForTimeout(400);
+  await phone.click("button:has-text('+30 Min.')");
   await phone.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
   await phone.waitForTimeout(5500); // Ausgang wird nach 4 s geschickt
+  out.serverNadelMinuten = [...globalThis.__devsync.rows.values()].find((r) => r.t === "kv" && r.k === "stylus")?.v?.value?.extraMinutes;
 
   // Laptop: frisch, holt alles ab
   const laptop = await device(b, { viewport: { width: 1440, height: 860 } });
@@ -47,6 +55,7 @@ async function device(b, opts) {
   out.laptopBpm = lt ? `${lt.bpm} ${lt.bpmSource}` : null;
   const sets = await idb(laptop, "sets");
   out.laptopSets = sets.map((s) => s.name);
+  out.laptopNadelMinuten = (await idb(laptop, "kv", "stylus"))?.value?.extraMinutes;
   // Laptop benennt das Set um
   await laptop.goto(`${B}/sets`);
   await laptop.click("text=Freitag Glashaus");

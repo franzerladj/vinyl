@@ -198,14 +198,22 @@ let busyCheck: () => boolean = () => false;
 const pipelineBusy = () => busyCheck();
 
 /** Nach dem Start: einmalige Bereinigung, dann Sync, wenn der letzte länger als 6 Stunden her ist (egal auf welcher Seite) */
-async function startupSync() {
-  const { migrateAudioMatching, migrateAlbumMatching, migrateTempoV2, autoPipeline, isPipelineRunning } = await import("./lib/sync");
-  busyCheck = isPipelineRunning;
-  const { getKV } = await import("./lib/db");
-  const { toast } = await import("./lib/store");
+/**
+ * Einmalige Bereinigungen alter Stände. Laufen vor dem Abgleich zwischen Geräten: auf einem frischen Gerät
+ * ist dann noch nichts da, was sie verwerfen könnten (sonst träfen sie die gerade abgeholten Werte der anderen Geräte).
+ */
+async function runMigrations() {
+  const { migrateAudioMatching, migrateAlbumMatching, migrateTempoV2 } = await import("./lib/sync");
   await migrateAudioMatching();
   await migrateAlbumMatching();
   await migrateTempoV2();
+}
+
+async function startupSync() {
+  const { autoPipeline, isPipelineRunning } = await import("./lib/sync");
+  busyCheck = isPipelineRunning;
+  const { getKV } = await import("./lib/db");
+  const { toast } = await import("./lib/store");
   // Vorhandene Tempi nach den neuen Regeln prüfen (lokal, ohne Downloads)
   await import("./lib/tempo").then((m) => m.migrateTempoCheck()).catch((e) => console.warn("Tempo", e));
   void import("./lib/friends").then((f) => f.refreshMyProfile()).catch(() => undefined);
@@ -371,7 +379,10 @@ export default function App() {
         setState({ me: m });
         // Erst die Änderungen der anderen Geräte holen (höchstens ein paar Sekunden warten), dann den Discogs-Sync
         if (m.username) {
-          const ready = m.verified !== false ? Promise.race([startDevSync().catch(() => undefined), new Promise((r) => setTimeout(r, 6000))]) : Promise.resolve();
+          const verified = m.verified !== false;
+          const ready = runMigrations()
+            .catch((e) => console.warn("Bereinigung", e))
+            .then(() => (verified ? Promise.race([startDevSync().catch(() => undefined), new Promise((r) => setTimeout(r, 6000))]) : undefined));
           void ready.then(() => startupSync());
         }
         try {

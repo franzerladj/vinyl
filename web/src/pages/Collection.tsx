@@ -404,7 +404,7 @@ export default function Collection() {
           { label: "Jahresrückblick", icon: <IconRecord />, onClick: () => nav("/year", { viewTransition: true }) },
           { label: "Labels vervollständigen", icon: <IconRecord />, onClick: () => nav("/labels", { viewTransition: true }) },
           { label: "Beschriften (Einleger & Sticker)", icon: <IconTag />, onClick: () => nav("/stickers", { viewTransition: true }) },
-          { label: "Alles abgleichen & ergänzen", icon: <IconSync />, onClick: () => autoPipeline({ force: true }).then(() => toast("Alles synchron und analysiert"), (e) => toast(e.message)) },
+          { label: "Alles abgleichen & ergänzen", icon: <IconSync />, onClick: () => autoPipeline({ force: true }).then(() => toast("Alles abgeglichen und ergänzt"), (e) => toast(e.message)) },
           { label: "Fehlende Tracklists laden", icon: <IconRows />, onClick: () => fetchMissingDetails("collection").catch((e) => toast(e.message)) },
         ]}
       />
@@ -579,7 +579,7 @@ function ValueSheet({ total, values, paid, count, onSort }: { total: Awaited<Ret
         <b>Was du bezahlt hast</b>
         {paid.size > 0 ? (
           <span className="sub">
-            {paid.size === 1 ? "Für eine Platte" : `Für ${paid.size} Platten`} hast du {fmt(paidSum)} bezahlt.{marketOfPaid > 0 ? ` Laut Markt sind sie heute etwa ${fmt(marketOfPaid)} wert.` : ""}
+            {paid.size === 1 ? "Für eine Platte" : `Für ${paid.size} Platten`} hast du {fmt(paidSum)} bezahlt.{marketOfPaid > 0 ? ` Laut Markt ${paid.size === 1 ? "ist sie" : "sind sie"} heute etwa ${fmt(marketOfPaid)} wert.` : ""}
           </span>
         ) : (
           <span className="sub">Discogs gibt deine Käufe nicht an Apps weiter. Trag den Kaufpreis selbst ein, dann zählt eine teure Pressung nicht nur mit dem Marktpreis. Er wird bei Discogs in der Notiz gespeichert.</span>
