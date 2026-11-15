@@ -30,31 +30,41 @@ export async function loadWeights(): Promise<DigWeights> {
   return w;
 }
 
-export async function recordAction(c: DigCard, action: DigAction) {
-  const w = learn(await loadWeights(), c, action);
-  await setKV("digWeights", w);
-  return w;
+// Lesen, ändern, schreiben jeweils in einer Transaktion: bei schnellem Wischen laufen mehrere Aktionen
+// gleichzeitig, sonst überschreibt die zweite, was die erste gelernt hat.
+export function recordAction(c: DigCard, action: DigAction) {
+  return db.transaction("rw", db.kv, db.collection, db.releases, async () => {
+    const w = learn(await loadWeights(), c, action);
+    await setKV("digWeights", w);
+    return w;
+  });
 }
 
-export async function markSeen(id: number) {
-  const seen = await getKV<number[]>("digSeen", []);
-  if (seen.includes(id)) return;
-  seen.push(id);
-  await setKV("digSeen", seen.slice(-SEEN_MAX));
+export function markSeen(id: number) {
+  return db.transaction("rw", db.kv, async () => {
+    const seen = await getKV<number[]>("digSeen", []);
+    if (seen.includes(id)) return;
+    seen.push(id);
+    await setKV("digSeen", seen.slice(-SEEN_MAX));
+  });
 }
 
 /** Likes (getrennt von der Wantlist), neueste zuerst */
 export const likedCards = () => getKV<(DigCard & { likedAt: number })[]>("digLiked", []);
 
-export async function setLiked(c: DigCard, on: boolean) {
-  const list = (await likedCards()).filter((x) => x.id !== c.id);
-  await setKV("digLiked", on ? [{ ...c, likedAt: Date.now() }, ...list].slice(0, 500) : list);
+export function setLiked(c: DigCard, on: boolean) {
+  return db.transaction("rw", db.kv, async () => {
+    const list = (await likedCards()).filter((x) => x.id !== c.id);
+    await setKV("digLiked", on ? [{ ...c, likedAt: Date.now() }, ...list].slice(0, 500) : list);
+  });
 }
 
 /** Weggewischtes für eine Weile ganz ausblenden */
-export async function markSkipped(id: number) {
-  const s = await getKV<number[]>("digSkipped", []);
-  await setKV("digSkipped", [...s.filter((x) => x !== id), id].slice(-SEEN_MAX));
+export function markSkipped(id: number) {
+  return db.transaction("rw", db.kv, async () => {
+    const s = await getKV<number[]>("digSkipped", []);
+    await setKV("digSkipped", [...s.filter((x) => x !== id), id].slice(-SEEN_MAX));
+  });
 }
 
 const pick = <T,>(arr: T[], n: number) => [...arr].sort(() => Math.random() - 0.5).slice(0, n);
