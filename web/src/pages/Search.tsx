@@ -18,6 +18,8 @@ export default function Search() {
   const [results, setResults] = useState<SearchResult[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
   const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
   const [showFilters, setShowFilters] = useState(false);
 
   const filters = {
@@ -47,15 +49,16 @@ export default function Search() {
     sp.set("per_page", "40");
     sp.set("page", String(page));
     setLoading(true);
+    setFailed(null);
     discogs<{ results: SearchResult[]; pagination: Pagination }>(`/database/search?${sp}`)
       .then((d) => {
         setResults((prev) => (page > 1 ? [...prev, ...d.results] : d.results));
         setPagination(d.pagination);
       })
-      .catch((e) => toast(e.message))
+      .catch((e) => (page > 1 ? toast(e.message) : (setResults([]), setFailed)(navigator.onLine === false ? "Du bist offline. Die Suche braucht eine Verbindung zu Discogs." : e.message)))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.toString()]);
+  }, [params.toString(), retry]);
 
   const update = (patch: Record<string, string>) => {
     const sp = new URLSearchParams(params);
@@ -184,7 +187,12 @@ export default function Search() {
           })}
         </div>
         {loading && page === 1 && <SkeletonRows />}
-        {!loading && hasQuery && results.length === 0 && <Empty title="Nichts gefunden">Anders schreiben oder Filter entfernen.</Empty>}
+        {!loading && hasQuery && failed && (
+          <Empty title="Suche nicht möglich" action={<button className="btn tinted" onClick={() => setRetry((n) => n + 1)}>Nochmal versuchen</button>}>
+            {failed}
+          </Empty>
+        )}
+        {!loading && hasQuery && !failed && results.length === 0 && <Empty title="Nichts gefunden">Anders schreiben oder Filter entfernen.</Empty>}
         {!hasQuery && (
           <Link to="/dig" viewTransition className="dig-entry press" style={{ marginTop: 8 }}>
             <span>

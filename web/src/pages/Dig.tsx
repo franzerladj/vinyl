@@ -352,7 +352,7 @@ export default function Dig() {
         {!loading && !cards.length && (
           <div className="dig-card">
             <div className="dig-loading">
-              Gerade nichts gefunden.
+              {navigator.onLine === false ? "Du bist offline. Diggen braucht eine Verbindung." : "Gerade nichts gefunden."}
               <button className="btn primary" onClick={() => applyFilter(filter)}>
                 Nochmal
               </button>

@@ -141,7 +141,9 @@ export function discogs<T>(path: string, opts: DiscogsOptions = {}): Promise<T> 
       } catch (e) {
         // Hängende Anfrage abgebrochen: kurz warten und neu versuchen
         const again = method === "GET" || opts.retry;
-        if ((isAbort(e) || (again && e instanceof TypeError)) && attempt < 3 && again) {
+        // Ohne Netz bringt Wiederholen nichts: sofort melden statt mehrere Sekunden zu warten
+        const offline = typeof navigator !== "undefined" && navigator.onLine === false;
+        if (!offline && (isAbort(e) || (again && e instanceof TypeError)) && attempt < 3 && again) {
           await new Promise((r) => setTimeout(r, 1500));
           continue;
         }
