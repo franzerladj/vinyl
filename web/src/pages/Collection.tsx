@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type Release, type TrackMeta } from "../lib/db";
@@ -70,6 +70,52 @@ const avgBpm = (t: TrackMeta[]) => {
   return b.length ? b.reduce((a, c) => a + c, 0) / b.length : 0;
 };
 
+interface Row { r: Release; meta?: { shelf?: string | null; lentTo?: string | null } | null; tracks: TrackMeta[]; rating: number; media?: string; sleeve?: string; sig: string }
+/** Alles, was eine Zeile anzeigt, als Text: ändert sich daran nichts, wird die Zeile nicht neu gezeichnet */
+const rowSig = (x: Omit<Row, "sig">) =>
+  [x.r.id, x.r.title, x.r.artist, x.r.thumb, x.r.cover, x.r.year, x.r.labels[0]?.name, x.r.labels[0]?.catno, x.tracks.map((t) => `${t.bpm ?? ""}/${t.key ?? ""}`).join(","), x.meta?.shelf, x.meta?.lentTo, x.media, x.sleeve, x.rating].join("\u0001");
+const bpmRange = (tracks: TrackMeta[]) => {
+  const b = tracks.filter((t) => t.bpm).map((t) => Math.round(t.bpm!));
+  if (!b.length) return null;
+  const lo = Math.min(...b);
+  const hi = Math.max(...b);
+  return lo === hi ? `${lo}` : `${lo}–${hi}`;
+};
+
+/** Zeile der Sammlung. Bei großen Sammlungen läuft im Hintergrund oft ein Sync: nur geänderte Zeilen neu zeichnen. */
+const CollRow = memo(
+  function CollRow({ x, sortId, paid, paidCur, market, marketCur }: { x: Row; sortId: string; paid?: number; paidCur?: string; market?: number; marketCur?: string }) {
+    const { r, tracks, meta, rating, media, sleeve } = x;
+    const range = bpmRange(tracks);
+    return (
+      <RecordRow
+        r={r}
+        side={
+          <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
+            {range && <span className="bpm" style={{ fontSize: 14 }}>{range}</span>}
+            <div className="row" style={{ gap: 3 }}>
+              {[...new Set(tracks.map((t) => t.key).filter(Boolean))].slice(0, 2).map((k) => (
+                <KeyBadge key={k} k={k} />
+              ))}
+            </div>
+            {(media || sleeve) && <span className="grade-tag mono">{[media ?? "–", sleeve ?? "–"].join("/")}</span>}
+            {sortId === "value" && paid != null && (
+              <span className="tiny mono" style={{ color: "var(--text)" }}>
+                {money(paid, paidCur)} bez.
+              </span>
+            )}
+            {sortId === "value" && market != null && <span className="tiny mono">{paid != null ? "Markt " : ""}{money(market, marketCur)}</span>}
+            {sortId === "rating" && rating > 0 && <span className="tiny" style={{ color: "var(--accent)" }}>{"★".repeat(rating)}</span>}
+            {meta?.shelf && sortId !== "shelf" && <span className="tiny">{meta.shelf}</span>}
+            {meta?.lentTo && <span className="badge accent">bei {meta.lentTo}</span>}
+          </div>
+        }
+      />
+    );
+  },
+  (a, b) => a.x.sig === b.x.sig && a.sortId === b.sortId && a.paid === b.paid && a.paidCur === b.paidCur && a.market === b.market && a.marketCur === b.marketCur,
+);
+
 export default function Collection() {
   const nav = useNavigate();
   const [q, setQ] = useState("");
@@ -119,7 +165,8 @@ export default function Collection() {
     tracks.forEach((t) => byRel.set(t.releaseId, [...(byRel.get(t.releaseId) ?? []), t]));
     return ids
       .map((id, i) => ({ r: rels[i]!, meta: metas[i], tracks: byRel.get(id) ?? [], added: byColl.get(id)?.dateAdded ?? "", rating: byColl.get(id)?.rating ?? 0, media: shortGrade(byColl.get(id)?.media), sleeve: shortGrade(byColl.get(id)?.sleeve) }))
-      .filter((x) => x.r);
+      .filter((x) => x.r)
+      .map((x) => ({ ...x, sig: rowSig(x) }));
   });
   // Ordner: Leiste über der Liste, Auswahl bleibt gemerkt
   const recs = useFolderRecords("coll");
@@ -242,14 +289,6 @@ export default function Collection() {
   const sections = useMemo(() => sectionsOf(list, sectionKey), [list, sectionKey]);
   const letters = sort.id === "artist" || sort.id === "title" ? sections.map(([k]) => k) : [];
 
-  const bpmRange = (tracks: TrackMeta[]) => {
-    const b = tracks.filter((t) => t.bpm).map((t) => Math.round(t.bpm!));
-    if (!b.length) return null;
-    const lo = Math.min(...b);
-    const hi = Math.max(...b);
-    return lo === hi ? `${lo}` : `${lo}–${hi}`;
-  };
-
   const chips = [
     ...f.styles.map((s) => ({ key: `s${s}`, label: s, remove: () => setF((p) => ({ ...p, styles: p.styles.filter((x) => x !== s) })) })),
     ...f.decades.map((s) => ({ key: `d${s}`, label: s, remove: () => setF((p) => ({ ...p, decades: p.decades.filter((x) => x !== s) })) })),
@@ -329,32 +368,11 @@ export default function Collection() {
           <SectionList
             sections={sections}
             stickyTop={toolbarH}
-            render={({ r, tracks, meta, rating, media, sleeve }: Item) => (
-              <RecordRow
-                key={r.id}
-                r={r as Release}
-                side={
-                  <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
-                    {bpmRange(tracks) && <span className="bpm" style={{ fontSize: 14 }}>{bpmRange(tracks)}</span>}
-                    <div className="row" style={{ gap: 3 }}>
-                      {[...new Set(tracks.map((t) => t.key).filter(Boolean))].slice(0, 2).map((k) => (
-                        <KeyBadge key={k} k={k} />
-                      ))}
-                    </div>
-                    {(media || sleeve) && <span className="grade-tag mono">{[media ?? "–", sleeve ?? "–"].join("/")}</span>}
-                    {sort.id === "value" && paid.get(r.id) && (
-                      <span className="tiny mono" style={{ color: "var(--text)" }}>
-                        {money(paid.get(r.id)!.value, paid.get(r.id)!.currency)} bez.
-                      </span>
-                    )}
-                    {sort.id === "value" && values.get(r.id) && <span className="tiny mono">{paid.get(r.id) ? "Markt " : ""}{money(values.get(r.id)!.value, values.get(r.id)!.currency)}</span>}
-                    {sort.id === "rating" && rating > 0 && <span className="tiny" style={{ color: "var(--accent)" }}>{"★".repeat(rating)}</span>}
-                    {meta?.shelf && sort.id !== "shelf" && <span className="tiny">{meta.shelf}</span>}
-                    {meta?.lentTo && <span className="badge accent">bei {meta.lentTo}</span>}
-                  </div>
-                }
-              />
-            )}
+            render={(x: Item) => {
+              const p = paid.get(x.r.id);
+              const v = values.get(x.r.id);
+              return <CollRow key={x.r.id} x={x} sortId={sort.id} paid={p?.value} paidCur={p?.currency} market={v?.value} marketCur={v?.currency} />;
+            }}
           />
         ) : (
           <SectionList
