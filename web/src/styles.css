@@ -697,7 +697,7 @@ button, .btn, .chip, .badge, .seg button, .stat b, .bpm, .tap-bpm, .djo-big b, .
 .grid2, .grid3 { grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); }
 .grid3 { --cols: 3; }
 .stat { min-width: 0; }
-.stat b { font-size: clamp(17px, 5.4vw, 26px); }
+.stat b { font-size: clamp(15px, 4.6vw, 26px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Aufklapp-Bereiche: Pfeil als eigenes Element statt float */
 details > summary { position: relative; display: block; padding-right: 26px; }
 details > summary::after { float: none; position: absolute; right: 0; top: 50%; width: 20px; height: 20px; margin-top: -10px; text-align: center; }

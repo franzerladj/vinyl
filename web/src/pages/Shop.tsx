@@ -375,9 +375,12 @@ export default function Shop() {
                   ))}
                 </div>
                 {plan.picked.length > 0 && (
-                  <button className="btn block tinted" onClick={() => setTab("basket")}>
-                    Bei möglichst wenigen Händlern zusammen kaufen → Warenkorb
-                  </button>
+                  <>
+                    <p className="sub" style={{ margin: "14px 2px 8px", textAlign: "center" }}>Im Warenkorb bündelt Crate die Platten bei möglichst wenigen Händlern. Das spart Versand.</p>
+                    <button className="btn block tinted" onClick={() => setTab("basket")}>
+                      Zum Warenkorb
+                    </button>
+                  </>
                 )}
                 {budgetItems.length === 0 && <div className="sub">Für den Budget-Plan braucht die App Marktpreise. Die kommen beim nächsten Sync automatisch, oder in der Wantlist auf „Preise laden“ tippen.</div>}
               </>
