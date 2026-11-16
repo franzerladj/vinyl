@@ -140,7 +140,8 @@ export function FriendsHome({
             </Link>
           </div>
 
-          <div className="fhome-row">
+          {friends.length > 0 && (
+      <div className="fhome-row">
             {friends.map(({ f, m }) => (
               <Link
                 key={f.username}
@@ -169,10 +170,11 @@ export function FriendsHome({
                 <IconPlus />
               </span>
               <span className="fhome-name sub">
-                {friends.length ? "Hinzufügen" : "Freunde finden"}
+                Hinzufügen
               </span>
             </Link>
           </div>
+      )}
           {friends.some((x) => x.m.hasYourWants.length > 0) && (
             <p className="tiny fhome-note">
               Grüne Zahl: so viele deiner Wants stehen bei diesem Freund im

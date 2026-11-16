@@ -6,7 +6,7 @@ import { autoPipeline, fetchMissingDetails } from "../lib/sync";
 import { toast, username } from "../lib/store";
 import { CAMELOT_COLORS, Cover, Empty, KeyBadge, markHero, RecordRow, Sheet, SkeletonRows, useDebounced, keepParens, DiscogsCredit } from "../components/bits";
 import { IconCamera, IconCart, IconFolder, IconRecord, IconGrid, IconMore, IconRows, IconSearch, IconSync, IconTag } from "../components/icons";
-import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
+import { LibrarySwitch, ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
 import { matchesQuery } from "../../../shared/textSearch";
 import { gradeRank, shortGrade } from "../../../shared/vinyl";
 import { keyDistance, parseKey } from "../../../shared/music";
@@ -325,6 +325,7 @@ export default function Collection() {
         </div>
       </div>
 
+      <LibrarySwitch value="coll" />
       <FolderBar kind="coll" recs={recs} value={folder} onChange={(f) => setFolderSel({ f })} onManage={() => setFolderSheet({ start: null })} />
       <FolderManager kind="coll" open={folderSheet !== null} onClose={() => setFolderSheet(null)} recs={recs} startWith={folderSheet?.start} onShow={(f) => setFolderSel({ f })} key={folderSheet?.start ?? "list"} />
 

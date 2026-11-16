@@ -12,6 +12,8 @@ import Login, { LoginFinish } from "./pages/Login";
 import { claimIdentity, verifyInBackground } from "./lib/auth";
 // Früh laden: die Hooks schreiben jede eigene Änderung für den Geräte-Abgleich mit
 import { startDevSync } from "./lib/devsync";
+import { useLiveQuery } from "dexie-react-hooks";
+import { cachedSocial } from "./lib/social";
 // Detailseite direkt laden, damit die Cover-Animation sofort ein Ziel hat
 import ReleasePage from "./pages/Release";
 const Collection = lazy(() => import("./pages/Collection"));
@@ -315,6 +317,7 @@ function useBackGesture() {
 
 export default function App() {
   const me = useStore((s) => s.me);
+  const social = useLiveQuery(() => cachedSocial(), []);
   const [loaded, setLoaded] = useState(false);
   const online = useOnline();
   const loc = useLocation();
@@ -494,27 +497,28 @@ export default function App() {
       </main>
       <Jobs />
       {me?.username && <Welcome username={me.username} />}
+      {/* Fünf Orte: Start, Diggen, Sammlung (mit Wantlist), Sets, Freunde. Suche, Scannen und Shop hängen an diesen Seiten. */}
       <nav className="nav no-print">
         <div className="nav-inner">
           <NavLink to="/" end viewTransition onClick={() => haptic(5)}>
             <IconHome />
             Start
           </NavLink>
-          <NavLink to="/search" viewTransition onClick={() => haptic(5)}>
-            <IconSearch />
-            Suche
+          <NavLink to="/dig" viewTransition onClick={() => haptic(5)}>
+            <IconPlay />
+            Diggen
           </NavLink>
-          <NavLink to="/collection" viewTransition onClick={() => haptic(5)}>
+          <NavLink to="/collection" viewTransition onClick={() => haptic(5)} className={/^\/(collection|wants|shop|labels?|stickers)(\/|$)/.test(loc.pathname) ? "active" : undefined}>
             <IconRecord />
             Sammlung
-          </NavLink>
-          <NavLink to="/wants" viewTransition onClick={() => haptic(5)}>
-            <IconHeart />
-            Wants
           </NavLink>
           <NavLink to="/sets" viewTransition onClick={() => haptic(5)}>
             <IconList />
             Sets
+          </NavLink>
+          <NavLink to="/friends" viewTransition onClick={() => haptic(5)} className={social?.in.length ? "has-dot" : undefined}>
+            <IconUser />
+            Freunde
           </NavLink>
         </div>
       </nav>

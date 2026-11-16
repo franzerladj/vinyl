@@ -119,7 +119,7 @@ export function DjOverview() {
         {d.recordsMissing > 0 && (
           <button className="djo-action press" onClick={() => go("/collection?nobpm=1")}>
             <span>
-              <b>{d.recordsMissing} Platten ergänzen</b>
+              <b>{d.recordsMissing === 1 ? "Eine Platte ergänzen" : `${d.recordsMissing} Platten ergänzen`}</b>
               <small>Track antippen, Video läuft, im Takt auf TAP tippen</small>
             </span>
             <span className="chev">›</span>

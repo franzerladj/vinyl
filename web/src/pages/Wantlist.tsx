@@ -12,7 +12,7 @@ import { IconCart, IconCoin, IconFolder, IconMore, IconRows, IconSearch, IconSyn
 import { matchesQuery } from "../../../shared/textSearch";
 import { stripFolder } from "../../../shared/folders";
 import { FolderBar, FolderManager, inPick, useFolderRecords, useFolderTabs } from "../components/Folders";
-import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
+import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState, LibrarySwitch } from "../components/ui";
 
 const SORTS: SortOption[] = [
   { id: "deal", label: "Beste Deals", dirs: ["Lohnendste zuerst", "Lohnendste zuletzt"], defaultDir: "desc" },
@@ -207,11 +207,15 @@ export default function Wantlist() {
           <Link to="/shop" viewTransition className="btn small primary">
             <IconCart /> Shoppen
           </Link>
+          <Link to="/search" viewTransition className="icon-btn round" aria-label="Platte suchen">
+            <IconSearch />
+          </Link>
           <button className="icon-btn round" onClick={() => setSheet("more")} aria-label="Mehr">
             <IconMore />
           </button>
         </div>
       </div>
+      <LibrarySwitch value="wants" />
       <FolderBar kind="want" recs={recs} value={folder} onChange={(f) => setFolderSel({ f })} onManage={() => setFolderSheet({ start: null })} />
       <FolderManager kind="want" open={folderSheet !== null} onClose={() => setFolderSheet(null)} recs={recs} startWith={folderSheet?.start} onShow={(f) => setFolderSel({ f })} key={folderSheet?.start ?? "list"} />
 

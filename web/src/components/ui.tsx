@@ -2,7 +2,7 @@
 // A–Z-Leiste, Schalter, gespeicherter Zustand.
 import { Fragment, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { haptic, Sheet } from "./bits";
+import { haptic, Seg, Sheet } from "./bits";
 import { IconBack, IconCheck, IconFilter, IconSort, IconX } from "./icons";
 
 /** useState, der sich den Wert pro Gerät merkt (localStorage) */
@@ -337,3 +337,20 @@ export function ChipGroup({ title, values, selected, onToggle, max = 24 }: { tit
   );
 }
 
+
+/** Sammlung und Wantlist teilen sich einen Platz in der Tab-Leiste: oben umschalten */
+export function LibrarySwitch({ value }: { value: "coll" | "wants" }) {
+  const nav = useNavigate();
+  return (
+    <div className="lib-switch no-print">
+      <Seg
+        value={value}
+        options={[
+          ["coll", "Sammlung"],
+          ["wants", "Wantlist"],
+        ]}
+        onChange={(v) => v !== value && nav(v === "coll" ? "/collection" : "/wants", { replace: true })}
+      />
+    </div>
+  );
+}

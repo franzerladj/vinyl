@@ -113,8 +113,7 @@ function FriendList() {
 
   return (
     <>
-      <NavBar title="Freunde" titleOnScroll backLabel="Zurück" />
-      <div className="page-head" style={{ paddingTop: 0 }}>
+      <div className="page-head">
         <div>
           <h1>Freunde</h1>
           <div className="sub">Sammlungen und Wantlists deiner Freunde</div>

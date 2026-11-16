@@ -10,7 +10,7 @@ import { toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, markHero } from "../components/bits";
 import { DjOverview } from "../components/DjOverview";
 import { computeStylus, hoursText } from "../lib/stylus";
-import { IconCamera, IconCart, IconList, IconPlay, IconSync, IconTag, IconUser } from "../components/icons";
+import { IconCamera, IconCart, IconList, IconPlay, IconSearch, IconSync, IconTag, IconUser } from "../components/icons";
 
 /** Begrüßung mit DJ-Bezug je nach Tageszeit. Wechselt täglich, damit sie nicht jeden Tag gleich ist. */
 export function greeting(name: string, opts: { setToday?: boolean; now?: Date } = {}) {
@@ -136,11 +136,9 @@ export default function Home() {
         <div className="home-hero-top">
           <div className="eyebrow">{today}</div>
           <div className="home-hero-actions">
-            <button className="hero-btn press" onClick={sync} disabled={busy} aria-label="Synchronisieren">
-              <span style={{ display: "grid", animation: busy ? "spin 1s linear infinite" : undefined }}>
-                <IconSync />
-              </span>
-            </button>
+<Link to="/search" viewTransition className="hero-btn press" aria-label="Platte suchen">
+              <IconSearch />
+            </Link>
             <Link to="/settings" viewTransition className="hero-avatar press" aria-label="Profil und Einstellungen">
               <Avatar src={profile?.avatar} name={me?.username ?? "?"} size={56} />
             </Link>
@@ -250,22 +248,12 @@ export default function Home() {
                 <span className="chev">›</span>
               </Link>
             )}
-            <div className="grid3">
-              <Link to="/collection" viewTransition className="stat">
-                <b>{stats?.records ?? "–"}</b>
-                <span>Platten</span>
-              </Link>
-              <Link to="/wants" viewTransition className="stat">
-                <b>{stats?.wants ?? "–"}</b>
-                <span>Wants</span>
-              </Link>
-              <Link to="/sets" viewTransition className="stat">
-                <b>{stats?.sets ?? "–"}</b>
-                <span>Sets</span>
-              </Link>
-            </div>
+            <FriendsHome friends={stats?.friends ?? []} />
 
-            <div className="grid2" style={{ marginTop: 10 }}>
+            <DjOverview />
+
+            <h2 style={{ marginTop: 28 }}>Werkzeug</h2>
+            <div className="grid2" >
               <Link to="/scan" viewTransition className="widget">
                 <div className="ico">
                   <IconCamera />
@@ -298,10 +286,6 @@ export default function Home() {
                 </span>
               </Link>
             </div>
-
-            <FriendsHome friends={stats?.friends ?? []} />
-
-            <DjOverview />
           </>
         )}
         {stats?.lastSync ? <p className="tiny" style={{ textAlign: "center", marginTop: 24 }}>Zuletzt synchronisiert {new Date(stats.lastSync).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}</p> : null}
