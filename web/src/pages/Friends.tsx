@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
-import { notifyFriendAdded } from "../lib/push";
 import { isDiscoverable, searchPeople, setDiscoverable, type PersonHit } from "../lib/friends";
 import { Switch } from "../components/ui";
 import { ProfileHeader } from "../components/ProfileCard";
@@ -12,6 +11,7 @@ import { getKV } from "../lib/db";
 import type { MyProfile } from "../lib/friends";
 import { loadMyProfile, loadProfile } from "../lib/profile";
 import type { CrateProfile } from "../../../shared/profile";
+import { cachedSocial, refreshSocial, requestFriend, respondFriend, unfriend } from "../lib/social";
 import { addFriend, collectionUrl, friendFeed, friendMatches, inviteLink, lentRecords, messageUrl, profileUrl, removeFriend, syncFriend, tasteMatch, type FriendMatch } from "../lib/friends";
 import { ask, toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, RecordRow, Seg, SkeletonRows, useDebounced, DiscogsCredit } from "../components/bits";
@@ -59,6 +59,24 @@ function FriendList() {
     return metas.map((m, i) => ({ m, r: rels[i] })).filter((x) => x.r);
   });
 
+  // Freundschaften: offene Anfragen an dich und von dir
+  const social = useLiveQuery(() => cachedSocial(), []);
+  useEffect(() => {
+    void refreshSocial();
+  }, []);
+  const [answering, setAnswering] = useState<string | null>(null);
+  const answer = async (from: string, accept: boolean) => {
+    setAnswering(from);
+    haptic(accept ? 14 : 6);
+    try {
+      await respondFriend(from, accept);
+      toast(accept ? `${from} und du seid jetzt befreundet` : "Anfrage abgelehnt");
+    } catch (e) {
+      toast((e as Error).message);
+    } finally {
+      setAnswering(null);
+    }
+  };
   const [adding, setAdding] = useState<string | null>(null);
   const add = async (u: string) => {
     if (busy) return;
@@ -69,12 +87,13 @@ function FriendList() {
       const f = await addFriend(u);
       haptic(12);
       // Sofort zeigen: die Mitteilung an den anderen läuft im Hintergrund und darf das Hinzufügen nicht aufhalten
-      toast(`${f.username} hinzugefügt`);
       setName("");
       setParams({}, { replace: true });
-      void notifyFriendAdded(f.username).then((status) => {
-        if (status === "zugestellt") toast(`${f.username} wurde benachrichtigt`);
-        else if (status === "wartet") toast(`${f.username} erfährt es, sobald dort Mitteilungen in Crate an sind`);
+      // Die Anfrage läuft im Hintergrund und darf das Hinzufügen nicht aufhalten
+      toast(`${f.username} hinzugefügt`);
+      void requestFriend(f.username).then((status) => {
+        if (status === "befreundet") toast(`${f.username} und du seid jetzt befreundet`);
+        else if (status === "angefragt") toast(`Anfrage an ${f.username} gesendet`);
       });
       void syncFriend(f.username).catch((e) => toast(e.message));
     } catch (e) {
@@ -112,6 +131,27 @@ function FriendList() {
             <button className="btn small primary" disabled={busy} onClick={() => add(invited)}>
               Hinzufügen
             </button>
+          </div>
+        )}
+
+        {(social?.in.length ?? 0) > 0 && (
+          <div className="group friend-requests">
+            <div className="friend-req-head">Anfragen</div>
+            {social!.in.map((r) => (
+              <div key={r.from} className="friend-req">
+                <Avatar name={r.from} size={44} />
+                <div className="friend-req-main">
+                  <b>{r.from}</b>
+                  <span className="sub">möchte mit dir befreundet sein</span>
+                </div>
+                <button className="btn small" disabled={answering === r.from} onClick={() => answer(r.from, false)}>
+                  Ablehnen
+                </button>
+                <button className="btn small primary" disabled={answering === r.from} onClick={() => answer(r.from, true)}>
+                  Annehmen
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -182,6 +222,7 @@ function FriendList() {
                   </div>
                 </div>
                 <div className="rec-side stack" style={{ gap: 4, alignItems: "flex-end" }}>
+                  {social?.out.some((x) => x.toLowerCase() === f.username.toLowerCase()) && <span className="badge">Anfrage offen</span>}
                   {m.hasYourWants.length > 0 && <span className="badge ok">hat {m.hasYourWants.length} deiner Wants</span>}
                   {m.wantsYours.length > 0 && <span className="badge accent">sucht {m.wantsYours.length} von dir</span>}
                   {taste.score != null && <span className="tiny">Geschmack {taste.score} %</span>}
@@ -447,6 +488,7 @@ function FriendDetail({ u }: { u: string }) {
             onClick: async () => {
               if (!(await ask({ title: `${u} entfernen?`, body: "Die Sammlung und Wantlist von " + u + " verschwinden aus deiner Freundesliste.", ok: "Entfernen", danger: true }))) return;
               await removeFriend(u);
+              void unfriend(u);
               nav("/friends", { viewTransition: true });
             },
           },

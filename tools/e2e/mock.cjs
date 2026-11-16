@@ -38,6 +38,15 @@ module.exports = async function install(page) {
     if (p === "/api/discogs/oauth/identity") return json({ id: 1, username: "franzerladj" });
     if (p === "/api/push/status") return json({ available: true, devices: 0, prefs: null });
     if (p === "/api/push/friend-added") return json({ ok: true, status: "wartet" });
+    // Freundschaften: FRIENDS=1 legt eine offene Anfrage von „kumpel“ an
+    if (p.startsWith("/api/friends")) {
+      const soc = (page.__social ??= { friends: [], in: process.env.FRIENDS ? [{ from: "kumpel", at: Date.now() }] : [], out: [] });
+      const b = route.request().postDataJSON?.() ?? {};
+      if (p === "/api/friends") return json(soc);
+      if (p === "/api/friends/request") { if (!soc.out.includes(b.to)) soc.out.push(b.to); return json({ status: "angefragt" }); }
+      if (p === "/api/friends/respond") { soc.in = soc.in.filter((x) => x.from !== b.from); if (b.accept) soc.friends.push(b.from); return json({ status: b.accept ? "befreundet" : "abgelehnt" }); }
+      if (p === "/api/friends/remove") { soc.friends = soc.friends.filter((x) => x !== b.user); soc.out = soc.out.filter((x) => x !== b.user); return json({ ok: true }); }
+    }
     if (p.startsWith("/api/push/")) return json({ ok: true });
     if (p === "/api/dir/search") {
       const q = (url.searchParams.get("q") || "").toLowerCase();

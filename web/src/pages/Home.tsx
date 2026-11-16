@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV } from "../lib/db";
+import { cachedSocial } from "../lib/social";
 import { friendMatches, type MyProfile } from "../lib/friends";
 import { autoPipeline, isPipelineRunning } from "../lib/sync";
 import { toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, markHero } from "../components/bits";
 import { DjOverview } from "../components/DjOverview";
 import { computeStylus, hoursText } from "../lib/stylus";
-import { IconCamera, IconCart, IconList, IconPlay, IconSync, IconTag } from "../components/icons";
+import { IconCamera, IconCart, IconList, IconPlay, IconSync, IconTag, IconUser } from "../components/icons";
 
 /** Begrüßung mit DJ-Bezug je nach Tageszeit. Wechselt täglich, damit sie nicht jeden Tag gleich ist. */
 export function greeting(name: string, opts: { setToday?: boolean; now?: Date } = {}) {
@@ -36,6 +37,7 @@ export default function Home() {
   const busy = Object.keys(jobs).length > 0;
 
   const profile = useLiveQuery(() => getKV<MyProfile | null>("myProfile", null));
+  const social = useLiveQuery(() => cachedSocial(), []);
   const stats = useLiveQuery(async () => {
     const coll = await db.collection.toArray();
     const ids = [...new Set(coll.map((c) => c.releaseId))];
@@ -186,6 +188,16 @@ export default function Home() {
           </Empty>
         ) : (
           <>
+            {(social?.in.length ?? 0) > 0 && (
+              <Link to="/friends" viewTransition className="card row press friend-nudge">
+                <IconUser />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <b>{social!.in.length === 1 ? `${social!.in[0].from} möchte mit dir befreundet sein` : `${social!.in.length} Freundschaftsanfragen`}</b>
+                  <span className="sub" style={{ display: "block" }}>Antippen zum Annehmen</span>
+                </span>
+                <span className="chev">›</span>
+              </Link>
+            )}
             <Link to="/dig" viewTransition className="dig-entry press rise" onClick={() => haptic(10)}>
               <span className="covers">
                 {(stats?.recent ?? []).filter(Boolean).slice(0, 4).map((r) => r && (

@@ -451,6 +451,109 @@ app.post("/api/push/friend-added", async (c) => {
   return c.json({ ok: true, status: "wartet" });
 });
 
+// ---------- Freundschaften: Anfrage, Annehmen, Ablehnen (nur mit bestätigtem Discogs-Namen) ----------
+// Je Nutzer ein Eintrag im KV: wer befreundet ist, wer angefragt hat, wen man selbst angefragt hat.
+interface Social { friends: string[]; in: { from: string; at: number }[]; out: string[] }
+const socKey = (u: string) => `soc:${u.toLowerCase()}`;
+const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+const without = (list: string[], u: string) => list.filter((x) => !sameName(x, u));
+async function loadSocial(kv: Config["kv"], u: string): Promise<Social> {
+  try {
+    const j = JSON.parse((await kv.get(socKey(u))) ?? "null") as Partial<Social> | null;
+    return { friends: j?.friends ?? [], in: j?.in ?? [], out: j?.out ?? [] };
+  } catch {
+    return { friends: [], in: [], out: [] };
+  }
+}
+const saveSocial = (kv: Config["kv"], u: string, s: Social) =>
+  s.friends.length || s.in.length || s.out.length ? kv.put(socKey(u), JSON.stringify({ friends: s.friends.slice(-500), in: s.in.slice(-100), out: s.out.slice(-100) })) : kv.delete(socKey(u));
+const validName = (u: unknown): u is string => typeof u === "string" && /^[\w.\-]{2,40}$/.test(u);
+/** Mitteilung an einen anderen Nutzer, falls er sie eingeschaltet hat */
+async function tellFriend(cfg: Config, to: string, msg: Message) {
+  const rec = await loadUser(cfg.kv, to);
+  if (rec?.subs.length) await notifyUser(cfg.kv, cfg.push, to, rec, "friends", msg).catch(() => 0);
+}
+async function befriend(cfg: Config, me: string, other: string, mine: Social, theirs: Social) {
+  mine.friends = [...without(mine.friends, other), other];
+  mine.out = without(mine.out, other);
+  mine.in = mine.in.filter((x) => !sameName(x.from, other));
+  theirs.friends = [...without(theirs.friends, me), me];
+  theirs.out = without(theirs.out, me);
+  theirs.in = theirs.in.filter((x) => !sameName(x.from, me));
+  await Promise.all([saveSocial(cfg.kv, me, mine), saveSocial(cfg.kv, other, theirs)]);
+}
+
+app.get("/api/friends", async (c) => {
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  c.header("Cache-Control", "no-store");
+  return c.json(await loadSocial(c.var.cfg.kv, s.username));
+});
+
+app.post("/api/friends/request", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const { to } = ((await c.req.json().catch(() => null)) ?? {}) as { to?: unknown };
+  if (!validName(to) || sameName(to, s.username)) return c.json({ message: "Name ungültig" }, 400);
+  const me = s.username;
+  const [mine, theirs] = await Promise.all([loadSocial(cfg.kv, me), loadSocial(cfg.kv, to)]);
+  if (mine.friends.some((x) => sameName(x, to))) return c.json({ status: "befreundet" });
+  // Der andere hat schon angefragt: dann ist es eine Zusage
+  if (mine.in.some((x) => sameName(x.from, to))) {
+    await befriend(cfg, me, to, mine, theirs);
+    await tellFriend(cfg, to, { title: "Ihr seid jetzt befreundet", body: `${me} hat deine Anfrage angenommen.`, url: `/friends/${encodeURIComponent(me)}`, tag: `friend-${me}` });
+    return c.json({ status: "befreundet" });
+  }
+  if (mine.out.some((x) => sameName(x, to))) return c.json({ status: "angefragt" });
+  if (mine.out.length >= 100) return c.json({ message: "Zu viele offene Anfragen" }, 400);
+  mine.out = [...mine.out, to];
+  theirs.in = [...theirs.in.filter((x) => !sameName(x.from, me)), { from: me, at: Date.now() }];
+  await Promise.all([saveSocial(cfg.kv, me, mine), saveSocial(cfg.kv, to, theirs)]);
+  await tellFriend(cfg, to, { title: "Freundschaftsanfrage", body: `${me} möchte auf Crate mit dir befreundet sein.`, url: "/friends", tag: `friend-${me}` });
+  return c.json({ status: "angefragt" });
+});
+
+app.post("/api/friends/respond", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const { from, accept } = ((await c.req.json().catch(() => null)) ?? {}) as { from?: unknown; accept?: unknown };
+  if (!validName(from)) return c.json({ message: "Name ungültig" }, 400);
+  const me = s.username;
+  const [mine, theirs] = await Promise.all([loadSocial(cfg.kv, me), loadSocial(cfg.kv, from)]);
+  if (!mine.in.some((x) => sameName(x.from, from))) return c.json({ message: "Keine Anfrage von diesem Namen" }, 404);
+  if (accept) {
+    await befriend(cfg, me, from, mine, theirs);
+    await tellFriend(cfg, from, { title: "Ihr seid jetzt befreundet", body: `${me} hat deine Anfrage angenommen.`, url: `/friends/${encodeURIComponent(me)}`, tag: `friend-${me}` });
+    return c.json({ status: "befreundet" });
+  }
+  // Ablehnen bleibt still: der andere bekommt keine Mitteilung
+  mine.in = mine.in.filter((x) => !sameName(x.from, from));
+  theirs.out = without(theirs.out, me);
+  await Promise.all([saveSocial(cfg.kv, me, mine), saveSocial(cfg.kv, from, theirs)]);
+  return c.json({ status: "abgelehnt" });
+});
+
+/** Freundschaft beenden oder eigene Anfrage zurückziehen */
+app.post("/api/friends/remove", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const { user } = ((await c.req.json().catch(() => null)) ?? {}) as { user?: unknown };
+  if (!validName(user)) return c.json({ message: "Name ungültig" }, 400);
+  const me = s.username;
+  const [mine, theirs] = await Promise.all([loadSocial(cfg.kv, me), loadSocial(cfg.kv, user)]);
+  mine.friends = without(mine.friends, user);
+  mine.out = without(mine.out, user);
+  mine.in = mine.in.filter((x) => !sameName(x.from, user));
+  theirs.friends = without(theirs.friends, me);
+  theirs.out = without(theirs.out, me);
+  theirs.in = theirs.in.filter((x) => !sameName(x.from, me));
+  await Promise.all([saveSocial(cfg.kv, me, mine), saveSocial(cfg.kv, user, theirs)]);
+  return c.json({ ok: true });
+});
+
 app.post("/api/push/test", async (c) => {
   const cfg = c.var.cfg;
   const s = await session(c);
@@ -648,6 +751,13 @@ app.delete("/api/me", async (c) => {
     await Promise.all(r.keys.map((k) => cfg.kv.delete(k.name)));
     cursor = r.list_complete ? undefined : r.cursor;
   } while (cursor);
+  // Freundschaften: bei allen Beteiligten austragen
+  const soc = await loadSocial(cfg.kv, u);
+  for (const other of [...new Set([...soc.friends, ...soc.out, ...soc.in.map((x) => x.from)])].slice(0, 200)) {
+    const t = await loadSocial(cfg.kv, other);
+    await saveSocial(cfg.kv, other, { friends: without(t.friends, u), out: without(t.out, u), in: t.in.filter((x) => !sameName(x.from, u)) });
+  }
+  await cfg.kv.delete(socKey(u));
   await syncStore(c.env ?? {}).clear(u);
   deleteCookie(c, SESSION, { path: "/" });
   return c.json({ ok: true });
