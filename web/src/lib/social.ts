@@ -59,7 +59,7 @@ export function refreshSocial(): Promise<Social> {
       try {
         const f = await addFriend(name);
         toast(`${f.username} und du seid jetzt befreundet`);
-        void syncFriend(f.username).catch(() => undefined);
+        void syncFriend(f.username, true).catch(() => undefined);
       } catch {
         /* Discogs gerade nicht erreichbar: beim nächsten Mal */
       }
@@ -85,7 +85,7 @@ export async function respondFriend(from: string, accept: boolean) {
   await call("/api/friends/respond", { from, accept });
   if (accept) {
     const f = await addFriend(from);
-    void syncFriend(f.username).catch(() => undefined);
+    void syncFriend(f.username, true).catch(() => undefined);
   }
   const s = await cachedSocial();
   await setKV(KEY, { ...s, in: s.in.filter((x) => !same(x.from, from)), friends: accept ? [...s.friends, from] : s.friends });

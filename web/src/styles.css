@@ -734,6 +734,47 @@ details > summary::after { float: none; position: absolute; right: 0; top: 50%; 
 .people-main small { font-size: 13px; color: var(--text-2); display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .people-main em { font-style: normal; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); }
 .people-add { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; flex: none; }
+/* Freunde auf Start: Reihe und Feed „Neu bei Freunden“ */
+.fhome { margin-top: 28px; }
+.fhome-head { margin-bottom: 12px; }
+.fhome.only { margin-top: 8px; }
+.fhome.only .fhome-feed { margin-top: 0; }
+.fhome-more { margin-top: 12px; }
+.fhome-head h2 { margin: 0; }
+.fhome-row { display: flex; gap: 14px; overflow-x: auto; margin: 0 calc(-1 * var(--gutter)); padding: 4px var(--gutter) 10px; scrollbar-width: none; }
+.fhome-row::-webkit-scrollbar { display: none; }
+.fhome-person { flex: none; width: 72px; display: flex; flex-direction: column; align-items: center; gap: 6px; color: var(--text); }
+.fhome-ring { position: relative; width: 72px; height: 72px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--surface-3); }
+.fhome-ring.new { border-color: var(--accent); }
+.fhome-ring.add { border-style: dashed; border-width: 1.5px; color: var(--accent); }
+.fhome-ring.add svg { width: 24px; height: 24px; }
+.fhome-count { position: absolute; top: -4px; right: -4px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; display: grid; place-items: center; background: var(--ok); color: #fff; font-size: 12px; font-weight: 700; box-shadow: 0 0 0 2px var(--bg); }
+.fhome-name { max-width: 100%; font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fhome-note { margin: 2px 0 0; }
+.fhome-empty { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; color: var(--text); }
+.fhome-feed { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; }
+.fhome-feed h3 { margin: 0 0 2px; }
+.fpost { background: var(--surface); border-radius: var(--r-lg); padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fpost-head { display: flex; align-items: center; gap: 10px; color: var(--text); }
+.fpost-who { min-width: 0; font-size: 15px; line-height: 1.3; }
+.fpost-when { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 12.5px; font-weight: 500; }
+.fpost-new { font-style: normal; font-weight: 700; color: var(--accent); }
+.fpost-one { display: flex; align-items: center; gap: 10px; }
+.fpost-rec { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; color: var(--text); }
+.fpost-rec .cover { width: 84px; height: 84px; flex: none; border-radius: 6px; box-shadow: var(--shadow-cover); }
+.fpost-text { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; }
+.fpost-text b { font-size: 16px; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.fpost-text > span:not(.badge) { color: var(--text-2); font-size: 14px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fpost-text small { color: var(--text-3); font-size: 12.5px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fpost-text .badge, .fpost-strip .badge { margin-top: 5px; }
+.fpost-want { flex: none; background: var(--surface-2); color: var(--accent); }
+.fpost-strip { display: flex; gap: 12px; overflow-x: auto; margin: 0 -14px; padding: 0 14px 2px; scrollbar-width: none; }
+.fpost-strip::-webkit-scrollbar { display: none; }
+.fpost-strip > a { flex: none; width: 112px; display: flex; flex-direction: column; align-items: flex-start; color: var(--text); min-width: 0; }
+.fpost-strip .cover { width: 112px; height: 112px; border-radius: 6px; box-shadow: var(--shadow-cover); margin-bottom: 7px; }
+.fpost-strip b { font-size: 13.5px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fpost-strip a > span:not(.badge) { color: var(--text-2); font-size: 12.5px; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (min-width: 1024px) { .fhome-feed { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); } .fhome-feed h3 { grid-column: 1 / -1; } .fhome-row, .fpost-strip { flex-wrap: nowrap; } }
 .friend-req-head { padding: 12px 14px 4px; font-weight: 700; font-size: 15px; }
 .friend-req { display: flex; align-items: center; gap: 10px; padding: 10px 14px; flex-wrap: wrap; }
 .friend-req + .friend-req { border-top: 0.5px solid var(--hairline); }

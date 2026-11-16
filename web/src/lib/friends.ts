@@ -52,14 +52,14 @@ export async function removeFriend(name: string) {
 type CollPage = { pagination: Pagination; releases: { id: number; date_added: string; basic_information: BasicInformation }[] };
 type WantPage = { pagination: Pagination; wants: { id: number; date_added: string; basic_information: BasicInformation }[] };
 
-async function loadList(u: string, kind: "coll" | "want"): Promise<{ items: FriendItem[]; private: boolean }> {
+async function loadList(u: string, kind: "coll" | "want", background = true): Promise<{ items: FriendItem[]; private: boolean }> {
   const items: FriendItem[] = [];
   let page = 1;
   let pages = 1;
   try {
     do {
       const path = kind === "coll" ? `/users/${encodeURIComponent(u)}/collection/folders/0/releases?per_page=100&page=${page}&sort=added&sort_order=desc` : `/users/${encodeURIComponent(u)}/wants?per_page=100&page=${page}`;
-      const d = await discogs<CollPage & WantPage>(path, { background: true });
+      const d = await discogs<CollPage & WantPage>(path, { background });
       pages = Math.min(d.pagination.pages, 60);
       const rows = kind === "coll" ? d.releases : d.wants;
       await upsertBasics(rows.map((r) => r.basic_information));
@@ -75,13 +75,14 @@ async function loadList(u: string, kind: "coll" | "want"): Promise<{ items: Frie
   return { items, private: false };
 }
 
-export async function syncFriend(u: string) {
+/** now: gerade hinzugefügt oder von Hand angestoßen, dann mit Vorrang vor dem Hintergrund-Sync laden */
+export async function syncFriend(u: string, now = false) {
   const job = `friend-${u}`;
   jobUpdate(job, { label: `Sammlung von ${u}`, done: 0, total: 1 });
   try {
-    const coll = await loadList(u, "coll");
+    const coll = await loadList(u, "coll", !now);
     jobUpdate(job, { label: `Wantlist von ${u}`, done: 0, total: 1 });
-    const wants = await loadList(u, "want");
+    const wants = await loadList(u, "want", !now);
     await db.transaction("rw", db.friends, db.friendItems, async () => {
       await db.friendItems.where("username").equals(u).delete();
       await db.friendItems.bulkPut([...coll.items, ...wants.items]);
@@ -263,14 +264,6 @@ export async function friendsFor(releaseId: number) {
   const items = await db.friendItems.where("releaseId").equals(releaseId).toArray();
   const friends = new Map((await db.friends.bulkGet([...new Set(items.map((i) => i.username))])).filter(Boolean).map((f) => [f!.username, f!]));
   return items.filter((i) => friends.has(i.username)).map((i) => ({ friend: friends.get(i.username)!, kind: i.kind }));
-}
-
-/** Neu in den Sammlungen deiner Freunde (nach Discogs-Datum) */
-export async function friendFeed(limit = 20) {
-  const items = (await db.friendItems.toArray()).filter((i) => i.kind === "coll").sort((x, y) => y.dateAdded.localeCompare(x.dateAdded)).slice(0, limit);
-  const [rels, friends] = await Promise.all([db.releases.bulkGet(items.map((i) => i.releaseId)), db.friends.toArray()]);
-  const fm = new Map(friends.map((f) => [f.username, f]));
-  return items.map((it, i) => ({ item: it, r: rels[i], friend: fm.get(it.username) })).filter((x) => x.r && x.friend);
 }
 
 // ---------------------------------------------------------------------------

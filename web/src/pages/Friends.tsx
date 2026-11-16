@@ -11,8 +11,9 @@ import { getKV } from "../lib/db";
 import type { MyProfile } from "../lib/friends";
 import { loadMyProfile, loadProfile } from "../lib/profile";
 import type { CrateProfile } from "../../../shared/profile";
+import { FriendsHome } from "../components/FriendsHome";
 import { cachedSocial, refreshSocial, requestFriend, respondFriend, unfriend } from "../lib/social";
-import { addFriend, collectionUrl, friendFeed, friendMatches, inviteLink, lentRecords, messageUrl, profileUrl, removeFriend, syncFriend, tasteMatch, type FriendMatch } from "../lib/friends";
+import { addFriend, collectionUrl, friendMatches, inviteLink, lentRecords, messageUrl, profileUrl, removeFriend, syncFriend, tasteMatch, type FriendMatch } from "../lib/friends";
 import { ask, toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, RecordRow, Seg, SkeletonRows, useDebounced, DiscogsCredit } from "../components/bits";
 import { IconMore, IconPlus, IconSearch, IconShare, IconSync, IconTrash, IconUser } from "../components/icons";
@@ -52,7 +53,6 @@ function FriendList() {
     const [matches, tastes] = await Promise.all([Promise.all(list.map((f) => friendMatches(f.username))), Promise.all(list.map((f) => tasteMatch(f.username)))]);
     return list.map((f, i) => ({ f, m: matches[i], taste: tastes[i] }));
   });
-  const feed = useLiveQuery(() => friendFeed(16));
   const lent = useLiveQuery(async () => {
     const metas = await lentRecords();
     const rels = await db.releases.bulkGet(metas.map((m) => m.releaseId));
@@ -95,7 +95,7 @@ function FriendList() {
         if (status === "befreundet") toast(`${f.username} und du seid jetzt befreundet`);
         else if (status === "angefragt") toast(`Anfrage an ${f.username} gesendet`);
       });
-      void syncFriend(f.username).catch((e) => toast(e.message));
+      void syncFriend(f.username, true).catch((e) => toast(e.message));
     } catch (e) {
       toast((e as Error).message);
     } finally {
@@ -280,25 +280,7 @@ function FriendList() {
           </>
         )}
 
-        {feed && feed.length > 0 && (
-          <>
-            <h2 style={{ marginBottom: 0 }}>Neu bei deinen Freunden</h2>
-            <div className="carousel">
-              {feed.map(({ item, r, friend }) => (
-                <Link key={item.key} to={`/release/${r!.id}`} viewTransition className="press" style={{ position: "relative" }}>
-                  <Cover src={r!.cover || r!.thumb} />
-                  <span style={{ position: "absolute", top: 8, left: 8, boxShadow: "0 0 0 2px var(--bg)", borderRadius: "50%", display: "grid" }}>
-                    <Avatar src={friend!.avatar} name={friend!.username} size={28} />
-                  </span>
-                  <div className="t">{r!.title}</div>
-                  <div className="a">
-                    {r!.artist} · {friend!.username}
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </>
-        )}
+        {friends && friends.length > 0 && <FriendsHome friends={friends} limit={20} feedOnly />}
 
         <div className="card stack" style={{ gap: 6 }}>
           <b>Damit Freunde deine Platten sehen</b>
@@ -349,7 +331,7 @@ function FriendDetail({ u }: { u: string }) {
   const syncing = Boolean(jobs[`friend-${u}`]);
 
   useEffect(() => {
-    if (f && !f.lastSync && !syncing) void syncFriend(u).catch((e) => toast(e.message));
+    if (f && !f.lastSync && !syncing) void syncFriend(u, true).catch((e) => toast(e.message));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [f?.username]);
 
@@ -479,7 +461,7 @@ function FriendDetail({ u }: { u: string }) {
         onClose={() => setMenu(false)}
         title={f.username}
         items={[
-          { label: "Jetzt aktualisieren", icon: <IconSync />, onClick: () => syncFriend(u).then(() => toast("Aktualisiert"), (e) => toast(e.message)), disabled: syncing },
+          { label: "Jetzt aktualisieren", icon: <IconSync />, onClick: () => syncFriend(u, true).then(() => toast("Aktualisiert"), (e) => toast(e.message)), disabled: syncing },
           { label: "Profil auf Discogs", icon: <IconUser />, onClick: () => window.open(profileUrl(u), "_blank") },
           {
             label: "Freund entfernen",

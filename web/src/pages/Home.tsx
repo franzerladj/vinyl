@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV } from "../lib/db";
 import { cachedSocial } from "../lib/social";
+import { FriendsHome } from "../components/FriendsHome";
 import { friendMatches, type MyProfile } from "../lib/friends";
 import { autoPipeline, isPipelineRunning } from "../lib/sync";
 import { toast, useStore } from "../lib/store";
@@ -298,37 +299,7 @@ export default function Home() {
               </Link>
             </div>
 
-            <div className="row" style={{ marginTop: 28, marginBottom: 12 }}>
-              <h2 style={{ margin: 0 }}>Freunde</h2>
-              <span className="spacer" />
-              <Link to="/friends" viewTransition className="btn small ghost" style={{ paddingRight: 0 }}>
-                Alle
-              </Link>
-            </div>
-            <div className="carousel" style={{ paddingBottom: 6 }}>
-              {(stats?.friends ?? []).map(({ f, m }) => (
-                <Link key={f.username} to={`/friends/${encodeURIComponent(f.username)}`} viewTransition className="press" style={{ width: 84, textAlign: "center", position: "relative" }}>
-                  <div style={{ display: "flex", justifyContent: "center" }}>
-                    <Avatar src={f.avatar} name={f.username} size={72} />
-                  </div>
-                  {m.hasYourWants.length > 0 && (
-                    <span className="badge" style={{ position: "absolute", top: 0, right: 2, background: "var(--ok)", color: "#fff" }}>
-                      {m.hasYourWants.length}
-                    </span>
-                  )}
-                  <div className="t" style={{ fontSize: 13 }}>{f.username}</div>
-                </Link>
-              ))}
-              <Link to="/friends" viewTransition className="press" style={{ width: 84, textAlign: "center" }}>
-                <span style={{ width: 72, height: 72, borderRadius: "50%", margin: "0 auto", display: "grid", placeItems: "center", border: "1.5px dashed var(--surface-3)", color: "var(--accent)", fontSize: 28 }}>+</span>
-                <div className="t" style={{ fontSize: 13, color: "var(--text-2)" }}>{stats?.friends.length ? "Hinzufügen" : "Freunde"}</div>
-              </Link>
-            </div>
-            {stats && stats.friends.some((x) => x.m.hasYourWants.length) && (
-              <p className="tiny" style={{ marginTop: 0 }}>
-                Grüne Zahl: so viele deiner Wants stehen bei diesem Freund im Regal.
-              </p>
-            )}
+            <FriendsHome friends={stats?.friends ?? []} />
 
             <DjOverview />
           </>

@@ -205,7 +205,7 @@ export async function lookupAudioFor(trackIds?: string[]) {
             body: JSON.stringify({ artist: r.artist, title: r.title, tracks: tracks.map((t) => ({ key: t.id, title: t.title, artist: t.artist, duration: parseDuration(durations.get(t.id)) })) }),
           });
           for (const t of tracks) {
-            const m = res.matches[t.id];
+            const m = res.matches?.[t.id];
             if (!m) {
               rest.push(t);
               continue;
