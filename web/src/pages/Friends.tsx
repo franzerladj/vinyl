@@ -59,27 +59,29 @@ function FriendList() {
     return metas.map((m, i) => ({ m, r: rels[i] })).filter((x) => x.r);
   });
 
+  const [adding, setAdding] = useState<string | null>(null);
   const add = async (u: string) => {
+    if (busy) return;
     setBusy(true);
+    setAdding(u.trim().toLowerCase());
+    haptic(8);
     try {
       const f = await addFriend(u);
       haptic(12);
-      // Der andere bekommt eine Mitteilung, sobald er sie in Crate eingeschaltet hat
-      const status = await notifyFriendAdded(f.username);
-      toast(
-        status === "zugestellt"
-          ? `${f.username} hinzugefügt und benachrichtigt`
-          : status === "wartet"
-            ? `${f.username} hinzugefügt. Die Nachricht kommt an, sobald dort Mitteilungen in Crate an sind.`
-            : `${f.username} hinzugefügt`,
-      );
+      // Sofort zeigen: die Mitteilung an den anderen läuft im Hintergrund und darf das Hinzufügen nicht aufhalten
+      toast(`${f.username} hinzugefügt`);
       setName("");
       setParams({}, { replace: true });
+      void notifyFriendAdded(f.username).then((status) => {
+        if (status === "zugestellt") toast(`${f.username} wurde benachrichtigt`);
+        else if (status === "wartet") toast(`${f.username} erfährt es, sobald dort Mitteilungen in Crate an sind`);
+      });
       void syncFriend(f.username).catch((e) => toast(e.message));
     } catch (e) {
       toast((e as Error).message);
     } finally {
       setBusy(false);
+      setAdding(null);
     }
   };
 
@@ -124,8 +126,8 @@ function FriendList() {
             <IconUser />
             <input className="input" placeholder="Discogs-Name oder Profil-Link" value={name} onChange={(e) => setName(e.target.value)} autoCapitalize="none" autoCorrect="off" />
           </div>
-          <button className="btn primary" disabled={busy || !name.trim()}>
-            <IconPlus />
+          <button className="btn primary" disabled={busy || !name.trim()} aria-label="Hinzufügen">
+            {busy && adding === name.trim().toLowerCase() ? <span className="spinner" /> : <IconPlus />}
           </button>
         </form>
 
@@ -142,9 +144,7 @@ function FriendList() {
                     {h.source === "crate" ? <em>auf Crate</em> : h.source === "seller" ? <em>Lieblingshändler</em> : <em>Discogs-Profil</em>}
                   </small>
                 </span>
-                <span className="people-add">
-                  <IconPlus />
-                </span>
+                <span className="people-add">{adding === h.username.toLowerCase() ? <span className="spinner" /> : <IconPlus />}</span>
               </button>
             ))}
             {!hits.length && (

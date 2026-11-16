@@ -27,7 +27,9 @@ async function pump() {
     const now = Date.now();
     while (recent.length && now - recent[0] > 60_000) recent.shift();
     // Volles Fenster: warten, bis die älteste Anfrage herausfällt
-    let wait = recent.length >= LIMIT_PER_MIN ? recent[0] + 60_000 - now : 0;
+    // Hintergrund-Jobs lassen 10 Anfragen pro Minute frei: was du antippst, kommt auch bei laufendem Sync sofort dran
+    const cap = job.priority > 0 ? LIMIT_PER_MIN : LIMIT_PER_MIN - 10;
+    let wait = recent.length >= cap ? recent[recent.length - cap] + 60_000 - now : 0;
     // Hintergrund-Jobs gleichmäßig verteilen, Nutzeraktionen sofort
     wait = Math.max(wait, lastCall + (job.priority > 0 ? 150 : 1050) - now);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));

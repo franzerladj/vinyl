@@ -735,6 +735,7 @@ details > summary::after { float: none; position: absolute; right: 0; top: 50%; 
 .people-main em { font-style: normal; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); }
 .people-add { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; flex: none; }
 .people-add svg { width: 18px; height: 18px; }
+.people-add .spinner, .btn .spinner { display: block; width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-top-color: transparent; opacity: 0.9; animation: spin 0.8s linear infinite; }
 .people-empty { padding: 14px; }
 
 /* ---------- Kopf der Startseite ---------- */
