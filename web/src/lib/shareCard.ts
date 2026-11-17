@@ -7,8 +7,8 @@ import { LOGO_SVG } from "./logoSvg";
 
 const W = 1080;
 const H = 1920;
-const ACCENT = "#ff5b14";
-const INK = "#16120f";
+const ACCENT = "#c6ff3a";
+const INK = "#0b0b0b";
 const HEAD = "'Archivo Variable', 'Archivo', 'Inter Variable', system-ui, sans-serif";
 const BODY = "'Inter Variable', 'Inter', -apple-system, system-ui, sans-serif";
 
@@ -48,9 +48,9 @@ function backdrop(ctx: CanvasRenderingContext2D, _img: HTMLImageElement | null) 
   ctx.globalAlpha = 0.55;
   ctx.beginPath();
   ctx.arc(cx, cy, 520, 0, Math.PI * 2);
-  ctx.fillStyle = "#0b0908";
+  ctx.fillStyle = "#050505";
   ctx.fill();
-  ctx.strokeStyle = "#2b2420";
+  ctx.strokeStyle = "#262626";
   ctx.lineWidth = 3;
   for (let r = 480; r > 190; r -= 26) {
     ctx.beginPath();

@@ -4,19 +4,19 @@ const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
 
-const INK = "#16120f";
-const ORANGE = "#ff5b14";
+const INK = "#0b0b0b";
+const ORANGE = "#c6ff3a";
 const ART = `
-  <g transform="rotate(-11 200 220)"><rect x="104" y="112" width="196" height="196" rx="6" fill="#e9dfcc"/></g>
-  <g transform="rotate(9 320 220)"><rect x="214" y="104" width="196" height="196" rx="6" fill="#c9b99c"/></g>
-  <circle cx="256" cy="196" r="118" fill="#0b0908"/>
-  <g fill="none" stroke="#2b2420" stroke-width="3"><circle cx="256" cy="196" r="104"/><circle cx="256" cy="196" r="90"/><circle cx="256" cy="196" r="76"/><circle cx="256" cy="196" r="62"/></g>
+  <g transform="rotate(-11 200 220)"><rect x="104" y="112" width="196" height="196" rx="6" fill="#f2f2f0"/></g>
+  <g transform="rotate(9 320 220)"><rect x="214" y="104" width="196" height="196" rx="6" fill="#bdbdb8"/></g>
+  <circle cx="256" cy="196" r="118" fill="#050505"/>
+  <g fill="none" stroke="#262626" stroke-width="3"><circle cx="256" cy="196" r="104"/><circle cx="256" cy="196" r="90"/><circle cx="256" cy="196" r="76"/><circle cx="256" cy="196" r="62"/></g>
   <circle cx="256" cy="196" r="40" fill="${ORANGE}"/>
-  <circle cx="256" cy="196" r="7" fill="#0b0908"/>
+  <circle cx="256" cy="196" r="7" fill="#050505"/>
   <rect x="72" y="262" width="368" height="178" rx="30" fill="${ORANGE}"/>
-  <rect x="72" y="262" width="368" height="22" rx="11" fill="#ff7a3a"/>
+  <rect x="72" y="262" width="368" height="22" rx="11" fill="#d8ff6e"/>
   <rect x="196" y="306" width="120" height="38" rx="19" fill="${INK}"/>
-  <rect x="104" y="384" width="304" height="8" rx="4" fill="#d9470b"/>`;
+  <rect x="104" y="384" width="304" height="8" rx="4" fill="#9fd11e"/>`;
 
 const svg = (body, { rx = 112, scale = 1 } = {}) =>
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="${rx}" fill="${INK}"/><g transform="translate(256 259) scale(${scale}) translate(-256 -259)">${body}</g></svg>`;

@@ -32,7 +32,7 @@ export default function Sets() {
           <div className="list">
             {sets.map((s) => (
               <Link key={s.id} to={`/sets/${s.id}`} viewTransition className="rec">
-                <div className="cover" style={{ display: "grid", placeItems: "center", background: "#16120f", color: "#ff5b14", fontWeight: 700, fontSize: 18, fontFamily: "'JetBrains Mono Variable', ui-monospace, monospace" }}>
+                <div className="cover" style={{ display: "grid", placeItems: "center", background: "#0b0b0b", color: "#c6ff3a", fontWeight: 700, fontSize: 18, fontFamily: "'JetBrains Mono Variable', ui-monospace, monospace" }}>
                   {s.trackIds.length}
                 </div>
                 <div className="rec-main">
