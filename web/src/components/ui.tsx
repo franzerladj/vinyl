@@ -341,6 +341,40 @@ export function ChipGroup({ title, values, selected, onToggle, max = 24 }: { tit
 /** Sammlung und Wantlist teilen sich einen Platz in der Tab-Leiste: oben umschalten */
 export function LibrarySwitch({ value }: { value: "coll" | "wants" }) {
   const nav = useNavigate();
+  // Wischen: nach links von der Sammlung zur Wantlist, nach rechts zurück
+  useEffect(() => {
+    let x0 = 0, y0 = 0, t0 = 0, on = false;
+    const start = (e: TouchEvent) => {
+      const t = e.touches[0];
+      const el = e.target as HTMLElement;
+      // Rand links gehört der Zurück-Geste, waagerecht scrollbare Leisten und Blätter behalten ihr Wischen
+      on = e.touches.length === 1 && t.clientX > 28 && !el.closest(".carousel, .toolbar-row, .folder-tabs, .chips-scroll, .seg, .sheet, .alpha-index, input, textarea");
+      x0 = t.clientX;
+      y0 = t.clientY;
+      t0 = Date.now();
+    };
+    const end = (e: TouchEvent) => {
+      if (!on) return;
+      on = false;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - x0, dy = t.clientY - y0;
+      if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.5 || Date.now() - t0 > 600) return;
+      if (dx < 0 && value === "coll") {
+        haptic(6);
+        nav("/wants", { replace: true, viewTransition: true });
+      } else if (dx > 0 && value === "wants") {
+        haptic(6);
+        document.documentElement.classList.add("vt-back");
+        nav("/collection", { replace: true, viewTransition: true });
+      }
+    };
+    window.addEventListener("touchstart", start, { passive: true });
+    window.addEventListener("touchend", end, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", start);
+      window.removeEventListener("touchend", end);
+    };
+  }, [value, nav]);
   return (
     <div className="lib-switch no-print">
       <Seg
