@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { DailyRecord } from "../components/DailyRecord";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV, type DJSet } from "../lib/db";
@@ -10,7 +10,7 @@ import { toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, markHero } from "../components/bits";
 import { DjOverview } from "../components/DjOverview";
 import { computeStylus, hoursText } from "../lib/stylus";
-import { IconCamera, IconCart, IconList, IconPlay, IconSearch, IconSync, IconTag, IconUser } from "../components/icons";
+import { IconCamera, IconCart, IconList, IconPlay, IconSearch, IconTag, IconUser } from "../components/icons";
 
 /** Begrüßung mit DJ-Bezug je nach Tageszeit. Wechselt täglich, damit sie nicht jeden Tag gleich ist. */
 export function greeting(name: string, opts: { setToday?: boolean; now?: Date } = {}) {
@@ -69,38 +69,6 @@ export default function Home() {
   });
 
 
-  // Herunterziehen am Seitenanfang startet den Sync (die Seite selbst wird nicht neu geladen)
-  const [pull, setPull] = useState(0);
-  useEffect(() => {
-    let startY: number | null = null;
-    let dy = 0;
-    const down = (e: TouchEvent) => {
-      startY = window.scrollY <= 0 ? e.touches[0].clientY : null;
-      dy = 0;
-    };
-    const move = (e: TouchEvent) => {
-      if (startY == null) return;
-      dy = Math.max(0, e.touches[0].clientY - startY);
-      setPull(Math.min(1.2, dy / 110));
-    };
-    const up = () => {
-      if (startY != null && dy > 110) void sync();
-      startY = null;
-      setPull(0);
-    };
-    window.addEventListener("touchstart", down, { passive: true });
-    window.addEventListener("touchmove", move, { passive: true });
-    window.addEventListener("touchend", up);
-    window.addEventListener("touchcancel", up);
-    return () => {
-      window.removeEventListener("touchstart", down);
-      window.removeEventListener("touchmove", move);
-      window.removeEventListener("touchend", up);
-      window.removeEventListener("touchcancel", up);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const sync = async () => {
     if (isPipelineRunning()) return toast("Sync läuft schon");
     haptic();
@@ -117,6 +85,7 @@ export default function Home() {
   const firstName = profile?.name?.split(" ")[0] || me?.username || "";
   const todayIso = new Date().toISOString().slice(0, 10);
   const setToday = stats?.nextSet?.date === todayIso;
+  const gigSoon = Boolean(stats?.nextSet?.date && (new Date(stats.nextSet.date).getTime() - new Date(todayIso).getTime()) / 864e5 <= 7);
   // Was gerade zählt: Set heute, neue Platten zum Beschriften, sonst der Überblick
   const statusLine = !stats
     ? ""
@@ -128,11 +97,7 @@ export default function Home() {
 
   return (
     <>
-      {pull > 0.05 && (
-        <div className="ptr" style={{ opacity: Math.min(1, pull), transform: `translateY(${pull * 40}px) rotate(${pull * 300}deg)` }} aria-hidden="true">
-          <IconSync />
-        </div>
-      )}
+
       {/* Erster Bildschirm: Begrüßung, Diggen, Zuletzt hinzugefügt. Der Rest kommt beim Scrollen. */}
       <div className="home-first">
       <header className="home-hero">
@@ -203,6 +168,8 @@ export default function Home() {
                 <span className="chev">›</span>
               </Link>
             )}
+            {/* Gig in den nächsten 7 Tagen: ganz nach oben, wie ein Flyer an der Wand */}
+            {stats?.nextSet && gigSoon && <GigCard set={stats.nextSet} covers={stats.gigCovers} records={stats.gigRecords} />}
             <Link to="/dig" viewTransition className="dig-entry press rise" onClick={() => haptic(10)}>
               <span className="covers">
                 {(stats?.recent ?? []).filter(Boolean).slice(0, 4).map((r) => r && (
@@ -217,6 +184,7 @@ export default function Home() {
                 <IconPlay />
               </span>
             </Link>
+            <DailyRecord />
             {stats?.recent.length ? (
               <>
                 {/* Schaufenster: die neuesten Platten als Cover-Wand, die jüngste groß */}
@@ -259,7 +227,7 @@ export default function Home() {
         {!(stats && stats.records === 0 && !busy) && (
           <>
             {/* Nächster Gig: so präsent wie ein Flyer an der Wand */}
-            {stats?.nextSet && <GigCard set={stats.nextSet} covers={stats.gigCovers} records={stats.gigRecords} />}
+            {stats?.nextSet && !gigSoon && <GigCard set={stats.nextSet} covers={stats.gigCovers} records={stats.gigRecords} />}
             {/* Ab November bis Januar: Jahresrückblick anbieten */}
             {[10, 11, 0].includes(new Date().getMonth()) && (
               <Link to="/year" viewTransition className="year-entry press">
