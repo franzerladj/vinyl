@@ -1,4 +1,4 @@
-// DJ-Übersicht auf der Startseite: Inhalte, Sprung in die gefilterte Sammlung
+// DJ-Übersicht: Kurzfassung auf Start, ganze Übersicht unter /dj, Sprung in die gefilterte Sammlung
 const { chromium, devices } = require("playwright");
 const install = require("./mock.cjs");
 (async () => {
@@ -17,6 +17,11 @@ const install = require("./mock.cjs");
     const sec = page.locator(".djo");
     await sec.scrollIntoViewIfNeeded();
     await sec.screenshot({ path: `${__dirname}/djo-${scheme}.png` });
+    // Kurzfassung auf Start führt zur ganzen Übersicht
+    await page.click("text=Tempo, Tonarten und Energie");
+    await page.waitForURL(/\/dj$/);
+    await page.waitForSelector(".djo-hist");
+    await page.locator(".djo").screenshot({ path: `${__dirname}/djo-full-${scheme}.png` });
     if (scheme === "dark") {
       await page.locator(".djo-hist button.top").click();
       await page.waitForTimeout(1500);

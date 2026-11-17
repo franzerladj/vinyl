@@ -34,6 +34,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const Friends = lazy(() => import("./pages/Friends"));
 const Dig = lazy(() => import("./pages/Dig"));
 const GetApp = lazy(() => import("./pages/GetApp"));
+const DjPage = lazy(() => import("./pages/DjPage"));
 const Impressum = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Impressum })));
 const Datenschutz = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Datenschutz })));
 
@@ -53,6 +54,7 @@ export const routes: RouteObject[] = [
   { path: "label/:id", element: <LabelPage /> },
   { path: "labels", element: <LabelsIndex /> },
   { path: "year", element: <YearPage /> },
+  { path: "dj", element: <DjPage /> },
   { path: "year/:year", element: <YearPage /> },
   { path: "sets", element: <Sets /> },
   { path: "sets/shared", element: <SharedSetPage /> },

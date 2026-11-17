@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db, getKV } from "../lib/db";
+import { db, getKV, type DJSet } from "../lib/db";
 import { cachedSocial } from "../lib/social";
 import { FriendsHome } from "../components/FriendsHome";
 import { friendMatches, type MyProfile } from "../lib/friends";
@@ -45,6 +45,10 @@ export default function Home() {
     const [metas, tracks] = await Promise.all([db.recordMeta.bulkGet(ids), db.tracks.where("releaseId").anyOf(ids).toArray()]);
     const recent = [...coll].sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)).slice(0, 12);
     const nextSet = (await db.sets.toArray()).filter((s) => s.date && s.date >= new Date().toISOString().slice(0, 10)).sort((a, b) => a.date!.localeCompare(b.date!))[0];
+    // Cover für die Gig-Karte: Platten der ersten Tracks, sonst aus der Kiste
+    const gigTracks = nextSet ? ((await db.tracks.bulkGet(nextSet.trackIds.slice(0, 16))).filter(Boolean) as { releaseId: number }[]) : [];
+    const gigRelIds = nextSet ? [...new Set([...gigTracks.map((t) => t.releaseId), ...(nextSet.crateIds ?? [])])] : [];
+    const gigCovers = ((await db.releases.bulkGet(gigRelIds.slice(0, 4))).filter(Boolean) as { thumb?: string; cover?: string }[]).map((r) => r.thumb || r.cover || "").filter(Boolean);
     return {
       records: ids.length,
       wants: await db.wants.count(),
@@ -55,6 +59,8 @@ export default function Home() {
       noSticker: ids.filter((_, i) => !metas[i]?.stickerPrintedAt).length,
       sets: await db.sets.count(),
       nextSet,
+      gigCovers,
+      gigRecords: gigRelIds.length,
       listings: await db.listings.count(),
       recent: (await db.releases.bulkGet(recent.map((r) => r.releaseId))).filter(Boolean),
       lastSync: await getKV<number>("lastCollectionSync", 0),
@@ -252,6 +258,8 @@ export default function Home() {
       <div className="page home-rest">
         {!(stats && stats.records === 0 && !busy) && (
           <>
+            {/* Nächster Gig: so präsent wie ein Flyer an der Wand */}
+            {stats?.nextSet && <GigCard set={stats.nextSet} covers={stats.gigCovers} records={stats.gigRecords} />}
             {/* Ab November bis Januar: Jahresrückblick anbieten */}
             {[10, 11, 0].includes(new Date().getMonth()) && (
               <Link to="/year" viewTransition className="year-entry press">
@@ -260,9 +268,9 @@ export default function Home() {
                 <span className="chev">›</span>
               </Link>
             )}
-            <FriendsHome friends={stats?.friends ?? []} />
+            <FriendsHome friends={stats?.friends ?? []} limit={3} />
 
-            <DjOverview />
+            <DjOverview compact />
 
             <h2 style={{ marginTop: 28 }}>Werkzeug</h2>
             <div className="grid2" >
@@ -288,14 +296,12 @@ export default function Home() {
                 <b>Sticker & Einleger</b>
                 <span className="sub">{stats?.noSticker ? `${stats.noSticker} Platten warten` : "Alles beschriftet"}</span>
               </Link>
-              <Link to={stats?.nextSet ? `/sets/${stats.nextSet.id}` : "/sets/new"} viewTransition className="widget">
+              <Link to="/sets/new" viewTransition className="widget">
                 <div className="ico">
                   <IconList />
                 </div>
-                <b>{stats?.nextSet ? stats.nextSet.name : "Set planen"}</b>
-                <span className="sub">
-                  {stats?.nextSet ? `${new Date(stats.nextSet.date!).toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "short" })} · ${stats.nextSet.trackIds.length} Tracks` : "Aus deiner Kiste"}
-                </span>
+                <b>Neues Set</b>
+                <span className="sub">Aus deiner Kiste</span>
               </Link>
             </div>
           </>
@@ -303,5 +309,28 @@ export default function Home() {
         {stats?.lastSync ? <p className="tiny" style={{ textAlign: "center", marginTop: 24 }}>Zuletzt synchronisiert {new Date(stats.lastSync).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}</p> : null}
       </div>
     </>
+  );
+}
+
+function GigCard({ set, covers, records }: { set: DJSet; covers: string[]; records: number }) {
+  const today = new Date(new Date().toISOString().slice(0, 10)).getTime();
+  const days = Math.round((new Date(set.date!).getTime() - today) / 86_400_000);
+  const when = days <= 0 ? "Heute" : days === 1 ? "Morgen" : days < 14 ? `In ${days} Tagen` : new Date(set.date!).toLocaleDateString("de-DE", { day: "numeric", month: "long" });
+  const date = new Date(set.date!).toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" });
+  return (
+    <Link to={`/sets/${set.id}`} viewTransition className="gig-card press">
+      <span className={`set-wall n${Math.min(covers.length, 4)}`}>
+        {covers.slice(0, 4).map((src, i) => (
+          <img key={i} src={src} alt="" loading="lazy" decoding="async" />
+        ))}
+        {covers.length === 0 && <span className="set-count">Noch leer</span>}
+      </span>
+      <span className="gig-text">
+        <span className="wall-tag inline">{when}</span>
+        <b>{set.name || "Gig"}</b>
+        <span className="sub">{[set.venue, date, set.start ? `${set.start} Uhr` : null].filter(Boolean).join(" · ")}</span>
+        <span className="sub">{set.trackIds.length} Tracks · {records} {records === 1 ? "Platte" : "Platten"}</span>
+      </span>
+    </Link>
   );
 }

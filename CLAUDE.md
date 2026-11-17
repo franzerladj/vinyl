@@ -85,7 +85,7 @@ node tools/e2e/dig.cjs      # Digging-Feed
 python3 tools/e2e/ean.py 5021392033112 tools/e2e/ean.jpg && node tools/e2e/scan.cjs   # Barcode aus Foto
 node tools/e2e/print.cjs    # Einleger als PDF
 node tools/e2e/yt.cjs       # YouTube-Einwilligung
-node tools/e2e/djo.cjs      # DJ-Übersicht auf Start
+node tools/e2e/djo.cjs      # DJ-Übersicht: Kurzfassung auf Start, ganze Übersicht unter /dj
 node tools/e2e/hero.cjs     # Kopf der Startseite zu verschiedenen Uhrzeiten
 node tools/e2e/ship.cjs     # Versand-Schätzung
 node tools/e2e/tap.cjs      # Tap-Tempo

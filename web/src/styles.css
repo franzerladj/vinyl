@@ -644,10 +644,10 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .djo-legend span { display: flex; align-items: center; gap: 8px; }
 .djo-legend i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
 .djo-note { margin: 0; font-size: 13px; line-height: 1.45; color: var(--text-2); }
-.djo-action { all: unset; cursor: pointer; display: flex; align-items: center; gap: 10px; margin-top: 2px; padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); color: var(--text); }
-.djo-action b { display: block; color: var(--accent); font-size: 15px; }
+.djo-action { all: unset; cursor: pointer; display: flex; align-items: center; gap: 10px; margin-top: 2px; padding: 12px 14px; border-radius: 12px; background: var(--surface-2); color: var(--text); }
+.djo-action b { display: block; color: var(--text); font-size: 15px; }
 .djo-action small { display: block; font-size: 12px; color: var(--text-2); margin-top: 1px; }
-.djo-action .chev { margin-left: auto; color: var(--accent); font-size: 22px; }
+.djo-action .chev { margin-left: auto; color: var(--text-3); font-size: 22px; }
 .djo-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .djo-head b { font-size: 17px; }
 .djo-hist { display: flex; align-items: flex-end; gap: 3px; height: 96px; }
@@ -1433,3 +1433,10 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .wall-tag.inline { position: static; display: inline-flex; flex-direction: row; padding: 3px 8px; font-size: 12.5px; font-weight: 700; }
 @media (min-width: 1024px) { .friend-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .app { overflow-x: clip; }
+
+/* Start: Karte „Nächster Gig“ wie ein Flyer */
+.gig-card { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; padding: 12px; border-radius: var(--r-lg); background: var(--surface); color: var(--text); min-width: 0; }
+.gig-card .set-wall { width: 104px; flex: none; border-radius: 6px; }
+.gig-text { min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.gig-text b { font: 900 26px/1 var(--font-brand); font-stretch: 62%; font-variation-settings: "wdth" 62; text-transform: uppercase; margin-top: 4px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gig-text .sub { font-size: 13px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
