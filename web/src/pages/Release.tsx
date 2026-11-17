@@ -390,7 +390,7 @@ export default function ReleasePage() {
         {inColl > 0 && (
           <>
             <h2>In deiner Kiste</h2>
-            <div className="group">
+            <div className="group kiste">
               {copies.map((c, i) => (
                 <div key={c.instanceId} className="group-row grade-row">
                   <span style={{ width: 92 }} className="sub">
@@ -398,11 +398,11 @@ export default function ReleasePage() {
                   </span>
                   <button className="grade-pill" onClick={() => setGrading({ item: c, which: "media" })}>
                     <small>Platte</small>
-                    <b>{shortGrade(c.media) ?? "–"}</b>
+                    {c.media ? <b>{shortGrade(c.media)}</b> : <em>offen</em>}
                   </button>
                   <button className="grade-pill" onClick={() => setGrading({ item: c, which: "sleeve" })}>
                     <small>Hülle</small>
-                    <b>{shortGrade(c.sleeve) ?? "–"}</b>
+                    {c.sleeve ? <b>{shortGrade(c.sleeve)}</b> : <em>offen</em>}
                   </button>
                 </div>
               ))}
@@ -414,9 +414,9 @@ export default function ReleasePage() {
                       Bezahlt{copies.length > 1 ? ` ${i + 1}` : ""}
                     </span>
                     <input
-                      className="input mono"
+                      className="input"
                       inputMode="decimal"
-                      placeholder="z. B. 25"
+                      placeholder="eintragen"
                       defaultValue={paid ? formatPaid(paid.value, paid.currency).replace(/\s?€$/, "") : ""}
                       key={c.note ?? ""}
                       onBlur={(e) => {
@@ -450,7 +450,7 @@ export default function ReleasePage() {
                 <input
                   className="input"
                   style={{ background: "transparent", padding: 0, minHeight: 32 }}
-                  placeholder="z.B. Kallax 2 · Fach C"
+                  placeholder="z. B. Kallax 2, Fach C"
                   defaultValue={meta?.shelf ?? ""}
                   onBlur={(e) => setMeta({ shelf: e.target.value })}
                   key={meta?.shelf}
@@ -466,7 +466,7 @@ export default function ReleasePage() {
                 <input
                   className="input"
                   style={{ background: "transparent", padding: 0, minHeight: 32 }}
-                  placeholder="z.B. Freitag, Disco"
+                  placeholder="z. B. Freitag, Disco"
                   defaultValue={(meta?.crates ?? []).join(", ")}
                   onBlur={(e) => setMeta({ crates: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
                   key={(meta?.crates ?? []).join()}
