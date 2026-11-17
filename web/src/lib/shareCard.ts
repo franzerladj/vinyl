@@ -1,5 +1,6 @@
 // Teilen-Karten im Story-Format (1080 × 1920) für Profil und Sets, direkt im Browser gezeichnet.
 // Cover kommen über /api/img, weil Discogs-Bilder sonst das Canvas für den Export sperren.
+import { appInfo } from "./push";
 import QRCode from "qrcode";
 import type { CrateProfile } from "../../../shared/profile";
 import { linkText, LINK_LABEL } from "../../../shared/profile";
@@ -595,4 +596,46 @@ export function saveImage(blob: Blob, filename: string) {
   a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/** Ab App-Version 1.6 gibt die Android-App ein Bild direkt in den Story-Editor von Instagram */
+export const storyDirect = () => {
+  const a = appInfo();
+  return a.android && a.v >= 7;
+};
+
+/** PNG verkleinern: als JPEG ist die Karte ein Bruchteil so groß und schneller übertragen */
+async function toJpeg(blob: Blob): Promise<Blob> {
+  try {
+    const bmp = await createImageBitmap(blob);
+    const c = document.createElement("canvas");
+    c.width = bmp.width;
+    c.height = bmp.height;
+    c.getContext("2d")!.drawImage(bmp, 0, 0);
+    return await new Promise<Blob>((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("kein Bild"))), "image/jpeg", 0.92));
+  } catch {
+    return blob;
+  }
+}
+
+/**
+ * In die Story teilen. In der Android-App direkt in Instagram: das Bild liegt dafür höchstens
+ * 10 Minuten unter einer zufälligen Adresse auf dem Crate-Server und wird beim Abholen gelöscht.
+ * Überall sonst (iPhone, Browser) öffnet sich das Teilen-Menü mit dem Bild.
+ */
+export async function shareToStory(blob: Blob, filename: string): Promise<"story" | "shared" | "downloaded" | "cancelled"> {
+  if (storyDirect()) {
+    try {
+      const jpg = await toJpeg(blob);
+      const r = await fetch("/api/story", { method: "POST", credentials: "include", headers: { "Content-Type": jpg.type === "image/jpeg" ? "image/jpeg" : "image/png" }, body: jpg });
+      if (r.ok) {
+        const { id } = (await r.json()) as { id: string };
+        location.href = `intent://story?id=${id}#Intent;scheme=crate;package=de.feuerpfeil.crate;end`;
+        return "story";
+      }
+    } catch {
+      /* dann eben das Teilen-Menü */
+    }
+  }
+  return shareImage(blob, filename);
 }

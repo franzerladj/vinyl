@@ -334,6 +334,36 @@ app.get("/api/lastfm/tags", async (c) => {
   return c.json(await lastfmTags(c.var.cfg, c.req.query("artist") ?? "", c.req.query("track") ?? ""));
 });
 
+// ---------- Story-Bild für die Android-App ----------
+// Die Webseite kann ein Bild nicht direkt an Instagram geben. Sie legt es kurz hier ab (10 Minuten,
+// zufällige Adresse), die Android-App holt es einmal ab und reicht es an den Story-Editor weiter.
+const STORY_MAX = 3 * 1024 * 1024;
+app.post("/api/story", async (c) => {
+  if (!(await tokenSession(c))) return c.json({ message: "nicht angemeldet" }, 401);
+  const type = (c.req.header("content-type") ?? "").split(";")[0];
+  if (type !== "image/jpeg" && type !== "image/png") return c.json({ message: "nur Bilder" }, 415);
+  const buf = new Uint8Array(await c.req.arrayBuffer());
+  if (!buf.length || buf.length > STORY_MAX) return c.json({ message: "Bild zu groß" }, 413);
+  const id = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, "0")).join("");
+  let bin = "";
+  for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+  await c.var.cfg.kv.put(`story:${id}`, JSON.stringify({ t: type, d: btoa(bin) }), { expirationTtl: 600 });
+  return c.json({ id });
+});
+app.get("/api/story/:id", async (c) => {
+  const id = c.req.param("id");
+  if (!/^[a-f0-9]{32}$/.test(id)) return c.json({ message: "nicht gefunden" }, 404);
+  const raw = await c.var.cfg.kv.get(`story:${id}`);
+  if (!raw) return c.json({ message: "nicht gefunden" }, 404);
+  // Einmal abholen, dann ist es weg
+  await c.var.cfg.kv.delete(`story:${id}`);
+  const { t, d } = JSON.parse(raw) as { t: string; d: string };
+  const bin = atob(d);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return new Response(out, { headers: { "Content-Type": t, "Cache-Control": "no-store" } });
+});
+
 app.onError((err, c) => {
   console.error(err);
   return c.json({ message: err.message }, 500);

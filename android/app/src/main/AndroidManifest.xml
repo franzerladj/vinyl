@@ -9,6 +9,8 @@
     <!-- Chrome muss für CrateLauncherActivity sichtbar sein (Android 11+) -->
     <queries>
         <package android:name="com.android.chrome" />
+        <!-- Für das Teilen direkt in die Instagram-Story -->
+        <package android:name="com.instagram.android" />
     </queries>
 
     <application
@@ -61,6 +63,21 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="crate" android:host="notifications" />
+            </intent-filter>
+        </activity>
+
+        <!-- crate://story?id=...: Bild von der Webseite direkt in die Instagram-Story -->
+        <activity
+            android:name=".StoryShareActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="crate" android:host="story" />
             </intent-filter>
         </activity>
 

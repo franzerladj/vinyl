@@ -9,7 +9,7 @@ import { YearStory } from "../components/YearStory";
 import { IconPlay } from "../components/icons";
 import { db } from "../lib/db";
 import { toast, useStore } from "../lib/store";
-import { renderYearCard, shareImage } from "../lib/shareCard";
+import { renderYearCard, shareToStory } from "../lib/shareCard";
 import { durationSeconds } from "../../../shared/stylus";
 import { yearReview } from "../../../shared/year";
 
@@ -176,7 +176,7 @@ export default function YearPage() {
                     setSharing(true);
                     return;
                   }
-                  void shareImage(ready, `crate-${year}.png`).then((r) => r === "downloaded" && toast("Bild gespeichert"));
+                  void shareToStory(ready, `crate-${year}.png`).then((r) => r === "downloaded" && toast("Bild gespeichert"));
                 }}
               />
             )}

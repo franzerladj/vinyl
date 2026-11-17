@@ -148,3 +148,27 @@ describe("Angemeldet bleiben, wenn Discogs den Server bremst", () => {
     expect(await v.json()).toEqual({ username: "franz", verified: true });
   });
 });
+
+describe("Story-Bild für die Android-App", () => {
+  const img = { "Content-Type": "image/jpeg", Origin: ORIGIN, "Sec-Fetch-Site": "same-origin" };
+  it("nur angemeldet ablegen", async () => {
+    const anon = await req("/api/story", { method: "POST", headers: img, body: new Uint8Array([1, 2, 3]) });
+    expect(anon.status).toBe(401);
+  });
+  it("ablegen, genau einmal abholen, falsche Adressen gibt es nicht", async () => {
+    const put = await req("/api/story", { method: "POST", headers: { ...img, Cookie: await sessionCookie() }, body: new Uint8Array([255, 216, 255, 0, 7]) });
+    expect(put.status).toBe(200);
+    const { id } = (await put.json()) as { id: string };
+    expect(id).toMatch(/^[a-f0-9]{32}$/);
+    const first = await req(`/api/story/${id}`);
+    expect(first.status).toBe(200);
+    expect(first.headers.get("content-type")).toBe("image/jpeg");
+    expect([...new Uint8Array(await first.arrayBuffer())]).toEqual([255, 216, 255, 0, 7]);
+    expect((await req(`/api/story/${id}`)).status).toBe(404);
+    expect((await req(`/api/story/${"a".repeat(32)}`)).status).toBe(404);
+  });
+  it("nur Bilder", async () => {
+    const r = await req("/api/story", { method: "POST", headers: { ...img, "Content-Type": "text/html", Cookie: await sessionCookie() }, body: "<b>x</b>" });
+    expect(r.status).toBe(415);
+  });
+});

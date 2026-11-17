@@ -1,13 +1,17 @@
 // Vorschau einer Teilen-Karte mit „Teilen“ (Teilen-Menü des Handys, z. B. Instagram-Story) oder Speichern
 import { useEffect, useState } from "react";
 import { Sheet } from "./bits";
-import { saveImage, shareImage } from "../lib/shareCard";
+import { saveImage, shareImage, shareToStory, storyDirect } from "../lib/shareCard";
 import { toast } from "../lib/store";
+import { appInfo } from "../lib/push";
 
 export function ShareCardSheet({ open, onClose, make, filename, title }: { open: boolean; onClose: () => void; make: () => Promise<Blob>; filename: string; text?: string; title: string }) {
   const [blob, setBlob] = useState<Blob | null>(null);
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const direct = storyDirect();
+  const oldApp = appInfo().android && !direct;
   useEffect(() => {
     if (!open) return;
     let alive = true;
@@ -35,16 +39,21 @@ export function ShareCardSheet({ open, onClose, make, filename, title }: { open:
         {/* Das Bild hat Story-Format (1080 × 1920). Das Teilen-Menü des Handys öffnet sich direkt mit dem Bild. */}
         <button
           className="btn primary block lg"
-          disabled={!blob}
+          disabled={!blob || busy}
           onClick={async () => {
-            // Nur das Bild, ohne Text: so nimmt Instagram es direkt als Story an
-            const r = await shareImage(blob!, filename);
+            setBusy(true);
+            const r = await shareToStory(blob!, filename).finally(() => setBusy(false));
             if (r === "downloaded") toast("Bild gespeichert");
             if (r !== "cancelled") onClose();
           }}
         >
-          In die Story teilen
+          {busy ? "Wird vorbereitet …" : direct ? "In die Instagram-Story" : "In die Story teilen"}
         </button>
+        {direct && (
+          <button className="btn block" disabled={!blob} onClick={async () => (await shareImage(blob!, filename)) !== "cancelled" && onClose()}>
+            Woanders teilen
+          </button>
+        )}
         <button
           className="btn block"
           disabled={!blob}
@@ -55,7 +64,12 @@ export function ShareCardSheet({ open, onClose, make, filename, title }: { open:
         >
           Bild sichern
         </button>
-        <span className="tiny" style={{ textAlign: "center" }}>Im Menü „Instagram“ wählen, dann „Story“. Geht genauso mit WhatsApp-Status.</span>
+        {oldApp && (
+          <a className="tiny" style={{ textAlign: "center" }} href="/download/crate.apk">
+            Mit der neuen App-Version geht es direkt in die Instagram-Story. Hier laden und installieren.
+          </a>
+        )}
+        <span className="tiny" style={{ textAlign: "center" }}>{direct ? "Öffnet direkt den Story-Editor von Instagram." : "Im Menü „Instagram“ wählen, dann „Story“. Geht genauso mit WhatsApp-Status."}</span>
       </div>
     </Sheet>
   );
