@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
-import { db } from "../lib/db";
+import { db, type Release } from "../lib/db";
 import { isDiscoverable, searchPeople, setDiscoverable, type PersonHit } from "../lib/friends";
 import { Switch } from "../components/ui";
 import { ProfileHeader } from "../components/ProfileCard";
@@ -51,7 +51,14 @@ function FriendList() {
   const friends = useLiveQuery(async () => {
     const list = await db.friends.orderBy("addedAt").reverse().toArray();
     const [matches, tastes] = await Promise.all([Promise.all(list.map((f) => friendMatches(f.username))), Promise.all(list.map((f) => tasteMatch(f.username)))]);
-    return list.map((f, i) => ({ f, m: matches[i], taste: tastes[i] }));
+    // Neueste Platten je Freund für die Cover-Leiste
+    const covers = await Promise.all(
+      list.map(async (f) => {
+        const items = (await db.friendItems.where("username").equals(f.username).toArray()).filter((x) => x.kind === "coll").sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)).slice(0, 5);
+        return ((await db.releases.bulkGet(items.map((x) => x.releaseId))).filter(Boolean) as Release[]).map((r) => r.thumb || r.cover).filter(Boolean) as string[];
+      }),
+    );
+    return list.map((f, i) => ({ f, m: matches[i], taste: tastes[i], covers: covers[i] }));
   });
   const lent = useLiveQuery(async () => {
     const metas = await lentRecords();
@@ -205,27 +212,33 @@ function FriendList() {
         )}
 
         {friends?.length ? (
-          <div className="list rise">
-            {friends.map(({ f, m, taste }) => (
-              <Link key={f.username} to={`/friends/${encodeURIComponent(f.username)}`} viewTransition className="rec">
-                <Avatar src={f.avatar} name={f.username} />
-                <div className="rec-main">
-                  <div className="rec-title">{f.name || f.username}</div>
-                  <div className="rec-artist">
-                    {f.name ? `${f.username}` : ""}
-                    {f.location ? `${f.name ? " · " : ""}${f.location}` : ""}
+          <div className="friend-cards rise">
+            {friends.map(({ f, m, taste, covers }) => (
+              <Link key={f.username} to={`/friends/${encodeURIComponent(f.username)}`} viewTransition className="friend-card press">
+                <div className="friend-card-head">
+                  <Avatar src={f.avatar} name={f.username} size={44} />
+                  <div className="friend-card-who">
+                    <b>{f.name || f.username}</b>
+                    <span className="sub">
+                      {[f.name ? f.username : null, f.location, f.collectionPrivate ? "Sammlung privat" : f.numCollection != null ? `${f.numCollection} Platten` : f.lastSync ? null : "wird geladen …"].filter(Boolean).join(" · ")}
+                    </span>
                   </div>
-                  <div className="rec-meta">
-                    <span>{f.collectionPrivate ? "Sammlung privat" : f.numCollection != null ? `${f.numCollection} Platten` : f.lastSync ? "" : "wird geladen …"}</span>
-                    <span>{f.wantsPrivate ? "Wantlist privat" : f.numWantlist != null ? `${f.numWantlist} Wants` : ""}</span>
+                  {taste.score != null && <span className="friend-taste">{taste.score} %</span>}
+                </div>
+                {covers.length > 0 && (
+                  <div className="friend-covers">
+                    {covers.map((src, i) => (
+                      <img key={i} src={src} alt="" loading="lazy" decoding="async" />
+                    ))}
                   </div>
-                </div>
-                <div className="rec-side stack" style={{ gap: 4, alignItems: "flex-end" }}>
-                  {social?.out.some((x) => x.toLowerCase() === f.username.toLowerCase()) && <span className="badge">Anfrage offen</span>}
-                  {m.hasYourWants.length > 0 && <span className="badge ok">hat {m.hasYourWants.length} deiner Wants</span>}
-                  {m.wantsYours.length > 0 && <span className="badge accent">sucht {m.wantsYours.length} von dir</span>}
-                  {taste.score != null && <span className="tiny">Geschmack {taste.score} %</span>}
-                </div>
+                )}
+                {(m.hasYourWants.length > 0 || m.wantsYours.length > 0 || social?.out.some((x) => x.toLowerCase() === f.username.toLowerCase())) && (
+                  <div className="friend-card-tags">
+                    {m.hasYourWants.length > 0 && <span className="wall-tag inline">hat {m.hasYourWants.length} deiner Wants</span>}
+                    {m.wantsYours.length > 0 && <span className="badge">sucht {m.wantsYours.length} von dir</span>}
+                    {social?.out.some((x) => x.toLowerCase() === f.username.toLowerCase()) && <span className="badge">Anfrage offen</span>}
+                  </div>
+                )}
               </Link>
             ))}
           </div>
