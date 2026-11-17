@@ -1403,3 +1403,18 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .wall-tag span { font-size: 12.5px; font-weight: 600; opacity: 0.75; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .home-wall > a:nth-child(n + 7) { display: none; }
 @media (min-width: 1024px) { .home-wall { grid-template-columns: repeat(6, minmax(0, 1fr)); } .home-wall > a:nth-child(n + 7) { display: block; } }
+
+/* Sets als Cover-Kacheln: je Set die Platten der ersten Tracks */
+.set-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 12px; }
+.set-tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; color: var(--text); }
+.set-tile b { margin-top: 8px; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.set-tile .sub { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.set-wall { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: var(--surface-2); display: grid; gap: 2px; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.set-wall img { width: 100%; height: 100%; object-fit: cover; display: block; min-width: 0; min-height: 0; }
+.set-wall.n1 img { grid-column: 1 / -1; grid-row: 1 / -1; }
+.set-wall.n2 img { grid-row: 1 / -1; }
+.set-wall.n3 img:first-child { grid-row: 1 / -1; }
+.set-count { grid-column: 1 / -1; grid-row: 1 / -1; display: grid; place-items: center; font-size: 14px; font-weight: 600; color: var(--text-3); }
+.set-when { top: 8px; bottom: auto; padding: 4px 8px; font-size: 12.5px; font-weight: 700; }
+@media (min-width: 700px) { .set-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .set-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
