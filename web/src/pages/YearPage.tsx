@@ -1,10 +1,12 @@
 // Jahresrückblick: dein Jahr auf Platte, mit Story-Karte zum Teilen
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { NavBar } from "../components/ui";
 import { Cover, Empty, keepParens, SkeletonRows } from "../components/bits";
 import { ShareCardSheet } from "../components/ShareCard";
+import { YearStory } from "../components/YearStory";
+import { IconPlay } from "../components/icons";
 import { db } from "../lib/db";
 import { useStore } from "../lib/store";
 import { renderYearCard } from "../lib/shareCard";
@@ -18,6 +20,7 @@ export default function YearPage() {
   const year = Number(useParams().year) || reviewYear();
   const me = useStore((s) => s.me);
   const [sharing, setSharing] = useState(false);
+  const [story, setStory] = useState(false);
   const data = useLiveQuery(async () => {
     const [collection, sets, tracks] = await Promise.all([db.collection.toArray(), db.sets.toArray(), db.tracks.toArray()]);
     const ids = [...new Set([...collection.map((c) => c.releaseId), ...tracks.map((t) => t.releaseId)])];
@@ -36,6 +39,19 @@ export default function YearPage() {
       },
     });
   }, [year]);
+  // Beim ersten Öffnen eines Jahres spielt die Story von selbst
+  const hasData = Boolean(data && (data.added > 0 || data.sets > 0));
+  useEffect(() => {
+    if (!hasData) return;
+    const k = `crate:year-story:${year}`;
+    try {
+      if (localStorage.getItem(k)) return;
+      localStorage.setItem(k, "1");
+    } catch {
+      return;
+    }
+    if (!(navigator as Navigator & { webdriver?: boolean }).webdriver || new URLSearchParams(location.search).has("story")) setStory(true);
+  }, [hasData, year]);
   const card = useMemo(
     () =>
       data && {
@@ -65,6 +81,13 @@ export default function YearPage() {
           <Empty title="Noch nicht viel passiert">Sobald du in diesem Jahr Platten hinzufügst oder Sets spielst, steht hier dein Rückblick.</Empty>
         ) : data ? (
           <>
+            <button className="year-play press" onClick={() => setStory(true)}>
+              <div>
+                <b>Rückblick abspielen</b>
+                <span>Dein Jahr als Story, Seite für Seite</span>
+              </div>
+              <IconPlay />
+            </button>
             <div className="grid3">
               <div className="stat">
                 <b>{data.added}</b>
@@ -129,6 +152,18 @@ export default function YearPage() {
             <button className="btn primary block lg" onClick={() => setSharing(true)}>
               Als Story teilen
             </button>
+            {story && data && (
+              <YearStory
+                data={data}
+                year={year}
+                name={me?.username ?? ""}
+                onClose={() => setStory(false)}
+                onShare={() => {
+                  setStory(false);
+                  setSharing(true);
+                }}
+              />
+            )}
             {card && (
               <ShareCardSheet open={sharing} onClose={() => setSharing(false)} title={`Dein Jahr ${year}`} filename={`crate-${year}.png`} text={`Mein Jahr auf Platte ${year}`} make={() => renderYearCard(card)} />
             )}
