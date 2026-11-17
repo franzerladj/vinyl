@@ -7,7 +7,7 @@ export const SYNC_TABLES = ["tracks", "sets", "recordMeta", "wantMeta", "sellers
 export type SyncTable = (typeof SYNC_TABLES)[number];
 
 /** Gerätedaten im Schlüssel-Wert-Speicher, die mitwandern (Einstellungen des Geräts selbst bleiben lokal) */
-export const SYNC_KV = new Set(["crateTemplates", "digLiked", "digWeights", "digSkipped", "digFilter", "stylus", "shopSettings", "printOpts", "currency"]);
+export const SYNC_KV = new Set(["crateTemplates", "digLiked", "digWeights", "digTaste", "digSkipped", "digFilter", "stylus", "shopSettings", "printOpts", "currency"]);
 
 export type Patch = Record<string, unknown>;
 

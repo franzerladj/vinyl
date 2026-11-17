@@ -4,40 +4,104 @@ import { discogs } from "./api";
 import { db, getKV, setKV } from "./db";
 import type { SearchResult } from "./types";
 import { currency } from "./sync";
-import { decadeLabel, decadeYears, emptyWeights, inDecade, learn, mix, splitTitle, top, type DigAction, type DigCard, type DigSource, type DigWeights } from "../../../shared/dig";
+import { decadeLabel, decadeYears, inDecade, splitTitle, type DigAction, type DigCard, type DigSource, type DigWeights } from "../../../shared/dig";
+import { arrange, emptyTaste, features, forget, learnTaste, sample, seedTaste, topTaste, viewReward, type SessionEvent, type Signal, type Taste } from "../../../shared/taste";
 
 const FALLBACK_STYLES = ["Deep House", "Disco", "Soul", "Jazz-Funk", "Techno", "Boogie", "House", "Funk"];
 const SEEN_MAX = 4000;
 
-export async function loadWeights(): Promise<DigWeights> {
-  const saved = await getKV<DigWeights | null>("digWeights", null);
-  if (saved) return saved;
-  // Erster Start: Vorlieben aus der Sammlung ableiten
+// Stile zum Erkunden: was im Profil noch kaum vorkommt, kommt hieraus
+const EXPLORE = ["Deep House", "Disco", "Soul", "Jazz-Funk", "Techno", "Boogie", "House", "Funk", "Italo-Disco", "Dub", "Electro", "Acid House", "Ambient", "Balearic", "Afrobeat", "Leftfield", "Minimal", "Detroit Techno", "Garage House", "Broken Beat", "Downtempo", "Jazz", "Latin Jazz", "Synth-pop", "Dub Techno", "Breaks", "UK Garage", "Electro House", "Experimental", "New Wave", "Post-Punk", "Library Music", "Psychedelic Rock", "Reggae", "Hip Hop", "Bossa Nova", "Gospel", "Afro-Cuban", "Highlife", "Cosmic Disco"];
+
+let tasteCache: Taste | null = null;
+let tasteAt = 0;
+/** Laufende Sitzung: was gerade zieht (nur im Speicher, wie das Kurzzeit-Gedächtnis eines Feeds) */
+const session: SessionEvent[] = [];
+export const digSession = () => session;
+
+/** Geschmacksprofil laden. Beim ersten Mal aus der Sammlung und dem alten Profil ableiten. */
+export async function loadTaste(): Promise<Taste> {
+  // Kurz zwischenspeichern; danach neu lesen (ein anderes Gerät kann das Profil geändert haben)
+  if (tasteCache && Date.now() - tasteAt < 20000) return tasteCache;
+  tasteAt = Date.now();
+  const saved = await getKV<Taste | null>("digTaste", null);
+  if (saved?.v === 2) return (tasteCache = saved);
   const ids = [...new Set((await db.collection.toArray()).map((c) => c.releaseId))];
-  const rels = (await db.releases.bulkGet(ids)).filter(Boolean);
-  const w = emptyWeights();
-  const count = (m: Record<string, number>, k?: string) => k && (m[k] = (m[k] ?? 0) + 1);
-  for (const r of rels) {
-    r!.styles.slice(0, 3).forEach((s) => count(w.style, s));
-    count(w.label, r!.labels[0]?.name.replace(/\s\(\d+\)$/, ""));
-    count(w.artist, r!.artist);
+  const rels = (await db.releases.bulkGet(ids)).filter(Boolean).map((r) => ({ styles: r!.styles, label: r!.labels[0]?.name.replace(/\s\(\d+\)$/, ""), artist: r!.artist, year: r!.year ? String(r!.year) : undefined, country: r!.country }));
+  let t = rels.length ? seedTaste(rels) : emptyTaste();
+  // Altes Profil (Gewichte aus Likes, Wants, Skips) mitnehmen
+  const old = await getKV<DigWeights | null>("digWeights", null);
+  if (old) {
+    const now = Date.now();
+    const add = (k: string, v: number) => {
+      const cur = t.f[k] ?? { s: 0, n: 0, t: now };
+      t = { ...t, f: { ...t.f, [k]: { s: cur.s + v * 0.5, n: cur.n + Math.min(6, Math.abs(v) * 0.3), t: now } } };
+    };
+    for (const [k, v] of Object.entries(old.style)) add(`s:${k}`, v);
+    for (const [k, v] of Object.entries(old.label)) add(`l:${k}`, v * 0.8);
+    for (const [k, v] of Object.entries(old.artist)) add(`a:${k}`, v * 0.7);
   }
-  // Auf 0 bis 6 skalieren, damit Lernen schnell wirkt
-  for (const m of [w.style, w.label, w.artist]) {
-    const max = Math.max(1, ...Object.values(m));
-    for (const k of Object.keys(m)) m[k] = Math.round((m[k] / max) * 6 * 10) / 10;
-  }
-  return w;
+  tasteCache = t;
+  await setKV("digTaste", t);
+  return t;
 }
 
-// Lesen, ändern, schreiben jeweils in einer Transaktion: bei schnellem Wischen laufen mehrere Aktionen
-// gleichzeitig, sonst überschreibt die zweite, was die erste gelernt hat.
-export function recordAction(c: DigCard, action: DigAction) {
+/** Profil von einem anderen Gerät übernommen: Zwischenspeicher verwerfen */
+export const dropTasteCache = () => void (tasteCache = null);
+
+async function learnNow(c: DigCard, signal: Signal, opts: { seconds?: number; listened?: number } = {}) {
+  const r = signal === "view" ? viewReward(opts.seconds ?? 0, opts.listened ?? 0) : ({ like: 2.5, unlike: -2.5, want: 3, collect: 3, more: 2, skip: -2, share: 2, detail: 0.6, video: 0.8 } as const)[signal];
+  session.push({ keys: features(c), r });
+  if (session.length > 60) session.splice(0, session.length - 60);
+  // Lesen, ändern, schreiben in einer Transaktion: schnelles Wischen löst mehrere Aktionen gleichzeitig aus
   return db.transaction("rw", db.kv, db.collection, db.releases, async () => {
-    const w = learn(await loadWeights(), c, action);
-    await setKV("digWeights", w);
-    return w;
+    tasteCache = null;
+    const t = learnTaste(await loadTaste(), c, signal, opts);
+    tasteCache = t;
+    await setKV("digTaste", t);
+    return t;
   });
+}
+
+/** Knopf-Aktionen: Like, Want, Mehr davon, Weg … */
+export function recordAction(c: DigCard, action: DigAction) {
+  if (action === "dwell") return Promise.resolve(tasteCache);
+  return learnNow(c, action);
+}
+
+/** Stilles Signal beim Weiterwischen: wie lange angeschaut, wie lange mitgehört */
+export function recordView(c: DigCard, seconds: number, listened: number) {
+  return learnNow(c, "view", { seconds, listened });
+}
+
+/** Kleine Signale: Tracklist geöffnet, Video gestartet, geteilt */
+export function recordSignal(c: DigCard, s: "detail" | "video" | "share") {
+  return learnNow(c, s);
+}
+
+/** Restliche Karten nach dem aktuellen Stand neu ordnen (nach jeder Reaktion) */
+export async function rearrange(rest: DigCard[], before: DigCard[]): Promise<DigCard[]> {
+  return arrange(await loadTaste(), rest, session, { before });
+}
+
+/** Lieblings-Styles fürs Kopfband */
+export async function favoriteStyles(n = 8): Promise<string[]> {
+  return topTaste(await loadTaste(), "s", n).map((x) => x.key);
+}
+
+export async function forgetTaste(key: string) {
+  const t = forget(await loadTaste(), key);
+  tasteCache = t;
+  await setKV("digTaste", t);
+  return t;
+}
+
+export async function resetTaste() {
+  tasteCache = null;
+  session.length = 0;
+  await setKV("digTaste", null);
+  await setKV("digWeights", null);
+  return loadTaste();
 }
 
 export function markSeen(id: number) {
@@ -120,45 +184,58 @@ export interface DigFilter {
   maxPrice?: number;
 }
 
-/** Neue Runde Karten aus allen Quellen holen und mischen */
-export async function buildQueue(f: DigFilter = {}, exclude: Set<number> = new Set()): Promise<DigCard[]> {
-  const w = await loadWeights();
+/** Neue Runde Karten: Quellen nach dem Geschmacksprofil ziehen, dann für dich ordnen */
+export async function buildQueue(f: DigFilter = {}, exclude: Set<number> = new Set(), before: DigCard[] = []): Promise<DigCard[]> {
+  const t = await loadTaste();
   const enc = encodeURIComponent;
-  const myStyles = top(w.style, 8);
-  const styles = f.style ? [f.style] : myStyles.length ? myStyles : FALLBACK_STYLES;
-  const [s1, s2, s3] = pick(styles, 3).concat(pick(FALLBACK_STYLES, 3));
+  const rnd = (n: number) => 1 + Math.floor(Math.random() * n);
+  // Stärkere Vorlieben öfter ziehen, aber nicht immer dieselben (Gewicht wächst exponentiell)
+  const favStyles = topTaste(t, "s", 14).map((x) => ({ item: x.key, weight: Math.exp(x.value * 1.5) }));
+  const pickStyle = () => f.style ?? sample(favStyles) ?? EXPLORE[Math.floor(Math.random() * 8)];
+  const s1 = pickStyle();
+  let s2 = pickStyle();
+  if (s2 === s1 && !f.style) s2 = pickStyle();
+  // Erkunden: ein Style, den das Profil kaum kennt
+  const unknown = EXPLORE.filter((s) => (t.f[`s:${s}`]?.n ?? 0) < 2);
+  const sx = f.style ?? unknown[Math.floor(Math.random() * unknown.length)] ?? EXPLORE[Math.floor(Math.random() * EXPLORE.length)];
+  const favLabel = sample(topTaste(t, "l", 12).map((x) => ({ item: x.key, weight: Math.exp(x.value) })));
+  const favDecade = sample(topTaste(t, "d", 4).map((x) => ({ item: Number(x.key), weight: Math.exp(x.value) })));
   const year = new Date().getFullYear();
   const dec = f.decade;
-  const ys = dec ? decadeYears(dec, 4) : [];
-  const yearParam = (i: number) => (dec ? `&year=${ys[i % ys.length]}` : "");
-  const jobs: Promise<DigCard[]>[] = dec
-    ? [
-        search(`style=${enc(s1)}${yearParam(0)}`, "random", `${s1} aus den ${decadeLabel(dec)}`),
-        search(`style=${enc(s1)}${yearParam(1)}&page=2`, "random", `${s1} aus den ${decadeLabel(dec)}`),
-        search(`style=${enc(s2)}${yearParam(2)}&page=${1 + Math.floor(Math.random() * 3)}`, "rare", `Gesucht in ${s2}`).then((cs) =>
-          cs.filter((c) => (c.want ?? 0) > 30 && (c.want ?? 0) / Math.max(1, c.have ?? 0) > 1),
-        ),
-        search(`style=${enc(s3)}${yearParam(3)}&page=${1 + Math.floor(Math.random() * 5)}`, "random", `Zufallsfund ${s3}`),
-      ]
-    : [
-        search(`style=${enc(s1)}&year=${year}`, "new", `Neu in ${s1}`),
-        search(`style=${enc(s1)}&year=${year - 1}`, "new", `Neu in ${s1}`),
-        search(`style=${enc(s2)}&page=${1 + Math.floor(Math.random() * 5)}`, "rare", `Gesucht in ${s2}`).then((cs) =>
-          cs.filter((c) => (c.want ?? 0) > 50 && (c.want ?? 0) / Math.max(1, c.have ?? 0) > 1.2),
-        ),
-        search(`style=${enc(s3)}&page=${1 + Math.floor(Math.random() * 20)}`, "random", `Zufallsfund ${s3}`),
-      ];
+  const ys = dec ? decadeYears(dec, 4) : favDecade ? decadeYears(favDecade, 2) : [];
+  const decYear = (i: number) => (ys.length ? `&year=${ys[i % ys.length]}` : "");
+  const jobs: Promise<DigCard[]>[] = [
+    search(`style=${enc(s1)}${dec ? decYear(0) : ""}&page=${rnd(4)}`, "foryou", `Für dich: ${s1}`),
+    dec
+      ? search(`style=${enc(s2)}${decYear(1)}&page=${rnd(2)}`, "foryou", `${s2} aus den ${decadeLabel(dec)}`)
+      : search(`style=${enc(s1)}&year=${year - Math.floor(Math.random() * 2)}`, "new", `Neu in ${s1}`),
+    search(`style=${enc(s2)}${dec ? decYear(2) : ""}&page=${rnd(5)}`, "rare", `Gesucht in ${s2}`).then((cs) => cs.filter((c) => (c.want ?? 0) > 30 && (c.want ?? 0) / Math.max(1, c.have ?? 0) > 1)),
+    search(`style=${enc(sx)}${dec ? decYear(3) : ""}&page=${rnd(8)}`, "random", f.style ? `Zufallsfund ${sx}` : `Mal was anderes: ${sx}`),
+  ];
+  if (favLabel) jobs.push(search(`label=${enc(favLabel)}&page=${rnd(2)}`, "foryou", `Weil du ${favLabel} magst`));
+  if (!dec && favDecade && ys.length) jobs.push(search(`style=${enc(s2)}${decYear(0)}`, "foryou", `${s2} aus den ${decadeLabel(favDecade)}`));
+  if (!f.style && !dec) jobs.push(friendCards());
   const sources = await Promise.all(jobs);
-  const [owned, wanted, skipped] = await Promise.all([
+  const [owned, wanted, skipped, seen] = await Promise.all([
     db.collection.toArray().then((c) => c.map((x) => x.releaseId)),
     db.wants.toCollection().primaryKeys(),
     getKV<number[]>("digSkipped", []),
+    getKV<number[]>("digSeen", []),
   ]);
   const ex = new Set([...exclude, ...owned, ...wanted, ...skipped]);
-  // Style-Filter: auch Label- und Freunde-Karten müssen passen
-  // Jahrzehnt: auch Label-, Artist- und Freunde-Karten müssen passen
-  const filtered = sources.map((s) => s.filter((c) => (!f.style || c.styles.includes(f.style)) && inDecade(c.year, f.decade)));
-  return mix(filtered, w, ex);
+  const seenSet = new Set(seen.slice(-1500));
+  const all = new Map<number, DigCard>();
+  for (const c of sources.flat()) {
+    if (ex.has(c.id) || all.has(c.id)) continue;
+    // Stil- und Jahrzehnt-Filter gelten für alle Quellen (auch Label und Freunde)
+    if ((f.style && !c.styles.includes(f.style)) || !inDecade(c.year, f.decade)) continue;
+    all.set(c.id, c);
+  }
+  // Schon Gesehenes nur, wenn sonst kaum etwas da ist
+  let list = [...all.values()];
+  const fresh = list.filter((c) => !seenSet.has(c.id));
+  if (fresh.length >= 8) list = fresh;
+  return arrange(t, list, session, { before });
 }
 
 /** „Mehr davon“: gleiche Label, Artist und Style */
@@ -167,8 +244,9 @@ export async function moreLike(c: DigCard, exclude: Set<number>): Promise<DigCar
   const jobs = [search(`artist=${enc(c.artist)}`, "foryou", `Mehr von ${c.artist}`)];
   if (c.label) jobs.push(search(`label=${enc(c.label)}`, "foryou", `Mehr von ${c.label}`));
   if (c.styles[0]) jobs.push(search(`style=${enc(c.styles[0])}&year=${c.year ?? ""}`, "foryou", `Mehr ${c.styles[0]}`));
-  const w = await loadWeights();
-  return mix(await Promise.all(jobs), w, exclude).slice(0, 12);
+  const seen = new Set<number>();
+  const list = (await Promise.all(jobs)).flat().filter((x) => !exclude.has(x.id) && !seen.has(x.id) && (seen.add(x.id), true));
+  return arrange(await loadTaste(), list, session, { before: [c] }).slice(0, 12);
 }
 
 export interface DigDetail {

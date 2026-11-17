@@ -5,7 +5,8 @@ import { useEffect, useRef, useState } from "react";
 import { MenuSheet } from "../components/ui";
 import { DigCoach } from "../components/DigCoach";
 import { useNavigate } from "react-router-dom";
-import { buildQueue, digDetail, likedCards, loadWeights, markSeen, markSkipped, moreLike, recordAction, setLiked, type DigDetail, type DigFilter } from "../lib/dig";
+import { buildQueue, digDetail, favoriteStyles, likedCards, markSeen, markSkipped, moreLike, rearrange, recordAction, recordSignal, recordView, setLiked, type DigDetail, type DigFilter } from "../lib/dig";
+import { TasteSheet } from "../components/TasteSheet";
 import { previewUrl } from "../lib/free";
 import { addToCollection, addWant } from "../lib/sync";
 import { discogsSellUrl, money } from "../lib/format";
@@ -14,7 +15,7 @@ import { getKV, setKV } from "../lib/db";
 import { ytConsent } from "../lib/theme";
 import { haptic, keepParens, DiscogsCredit, useRootClass } from "../components/bits";
 import { IconBack, IconCart, IconFilter, IconHeart, IconPause, IconPlay, IconPlus, IconShare, IconMore, IconSleeves, IconThumb, IconX } from "../components/icons";
-import { DECADES, decadeLabel, passesPrice, top, type DigCard } from "../../../shared/dig";
+import { DECADES, decadeLabel, passesPrice, type DigCard } from "../../../shared/dig";
 import { parseDuration } from "../../../shared/match";
 
 type Audio = "idle" | "loading" | "playing" | "paused" | "none";
@@ -39,6 +40,9 @@ export default function Dig() {
   const [liked, setLikedIds] = useState<Set<number>>(new Set());
   const [likedOpen, setLikedOpen] = useState(false);
   const [moreMenu, setMoreMenu] = useState(false);
+  const [tasteOpen, setTasteOpen] = useState(false);
+  // Mithören zählt fürs Profil: Zeit, in der die Hörprobe der aktuellen Karte lief
+  const listen = useRef<{ start: number | null; acc: number }>({ start: null, acc: 0 });
   const [likedList, setLikedList] = useState<Awaited<ReturnType<typeof likedCards>>>([]);
   useEffect(() => {
     void likedCards().then((l) => {
@@ -62,8 +66,7 @@ export default function Dig() {
   // Start: gemerkten Filter und Lieblings-Styles laden
   useEffect(() => {
     void (async () => {
-      const w = await loadWeights();
-      setStyles(top(w.style, 8));
+      setStyles(await favoriteStyles(8));
       const f = await getKV<DigFilter>("digFilter", {});
       setFilter(f);
       setCards(await buildQueue(f));
@@ -103,6 +106,24 @@ export default function Dig() {
     if (!current) return;
     const started = Date.now();
     shownAt.current = started;
+    listen.current = { start: null, acc: 0 };
+    // Nach der Reaktion auf die letzte Karte den Rest neu ordnen (sichtbar bleibt alles bis zur nächsten Karte)
+    const reorder = setTimeout(() => {
+      setCards((cs) => {
+        const i = cs.findIndex((c) => c.id === current.id);
+        if (i < 0 || cs.length - i < 4) return cs;
+        void rearrange(cs.slice(i + 2), cs.slice(0, i + 2)).then((rest) =>
+          setCards((now) => {
+            const j = now.findIndex((c) => c.id === current.id);
+            const tail = now.slice(j + 2);
+            // Nur übernehmen, wenn sich inzwischen nichts geändert hat
+            if (j !== i || tail.length !== rest.length || tail.some((c) => !rest.includes(c))) return now;
+            return [...now.slice(0, j + 2), ...rest];
+          }),
+        );
+        return cs;
+      });
+    }, 350);
     setVideo(null);
     void markSeen(current.id);
     let cancelled = false;
@@ -125,13 +146,19 @@ export default function Dig() {
     );
     if (cards.length - active < 5 && !loadingMore.current) {
       loadingMore.current = true;
-      buildQueue(filter, new Set(cards.map((c) => c.id)))
+      buildQueue(filter, new Set(cards.map((c) => c.id)), cards.slice(-3))
         .then((more) => setCards((cs) => [...cs, ...more.filter((m) => !cs.some((c) => c.id === m.id))]))
         .finally(() => (loadingMore.current = false));
     }
     return () => {
       cancelled = true;
-      if (Date.now() - started > 8000) void recordAction(current, "dwell");
+      clearTimeout(reorder);
+      const now = Date.now();
+      const l = listen.current;
+      const listened = (l.acc + (l.start ? now - l.start : 0)) / 1000;
+      listen.current = { start: null, acc: 0 };
+      // Jede Karte zählt still mit: kurz gesehen = eher nein, lange gehört = ja
+      void recordView(current, (now - started) / 1000, listened);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id]);
@@ -145,9 +172,22 @@ export default function Dig() {
   // Audio-Ereignisse
   useEffect(() => {
     const a = audio.current!;
-    const on = () => setAudioState("playing");
-    const off = () => setAudioState((s) => (s === "none" ? s : "paused"));
-    const err = () => setAudioState("none");
+    const stop = () => {
+      const l = listen.current;
+      if (l.start) listen.current = { start: null, acc: l.acc + Date.now() - l.start };
+    };
+    const on = () => {
+      if (!listen.current.start) listen.current.start = Date.now();
+      setAudioState("playing");
+    };
+    const off = () => {
+      stop();
+      setAudioState((s) => (s === "none" ? s : "paused"));
+    };
+    const err = () => {
+      stop();
+      setAudioState("none");
+    };
     a.addEventListener("playing", on);
     a.addEventListener("pause", off);
     a.addEventListener("error", err);
@@ -267,6 +307,7 @@ export default function Dig() {
   };
 
   const share = async (c: DigCard) => {
+    void recordSignal(c, "share");
     const url = `https://www.discogs.com/release/${c.id}`;
     try {
       if (navigator.share) await navigator.share({ title: `${c.artist} – ${c.title}`, url });
@@ -426,7 +467,7 @@ export default function Dig() {
                         <div className="dig-sound">
                           {audioState === "none" ? (
                             d?.video ? (
-                              <button onClick={() => setVideo(d.video!)}>
+                              <button onClick={() => (setVideo(d.video!), void recordSignal(c, "video"))}>
                                 <IconPlay /> Video ansehen
                               </button>
                             ) : (
@@ -440,12 +481,12 @@ export default function Dig() {
                             </button>
                           )}
                           {d && d.tracks.length > 0 && (
-                            <button className="dig-link" onClick={() => setSheet(c.id)}>
+                            <button className="dig-link" onClick={() => (setSheet(c.id), void recordSignal(c, "detail"))}>
                               {d.tracks.length} Tracks
                             </button>
                           )}
                           {d?.video && audioState !== "none" && !video && (
-                            <button className="dig-link" onClick={() => setVideo(d.video!)}>
+                            <button className="dig-link" onClick={() => (setVideo(d.video!), void recordSignal(c, "video"))}>
                               Video
                             </button>
                           )}
@@ -501,10 +542,12 @@ export default function Dig() {
             { label: "Hab ich, in die Sammlung", icon: <IconPlus />, onClick: () => (setMoreMenu(false), void collect(current)) },
             { label: "Bei Discogs kaufen", icon: <IconCart />, onClick: () => (setMoreMenu(false), window.open(discogsSellUrl(current.id), "_blank", "noopener")) },
             { label: "Teilen", icon: <IconShare />, onClick: () => (setMoreMenu(false), void share(current)) },
+            { label: "Dein Geschmack", icon: <IconSleeves />, onClick: () => (setMoreMenu(false), setTasteOpen(true)) },
             { label: "Zur Platten-Seite", icon: <IconPlay />, onClick: () => nav(`/release/${current.id}`, { viewTransition: true }) },
           ]}
         />
       )}
+      <TasteSheet open={tasteOpen} onClose={() => setTasteOpen(false)} onChanged={() => void favoriteStyles(8).then(setStyles)} />
       {likedOpen && (
         <div className="dig-sheet-bg" onClick={() => setLikedOpen(false)}>
           <div className="dig-sheet stack" onClick={(e) => e.stopPropagation()}>
