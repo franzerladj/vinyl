@@ -96,12 +96,23 @@ export function RecordRow({ r, side, to }: { r: Release; side?: React.ReactNode;
   );
 }
 
+/** Schalter am <html>: ersetzt teure :has()-Regeln (die bei jeder Änderung den ganzen Baum prüfen) */
+export function useRootClass(name: string, on: boolean) {
+  useEffect(() => {
+    if (!on) return;
+    document.documentElement.classList.add(name);
+    return () => document.documentElement.classList.remove(name);
+  }, [name, on]);
+}
+
 export function Jobs() {
   const jobs = useStore((s) => s.jobs);
   const loc = useLocation();
   const toastMsg = useStore((s) => s.toast);
   const update = useStore((s) => s.updateReady);
   const list = Object.values(jobs);
+  const showJobs = list.length > 0 && loc.pathname !== "/" && loc.pathname !== "/scan";
+  useRootClass("has-jobs", showJobs);
   return (
     <>
       <AskDialog />
@@ -115,7 +126,7 @@ export function Jobs() {
           {toastMsg}
         </div>
       )}
-      {list.length > 0 && loc.pathname !== "/" && loc.pathname !== "/scan" && (
+      {showJobs && (
         <div className="jobs" aria-live="polite">
           {(() => {
             const done = list.reduce((a, j) => a + j.done, 0);
@@ -325,22 +336,12 @@ export function useDebounced<T>(value: T, ms = 300) {
 
 /** iOS-Segmented-Control mit gleitendem Indikator */
 export function Seg<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null);
-  useLayoutEffect(() => {
-    const measure = () => {
-      const i = options.findIndex(([v]) => v === value);
-      const btn = ref.current?.querySelectorAll("button")[i];
-      if (btn) setThumb({ left: btn.offsetLeft, width: btn.offsetWidth });
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    if (ref.current) ro.observe(ref.current);
-    return () => ro.disconnect();
-  }, [value, options]);
+  // Alle Felder sind gleich breit: der Schieber wird nur verschoben, nichts wird vermessen.
+  // (Messen zwang den Browser, die ganze neue Seite mitten im Seitenwechsel durchzurechnen.)
+  const i = Math.max(0, options.findIndex(([v]) => v === value));
   return (
-    <div className="seg" ref={ref} role="tablist">
-      {thumb && <span className="seg-thumb" style={{ left: 0, width: thumb.width, transform: `translateX(${thumb.left}px)` }} />}
+    <div className="seg" role="tablist" style={{ "--seg-n": options.length } as React.CSSProperties}>
+      <span className="seg-thumb" style={{ transform: `translateX(${i * 100}%)` }} />
       {options.map(([v, l]) => (
         <button
           key={v}

@@ -209,8 +209,8 @@ details[open] > summary::after { transform: rotate(270deg); }
 .chip.on { background: var(--text); color: var(--bg); }
 .chip.on .sub { color: inherit; opacity: 0.6; }
 .seg { position: relative; display: flex; background: var(--surface-2); border-radius: 10px; padding: 2px; isolation: isolate; }
-.seg button { position: relative; z-index: 1; flex: 1; border: 0; background: transparent; min-height: 32px; padding: 0 10px; font-size: 13.5px; font-weight: 600; color: var(--text); cursor: pointer; white-space: nowrap; }
-.seg-thumb { position: absolute; z-index: 0; top: 2px; bottom: 2px; border-radius: 8px; background: var(--seg-thumb); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); transition: transform 0.45s var(--spring), width 0.45s var(--spring); will-change: transform; }
+.seg button { position: relative; z-index: 1; flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; border: 0; background: transparent; min-height: 32px; padding: 0 10px; font-size: 13.5px; font-weight: 600; color: var(--text); cursor: pointer; white-space: nowrap; }
+.seg-thumb { position: absolute; z-index: 0; top: 2px; bottom: 2px; left: 2px; width: calc((100% - 4px) / var(--seg-n, 2)); border-radius: 8px; background: var(--seg-thumb); box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04); transition: transform 0.4s var(--spring); }
 
 /* --------- Listen --------- */
 .list { display: flex; flex-direction: column; }
@@ -262,7 +262,7 @@ details[open] > summary::after { transform: rotate(270deg); }
 
 /* --------- Fortschritt, Jobs, Toast --------- */
 .progress { height: 6px; background: var(--surface-2); border-radius: 6px; overflow: hidden; }
-.progress > div { height: 100%; background: var(--accent); border-radius: 6px; transition: width 0.6s var(--ease); }
+.progress > div { height: 100%; width: 100%; background: var(--accent); border-radius: 6px; transform-origin: left; transition: transform 0.6s var(--ease); }
 /* Mini-Player über der Tab-Leiste */
 .mini-player { position: fixed; z-index: 19; left: 8px; right: 8px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 6px); max-width: 744px; margin: 0 auto; height: 58px; display: flex; align-items: center; gap: 4px; padding: 0 6px 0 7px; border-radius: 14px; background: var(--material); -webkit-backdrop-filter: saturate(180%) blur(22px); backdrop-filter: saturate(180%) blur(22px); box-shadow: 0 6px 22px -8px rgba(11, 11, 11, 0.35), inset 0 0 0 0.5px var(--hairline); animation: mp-in 0.35s var(--spring) both; }
 @keyframes mp-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
@@ -277,10 +277,10 @@ details[open] > summary::after { transform: rotate(270deg); }
 .mp-btn.sub { color: var(--text-3); }
 .mp-btn.sub svg { width: 18px; height: 18px; }
 .mp-btn:active { transform: scale(0.9); }
-.app:has(.mini-player) { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 84px); }
-.app:has(.mini-player) .jobs, .app:has(.mini-player) .fab { translate: 0 -64px; }
-.app:has(.mini-player):has(.jobs) .fab { translate: 0 -110px; }
-@media (min-width: 1024px) { .mini-player { left: calc(var(--side) + 24px); right: 24px; bottom: 20px; max-width: 560px; } .app:has(.mini-player) { padding-bottom: 96px; } .app:has(.mini-player) .jobs, .app:has(.mini-player) .fab { translate: 0 -72px; } }
+.has-player .app { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 84px); }
+.has-player .jobs, .has-player .fab { translate: 0 -64px; }
+.has-player.has-jobs .fab { translate: 0 -110px; }
+@media (min-width: 1024px) { .mini-player { left: calc(var(--side) + 24px); right: 24px; bottom: 20px; max-width: 560px; } .has-player .app { padding-bottom: 96px; } .has-player .jobs, .has-player .fab { translate: 0 -72px; } }
 .jobs { position: fixed; left: 12px; right: 12px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px); max-width: 520px; margin: 0 auto; z-index: 15; display: flex; justify-content: center; pointer-events: none; }
 .job-pill { pointer-events: auto; display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 8px 14px 8px 10px; border-radius: 999px; background: var(--material); -webkit-backdrop-filter: saturate(180%) blur(22px); backdrop-filter: saturate(180%) blur(22px); border: 0.5px solid var(--hairline); box-shadow: var(--shadow); font-size: 14px; font-weight: 600; color: var(--text); text-decoration: none; animation: pop 0.5s var(--spring) both; }
 .job-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -555,7 +555,7 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .ptr svg { width: 20px; height: 20px; }
 
 /* Läuft ein Hintergrund-Job, rückt der runde Knopf über die Fortschrittsanzeige */
-.app:has(.jobs) .fab { translate: 0 -46px; }
+.has-jobs .fab { translate: 0 -46px; }
 
 .video-facade { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; border: 0; padding: 16px; background: linear-gradient(160deg, var(--surface-2), var(--surface)); color: var(--text); cursor: pointer; text-align: center; }
 .video-play { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); }
@@ -569,7 +569,7 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .legal p { margin: 0 0 8px; color: var(--text-2); }
 
 /* ---------- Digging-Feed ---------- */
-.app:has(.dig) .nav, .app:has(.dig) .topbar, .app:has(.dig) .jobs, .app:has(.dig) .offline-bar { display: none; }
+.in-dig .nav, .in-dig .topbar, .in-dig .jobs, .in-dig .offline-bar { display: none; }
 .dig { position: fixed; inset: 0; z-index: 30; background: #000; color: #fff; }
 .dig-feed { position: absolute; inset: 0; overflow-y: auto; scroll-snap-type: y mandatory; overscroll-behavior: contain; scrollbar-width: none; }
 .dig-feed::-webkit-scrollbar { display: none; }
@@ -943,7 +943,7 @@ button.transition { padding: 4px 0 4px 40px; white-space: nowrap; gap: 5px; min-
 button.transition::before { display: none; }
 button.transition .dot { flex: none; }
 button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: right; max-width: none; }
-.app:has(.live) .nav, .app:has(.live) .topbar, .app:has(.live) .jobs, .app:has(.live) .navbar { display: none; }
+.in-live .nav, .in-live .topbar, .in-live .jobs, .in-live .navbar { display: none; }
 .share-preview { display: grid; place-items: center; min-height: 320px; }
 .share-preview img { height: min(56dvh, 520px); aspect-ratio: 9 / 16; border-radius: 18px; box-shadow: var(--shadow); object-fit: cover; }
 .live-cue { margin: 4px 0 0; font-size: 15px; font-weight: 600; color: var(--text-2); }
@@ -955,7 +955,7 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 
 /* Geteiltes Set */
 .shared-meter { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
-.shared-meter span { display: block; height: 100%; border-radius: inherit; background: var(--ok); transition: width 0.6s var(--spring); }
+.shared-meter span { display: block; height: 100%; width: 100%; border-radius: inherit; background: var(--ok); transform-origin: left; transition: transform 0.6s var(--spring); }
 .shared-num { width: 20px; flex: none; text-align: right; color: var(--text-2); font-variant-numeric: tabular-nums; font-size: 13px; }
 .shared-track .badge { flex: none; }
 
@@ -1446,3 +1446,8 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .logo-mark { --logo-c: var(--text); } }
 :root[data-theme="light"] .logo-mark { --logo-c: var(--text); }
+
+/* Tab-Wechsel: sofort, mit kurzem Einblenden */
+.main.tab-enter { animation: tab-in 0.22s var(--ease) both; }
+@keyframes tab-in { from { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .main.tab-enter { animation: none; } }

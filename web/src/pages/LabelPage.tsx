@@ -55,7 +55,7 @@ export default function LabelPage() {
           <>
             <div className="card stack" style={{ gap: 8 }}>
               <div className="shared-meter" aria-hidden>
-                <span style={{ width: `${c.total ? (c.have / c.total) * 100 : 0}%` }} />
+                <span style={{ transform: `scaleX(${Math.min(1, Math.max(0, (c.total ? (c.have / c.total) * 100 : 0) / 100))})` }} />
               </div>
               <b>
                 Du hast {c.have} von {c.total} Platten

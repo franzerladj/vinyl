@@ -18,25 +18,63 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { cachedSocial } from "./lib/social";
 // Detailseite direkt laden, damit die Cover-Animation sofort ein Ziel hat
 import ReleasePage from "./pages/Release";
-const Collection = lazy(() => import("./pages/Collection"));
-const Wantlist = lazy(() => import("./pages/Wantlist"));
-const Search = lazy(() => import("./pages/Search"));
-const Scan = lazy(() => import("./pages/Scan"));
-const Shop = lazy(() => import("./pages/Shop"));
-const LabelPage = lazy(() => import("./pages/LabelPage"));
-const YearPage = lazy(() => import("./pages/YearPage"));
-const LabelsIndex = lazy(() => import("./pages/LabelPage").then((m) => ({ default: m.LabelsIndex })));
-const Sets = lazy(() => import("./pages/Sets"));
-const SetEditor = lazy(() => import("./pages/SetEditor"));
-const SharedSetPage = lazy(() => import("./pages/SharedSetPage"));
-const Stickers = lazy(() => import("./pages/Stickers"));
-const Settings = lazy(() => import("./pages/Settings"));
-const Friends = lazy(() => import("./pages/Friends"));
-const Dig = lazy(() => import("./pages/Dig"));
-const GetApp = lazy(() => import("./pages/GetApp"));
-const DjPage = lazy(() => import("./pages/DjPage"));
-const Impressum = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Impressum })));
-const Datenschutz = lazy(() => import("./pages/Legal").then((m) => ({ default: m.Datenschutz })));
+/**
+ * Seite mit eigenem Code-Paket. Wird im Leerlauf vorgeladen (preloadPages); ist sie schon geladen,
+ * rendert sie sofort ohne Suspense-Umweg. Sonst hinge beim ersten Öffnen das Laden und Vorbereiten
+ * des Codes mitten im Seitenwechsel (bis 170 ms Stillstand auf einem mittleren Handy).
+ */
+type PageModule = { default: React.ComponentType };
+const preloaders: (() => Promise<unknown>)[] = [];
+function page(load: () => Promise<PageModule>) {
+  let mod: PageModule | null = null;
+  const get = () => load().then((m) => (mod = m));
+  const Lazy = lazy(() => get());
+  preloaders.push(get);
+  return function Page() {
+    return mod ? <mod.default /> : <Lazy />;
+  };
+}
+/** Kurzes Einblenden des Inhalts beim Tab-Wechsel (nur Deckkraft, läuft auf der Grafikkarte) */
+function tabFade() {
+  const main = document.querySelector<HTMLElement>(".main");
+  if (!main) return;
+  main.classList.remove("tab-enter");
+  requestAnimationFrame(() => {
+    main.classList.add("tab-enter");
+    setTimeout(() => main.classList.remove("tab-enter"), 260);
+  });
+}
+
+/** Nach dem Start, wenn nichts los ist: alle Seiten nacheinander vorladen */
+export function preloadPages() {
+  const idle = (fn: () => void) => ("requestIdleCallback" in window ? window.requestIdleCallback(fn, { timeout: 3000 }) : setTimeout(fn, 400));
+  let i = 0;
+  const next = () => {
+    const p = preloaders[i++];
+    if (!p) return;
+    void p().catch(() => undefined).finally(() => idle(next));
+  };
+  idle(next);
+}
+const Collection = page(() => import("./pages/Collection"));
+const Wantlist = page(() => import("./pages/Wantlist"));
+const Search = page(() => import("./pages/Search"));
+const Scan = page(() => import("./pages/Scan"));
+const Shop = page(() => import("./pages/Shop"));
+const LabelPage = page(() => import("./pages/LabelPage"));
+const YearPage = page(() => import("./pages/YearPage"));
+const LabelsIndex = page(() => import("./pages/LabelPage").then((m) => ({ default: m.LabelsIndex })));
+const Sets = page(() => import("./pages/Sets"));
+const SetEditor = page(() => import("./pages/SetEditor"));
+const SharedSetPage = page(() => import("./pages/SharedSetPage"));
+const Stickers = page(() => import("./pages/Stickers"));
+const Settings = page(() => import("./pages/Settings"));
+const Friends = page(() => import("./pages/Friends"));
+const Dig = page(() => import("./pages/Dig"));
+const GetApp = page(() => import("./pages/GetApp"));
+const DjPage = page(() => import("./pages/DjPage"));
+const Impressum = page(() => import("./pages/Legal").then((m) => ({ default: m.Impressum })));
+const Datenschutz = page(() => import("./pages/Legal").then((m) => ({ default: m.Datenschutz })));
 
 /** Seiten, die auch ohne Anmeldung erreichbar sein müssen (App-Store-Prüfung, Login-Seite) */
 const PUBLIC = new Set(["/impressum", "/datenschutz", "/app"]);
@@ -160,16 +198,17 @@ function useScrollMemory() {
     const target = fromTab ?? (type === "POP" ? scrollMemo.get(key) ?? 0 : 0);
     let tries = 0;
     const restore = () => {
-      const max = document.documentElement.scrollHeight - window.innerHeight;
+      // Nach oben braucht keine Messung (scrollHeight zwingt den Browser, die neue Seite sofort durchzurechnen)
+      const max = target <= 0 ? 0 : document.documentElement.scrollHeight - window.innerHeight;
       if (max >= target - 4 || tries > 40) {
         window.scrollTo(0, target);
         if (type === "POP") {
           const last = sessionStorage.getItem(`crate:tap:${loc.pathname}`);
           const el = last ? document.querySelector<HTMLElement>(`[data-key="${CSS.escape(last)}"]`) : null;
           if (el) {
+            // Ohne erzwungenes Neuberechnen neu starten: im nächsten Bild wieder anhängen
             el.classList.remove("last-tapped");
-            void el.offsetWidth;
-            el.classList.add("last-tapped");
+            requestAnimationFrame(() => el.classList.add("last-tapped"));
           }
         }
         return;
@@ -177,7 +216,9 @@ function useScrollMemory() {
       tries++;
       requestAnimationFrame(() => setTimeout(restore, 30));
     };
-    restore();
+    // Erst im nächsten Bild: dann ist die neue Seite ohnehin berechnet
+    if (target <= 0) restore();
+    else requestAnimationFrame(restore);
     return () => {
       // Nicht hier speichern: beim Seitenwechsel ist die Position schon vom Browser verfälscht
       window.removeEventListener("scroll", onScroll);
@@ -408,7 +449,11 @@ export default function App() {
         }
       })
       .catch(() => setState({ me: cached }))
-      .finally(() => setLoaded(true));
+      .finally(() => {
+        setLoaded(true);
+        // Nach dem ersten Bild die übrigen Seiten im Leerlauf vorladen
+        setTimeout(preloadPages, 1500);
+      });
   }, []);
 
   // Am Computer: „/“ springt in die Suche der Seite (oder zur Suche)
@@ -531,7 +576,11 @@ export default function App() {
                 haptic(5);
                 const dest = tabTarget(id, loc.pathname + loc.search);
                 if (dest == null) window.scrollTo({ top: 0, behavior: "smooth" });
-                else navigate(dest, { viewTransition: true });
+                else {
+                  // Wie bei iOS: Tabs wechseln sofort, nur ein kurzes Einblenden (kein Abfotografieren ganzer Seiten)
+                  tabFade();
+                  navigate(dest);
+                }
               }}
             >
               {icon}

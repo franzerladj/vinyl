@@ -394,7 +394,7 @@ function SyncPage() {
                   </span>
                 </div>
                 <div className="progress" style={{ height: 4 }}>
-                  <div style={{ width: `${b ? (100 * a) / b : 0}%`, background: a >= b ? "var(--ok)" : undefined }} />
+                  <div style={{ transform: `scaleX(${Math.min(1, Math.max(0, (b ? (100 * a) / b : 0) / 100))})`, background: a >= b ? "var(--ok)" : undefined }} />
                 </div>
               </div>
             ))}
@@ -1081,7 +1081,7 @@ function StylusPage() {
           {wear != null ? (
             <>
               <div className="shared-meter" aria-hidden>
-                <span style={{ width: `${wear * 100}%`, background: wear >= 0.9 ? "var(--bad)" : wear >= 0.7 ? "var(--warn)" : undefined }} />
+                <span style={{ transform: `scaleX(${Math.min(1, Math.max(0, (wear * 100) / 100))})`, background: wear >= 0.9 ? "var(--bad)" : wear >= 0.7 ? "var(--warn)" : undefined }} />
               </div>
               <span className="sub">{wear >= 1 ? "Die Lebensdauer ist erreicht. Zeit für eine neue Nadel." : wear >= 0.9 ? "Bald wechseln: eine abgenutzte Nadel klingt dumpfer und schadet den Rillen." : `${Math.round(wear * 100)} % der angegebenen Lebensdauer`}</span>
             </>

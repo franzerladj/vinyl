@@ -97,7 +97,7 @@ export default function SharedSetPage() {
         {cov && (
           <div className="card stack" style={{ gap: 10 }}>
             <div className="shared-meter" aria-hidden>
-              <span style={{ width: `${cov.records ? (cov.have / cov.records) * 100 : 0}%` }} />
+              <span style={{ transform: `scaleX(${Math.min(1, Math.max(0, (cov.records ? (cov.have / cov.records) * 100 : 0) / 100))})` }} />
             </div>
             <b>
               Du hast {cov.have} von {cov.records} Platten

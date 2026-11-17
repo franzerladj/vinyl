@@ -12,7 +12,7 @@ import { discogsSellUrl, money } from "../lib/format";
 import { ask, toast } from "../lib/store";
 import { getKV, setKV } from "../lib/db";
 import { ytConsent } from "../lib/theme";
-import { haptic, keepParens, DiscogsCredit } from "../components/bits";
+import { haptic, keepParens, DiscogsCredit, useRootClass } from "../components/bits";
 import { IconBack, IconCart, IconFilter, IconHeart, IconPause, IconPlay, IconPlus, IconShare, IconMore, IconSleeves, IconThumb, IconX } from "../components/icons";
 import { DECADES, decadeLabel, passesPrice, top, type DigCard } from "../../../shared/dig";
 import { parseDuration } from "../../../shared/match";
@@ -53,6 +53,7 @@ export default function Dig() {
   useEffect(() => {
     pausePlayer();
   }, []);
+  useRootClass("in-dig", true);
   const feed = useRef<HTMLDivElement>(null);
   const loadingMore = useRef(false);
   const shownAt = useRef(Date.now());

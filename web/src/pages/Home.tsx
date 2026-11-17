@@ -171,7 +171,7 @@ export default function Home() {
                     </span>
                   </div>
                   <div className="progress" style={{ height: 4, marginTop: 4 }}>
-                    <div style={{ width: `${j.total ? (100 * j.done) / j.total : 4}%` }} />
+                    <div style={{ transform: `scaleX(${Math.min(1, Math.max(0, (j.total ? (100 * j.done) / j.total : 4) / 100))})` }} />
                   </div>
                 </div>
               ))}

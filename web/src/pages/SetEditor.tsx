@@ -12,7 +12,7 @@ import { encodeSet } from "../../../shared/setShare";
 import { playedHistory, playedText, type PlayedAt } from "../lib/setHistory";
 import { ask, toast, username } from "../lib/store";
 import { deleteTemplate, saveTemplate, stillOwned, useTemplates } from "../lib/crateTemplates";
-import { Cover, haptic, Seg, Sheet, keepParens } from "../components/bits";
+import { Cover, haptic, Seg, Sheet, keepParens, useRootClass } from "../components/bits";
 import { IconCheck, IconPlay, IconPlus, IconX } from "../components/icons";
 import { TrackLine } from "./Sets";
 import { previewUrl } from "../lib/free";
@@ -1088,6 +1088,7 @@ function LiveMode({ tracks, rels, notes, played, onPlayed, onClose }: { tracks: 
     );
     return () => void lock?.release();
   }, []);
+  useRootClass("in-live", Boolean(cur));
   if (!cur) return null;
   const r = rels?.get(cur.releaseId);
   const nr = next ? rels?.get(next.releaseId) : undefined;
