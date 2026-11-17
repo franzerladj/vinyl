@@ -12,6 +12,7 @@ import { applyTheme } from "./lib/theme";
 import { registerSW } from "virtual:pwa-register";
 import { getState, setState } from "./lib/store";
 import { noteAppLaunch } from "./lib/push";
+import { unlockDigAudio } from "./lib/digAudio";
 
 applyTheme();
 noteAppLaunch();
@@ -23,6 +24,8 @@ if (/iP(hone|ad|od)/.test(navigator.userAgent)) {
   document.documentElement.classList.add("ios");
 }
 document.addEventListener("touchstart", () => undefined, { passive: true });
+// Erste Berührung schaltet den Ton fürs Diggen frei (iPhone verlangt das einmal pro Sitzung)
+for (const ev of ["touchend", "click"] as const) document.addEventListener(ev, () => unlockDigAudio(), { capture: true, passive: true });
 
 // Neue Version: nicht mitten in einem Sync neu laden, sondern Bescheid geben.
 // Läuft gerade nichts und die App ist im Hintergrund, wird still aktualisiert.

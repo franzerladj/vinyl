@@ -22,7 +22,7 @@ export function RecordMenu() {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     let start: { x: number; y: number } | null = null;
-    let suppress = 0;
+    let suppress = -Infinity;
     const open = async (a: HTMLAnchorElement) => {
       const id = Number(a.getAttribute("href")!.split("/")[2]);
       if (!id) return;

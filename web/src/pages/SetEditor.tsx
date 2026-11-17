@@ -26,6 +26,7 @@ import { CalendarSheet } from "../components/CalendarSheet";
 import type { GigEvent } from "../../../shared/ics";
 import { useFolders } from "../lib/folders";
 import { fetchRelease } from "../lib/sync";
+import { SetWizard } from "../components/SetWizard";
 
 /** Zuletzt gewählter Ordner gilt für das nächste neue Set */
 const lastFolder = () => {
@@ -33,6 +34,15 @@ const lastFolder = () => {
     return Number(localStorage.getItem("crate:set-folder")) || undefined;
   } catch {
     return undefined;
+  }
+};
+
+/** Geführter Start für neue Sets. Browser-Tests überspringen ihn, außer sie wollen ihn sehen. */
+const wizardWanted = () => {
+  try {
+    return !(navigator as Navigator & { webdriver?: boolean }).webdriver || localStorage.getItem("crate:test-wizard") === "1";
+  } catch {
+    return true;
   }
 };
 
@@ -60,6 +70,8 @@ export default function SetEditor() {
   const isNew = id === "new";
   const [set, setSet] = useState<DJSet>({ name: "", curve: "journey", trackIds: [], createdAt: Date.now(), crateIds: [], mixNotes: {}, folderId: lastFolder() });
   const [dirty, setDirty] = useState(false);
+  const [planning, setPlanning] = useState(() => isNew && wizardWanted());
+  const [autofill, setAutofill] = useState<number | null>(null);
   const [view, setView] = useState<"order" | "crate">("order");
   const [picker, setPicker] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
@@ -158,7 +170,8 @@ export default function SetEditor() {
   const folders = useFolders();
   const folderId = set.folderId && folders.some((f) => f.id === set.folderId) ? set.folderId : undefined;
   const folderName = folders.find((f) => f.id === folderId)?.name;
-  const fromSource = (rid: number) => !folderId || Boolean(data?.folders.get(rid)?.includes(folderId));
+  const fromSource = (rid: number) =>
+    (!folderId || Boolean(data?.folders.get(rid)?.includes(folderId))) && (!set.styles?.length || Boolean(data?.rels.get(rid)?.styles.some((s) => set.styles!.includes(s))));
   const chooseFolder = (id?: number) => {
     update({ folderId: id });
     try {
@@ -183,6 +196,24 @@ export default function SetEditor() {
       void fetchRelease(rid).then((r) => (realTracks(r.tracklist).length ? undefined : done()), done);
     }
   }, [crateMissing.join()]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Nach dem geführten Start: sobald die Sammlung da ist, den Vorschlag bauen
+  useEffect(() => {
+    if (autofill == null || !data) return;
+    setAutofill(null);
+    const pool = data.tracks.filter((t) => fromSource(t.releaseId)).map(toSetTrack);
+    if (!pool.length) return void toast("Zu dieser Auswahl gibt es noch keine Tracks. Pack die Kiste von Hand.");
+    const ids = buildSetlist(pool, { curve: set.curve as Curve, keyWeight: 1, length: autofill, maxPerRecord: 1 });
+    const rids = [...new Set(ids.map((i) => data.byId.get(i)?.releaseId).filter((x): x is number => x != null))];
+    update({ trackIds: ids, crateIds: rids });
+    toast(
+      ids.length < autofill * 0.6
+        ? `Erst ${ids.length} Tracks: bei manchen Platten fehlt noch die Tracklist, sie lädt im Hintergrund.`
+        : ids.length < autofill
+          ? `${ids.length} Tracks gefunden. Tausch aus, was nicht passt.`
+          : "Vorschlag steht. Tausch aus, was nicht passt.",
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autofill, data]);
   const stats = setStats(seq);
   const durOf = (t: TrackMeta) => parseDuration(data?.rels.get(t.releaseId)?.tracklist?.find((x) => x.position === t.position)?.duration);
   // Beim Mixen überlappen Tracks: grob 80 % der Länge, nur der letzte läuft ganz
@@ -291,6 +322,21 @@ export default function SetEditor() {
     else await navigator.clipboard.writeText(url).then(() => toast("Link kopiert"));
   };
 
+  if (planning)
+    return (
+      <SetWizard
+        initial={set}
+        onSkip={() => setPlanning(false)}
+        onDone={({ patch, autofill: n }) => {
+          update(patch);
+          if (patch.folderId !== set.folderId) chooseFolder(patch.folderId);
+          setPlanning(false);
+          setAutofill(n);
+          window.scrollTo(0, 0);
+        }}
+      />
+    );
+
   return (
     <>
       <CalendarSheet
@@ -352,6 +398,20 @@ export default function SetEditor() {
               {folders.map((f) => (
                 <button key={f.id} className={`chip ${folderId === f.id ? "on" : ""}`} onClick={() => chooseFolder(f.id)}>
                   {f.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {set.styles && set.styles.length > 0 && (
+          <div className="set-source">
+            <span className="sub">Richtung</span>
+            <div className="chips chips-scroll">
+              {set.styles.map((st) => (
+                <button key={st} className="active-chip" onClick={() => update({ styles: set.styles!.filter((x) => x !== st) })} aria-label={`${st} entfernen`}>
+                  {st}
+                  <IconX />
                 </button>
               ))}
             </div>

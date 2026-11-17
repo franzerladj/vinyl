@@ -1,6 +1,7 @@
 // Digging-Feed: eine Platte pro Bildschirm, senkrecht wischen, Hörprobe läuft automatisch.
 import { pause as pausePlayer } from "../lib/player";
 import { leaveDig } from "../lib/tabs";
+import { digAudio, digAudioUnlocked, markDigAudioUnlocked } from "../lib/digAudio";
 import { useEffect, useRef, useState } from "react";
 import { MenuSheet } from "../components/ui";
 import { DigCoach } from "../components/DigCoach";
@@ -32,7 +33,12 @@ export default function Dig() {
   const [leaving, setLeaving] = useState<number | null>(null);
   const touch = useRef<{ x: number; y: number; id: number; horizontal?: boolean } | null>(null);
   const [styles, setStyles] = useState<string[]>([]);
-  const [unlocked, setUnlocked] = useState(false);
+  // Ton läuft von selbst, sobald die App einmal berührt wurde (siehe digAudio.ts)
+  const [unlocked, setUnlockedState] = useState(digAudioUnlocked);
+  const setUnlocked = (v: boolean) => {
+    if (v) markDigAudioUnlocked();
+    setUnlockedState(v);
+  };
   const [audioState, setAudioState] = useState<Audio>("idle");
   const [detail, setDetail] = useState<Map<number, DigDetail>>(new Map());
   const [wanted, setWanted] = useState<Set<number>>(new Set());
@@ -52,7 +58,12 @@ export default function Dig() {
   }, []);
   const [video, setVideo] = useState<string | null>(null);
   const [sheet, setSheet] = useState<number | null>(null);
-  const audio = useRef<HTMLAudioElement>(null);
+  const audio = useRef<HTMLAudioElement>(digAudio());
+  // Das Freischalten läuft im Moment des Antippens von „Diggen“ und ist kurz danach fertig
+  useEffect(() => {
+    const t = setTimeout(() => digAudioUnlocked() && setUnlockedState(true), 250);
+    return () => clearTimeout(t);
+  }, []);
   // Diggen hat einen eigenen Player: der der App schweigt solange
   useEffect(() => {
     pausePlayer();
@@ -134,8 +145,9 @@ export default function Dig() {
       if (cancelled) return;
       setDetail((m) => new Map(m).set(current.id, d));
       const t = d.tracks[0];
+      a.muted = false;
       a.src = previewUrl(current.artist, t?.title ?? current.title, parseDuration(t?.duration));
-      if (unlocked) a.play().catch(() => setAudioState("paused"));
+      if (unlocked || digAudioUnlocked()) a.play().catch(() => setAudioState("paused"));
       else setAudioState("paused");
     });
     // Nächste Karten vorladen. Mit Preisgrenze weiter voraus, damit zu teure vorher rausfallen.
@@ -361,7 +373,6 @@ export default function Dig() {
 
   return (
     <div className="dig">
-      <audio ref={audio} preload="auto" playsInline loop />
       <header className="dig-top">
         {/* Zurück in die App: dorthin, wo du vor dem Diggen warst */}
         <button className="dig-icon dig-close" onClick={() => nav(leaveDig(), { viewTransition: true })} aria-label="Diggen beenden">

@@ -601,7 +601,7 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 @keyframes digburst { 0% { transform: scale(.2); opacity: 0; } 30% { transform: scale(1.15); opacity: 1; } 70% { transform: scale(1); opacity: 1; } 100% { transform: scale(1.3) translateY(-30px); opacity: 0; } }
 .dig-top { position: absolute; z-index: 2; top: 0; left: 0; right: 0; padding: calc(env(safe-area-inset-top) + 8px) 12px 8px; display: flex; gap: 8px; align-items: center; pointer-events: none; }
 .dig-top > * { pointer-events: auto; }
-.dig-icon { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; display: grid; place-items: center; color: #fff; background: rgba(0,0,0,.35); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.dig-icon { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; display: grid; place-items: center; color: #fff; background: #262626; }
 .dig-icon svg { width: 22px; height: 22px; }
 .dig-chips { flex: 1; min-width: 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(90deg, #000 85%, transparent); }
 .dig-chips::-webkit-scrollbar { display: none; }
@@ -1404,7 +1404,7 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .kiste .grade-row { gap: 8px; }
 .kiste .grade-pill { flex: 0 1 auto; min-width: 0; padding: 7px 11px; white-space: nowrap; }
 .grade-pill em { font-style: normal; font-size: 13.5px; font-weight: 600; color: var(--accent); }
-.dig-close { width: auto; padding: 0 14px 0 10px; gap: 4px; display: inline-flex; align-items: center; font-weight: 600; font-size: 15px; }
+.dig-close { width: auto; border-radius: 999px; padding: 0 14px 0 10px; gap: 4px; display: inline-flex; align-items: center; font-weight: 600; font-size: 15px; }
 .dig-close svg { width: 20px; height: 20px; }
 
 /* Start: Schaufenster und ruhigerer Kopf */
@@ -1598,3 +1598,34 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 @keyframes ctxFade { from { opacity: 0; } }
 @keyframes ctxPop { from { opacity: 0; transform: scale(0.9); } }
 @media (max-height: 640px) { .ctx-preview img { aspect-ratio: 16 / 10; } }
+
+/* Neues Set in drei Fragen (SetWizard.tsx) */
+.wiz { display: flex; flex-direction: column; gap: 14px; padding-bottom: 180px; }
+.wiz-steps { display: flex; gap: 6px; margin: 4px 0 6px; }
+.wiz-steps button { flex: 1; height: 4px; padding: 0; border: 0; border-radius: 2px; background: var(--surface-3, var(--surface-2)); position: relative; overflow: hidden; cursor: pointer; }
+.wiz-steps button::after { content: ""; position: absolute; inset: 0; background: var(--accent); transform: scaleX(0); transform-origin: left; transition: transform 0.45s var(--spring); }
+.wiz-steps button.on::after { transform: scaleX(1); }
+.wiz-step { display: flex; flex-direction: column; gap: 12px; animation: wizIn 0.45s var(--spring) both; }
+@keyframes wizIn { from { opacity: 0; transform: translateX(28px); } }
+.wiz-q { margin: 6px 0 0; font: 900 clamp(34px, 10.5vw, 44px)/0.95 var(--font-brand); font-stretch: 62%; font-variation-settings: "wdth" 62; text-transform: uppercase; word-spacing: 0.1em; text-wrap: balance; }
+.wiz-step > .sub { margin: 0; }
+.wiz-big { font-size: 18px; font-weight: 600; }
+.wiz-label { font-size: 14px; font-weight: 600; color: var(--text-2); margin-top: 8px; }
+.wiz-date { position: relative; overflow: hidden; cursor: pointer; }
+.wiz-date input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.wiz-time { display: grid; gap: 6px; max-width: 180px; }
+.wiz-curves { display: grid; gap: 8px; }
+.wiz-card { display: grid; grid-template-columns: 72px minmax(0, 1fr) 22px; align-items: center; gap: 14px; padding: 14px; border: 0; border-radius: 18px; background: var(--surface); color: var(--text); text-align: left; cursor: pointer; box-shadow: inset 0 0 0 2px transparent; transition: box-shadow 0.2s var(--ease); }
+.wiz-card.on { box-shadow: inset 0 0 0 2px var(--accent); }
+.wiz-card b { display: block; font-size: 17px; }
+.wiz-card small { display: block; font-size: 13.5px; color: var(--text-2); margin-top: 2px; }
+.wiz-card > svg:last-child { width: 22px; height: 22px; color: var(--accent); }
+.wiz-curve { width: 72px; height: 36px; color: var(--text-2); }
+.wiz-card.on .wiz-curve { color: var(--accent); }
+.wiz-sum { margin-top: 10px; padding: 14px 16px; border-radius: 16px; background: var(--surface); font-size: 15px; }
+.wiz-foot { position: fixed; left: 0; right: 0; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom)); z-index: 15; display: grid; gap: 6px; padding: 12px var(--gutter) 12px; background: var(--bg); border-top: 0.5px solid var(--hairline); }
+.has-player .wiz-foot { translate: 0 -64px; }
+.chip-n { opacity: 0.55; font-variant-numeric: tabular-nums; margin-left: 2px; }
+@media (min-width: 1024px) { .wiz { max-width: 640px; margin: 0 auto; } .wiz-foot { position: static; max-width: 640px; margin: 0 auto; border: 0; background: transparent; } }
+.in-wiz .jobs { visibility: hidden; }
+.wiz .chips { flex-wrap: wrap; overflow: visible; }
