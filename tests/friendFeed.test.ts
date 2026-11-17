@@ -21,6 +21,7 @@ describe("Neu bei Freunden", () => {
   it("begrenzt Beiträge und Platten je Beitrag, lässt Altes und Kaputtes weg", () => {
     const many = Array.from({ length: 30 }, (_, i) => it_("carl", "coll", i, "2026-11-01T10:00:00Z"));
     expect(feedPosts(many, { perPost: 5 })[0].releaseIds).toHaveLength(5);
+    expect(feedPosts(many, { perPost: 5 })[0].count).toBe(30);
     expect(feedPosts([it_("x", "coll", 1, "kaputt"), it_("y", "coll", 2, "2020-01-01T00:00:00Z")], { sinceMs: Date.parse("2026-01-01") })).toEqual([]);
     expect(feedPosts(Array.from({ length: 20 }, (_, i) => it_(`f${i}`, "coll", i, "2026-11-01T10:00:00Z")), { limit: 3 })).toHaveLength(3);
   });

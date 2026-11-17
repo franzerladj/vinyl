@@ -309,9 +309,25 @@ type Tab = "hasYourWants" | "wantsYours" | "coll" | "want" | "shared";
 function FriendDetail({ u }: { u: string }) {
   const nav = useNavigate();
   const jobs = useStore((s) => s.jobs);
-  const [tab, setTab] = useState<Tab>("hasYourWants");
+  // Reiter und Suche bleiben, wenn man eine Platte öffnet und zurückkommt (sonst landet man wieder ganz oben)
+  const memo = `crate:friend:${u}`;
+  const saved = (() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(memo) ?? "null") as { tab: Tab; q: string } | null;
+    } catch {
+      return null;
+    }
+  })();
+  const [tab, setTab] = useState<Tab>(saved?.tab ?? "hasYourWants");
   const [menu, setMenu] = useState(false);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(saved?.q ?? "");
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(memo, JSON.stringify({ tab, q }));
+    } catch {
+      /* egal */
+    }
+  }, [memo, tab, q]);
   const dq = useDebounced(q.toLowerCase(), 180);
   const f = useLiveQuery(() => db.friends.get(u), [u]);
   const [crate, setCrate] = useState<CrateProfile | null | undefined>(undefined);

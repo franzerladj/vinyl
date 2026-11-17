@@ -15,7 +15,10 @@ export interface FeedPost {
   kind: "coll" | "want";
   /** jüngster Eintrag des Beitrags (ms) */
   at: number;
+  /** die ersten Platten (für die Cover-Leiste) */
   releaseIds: number[];
+  /** wie viele es insgesamt waren */
+  count: number;
 }
 
 /**
@@ -29,9 +32,12 @@ export function feedPosts(items: FeedItem[], opts: { limit?: number; perPost?: n
     const at = Date.parse(it.dateAdded);
     if (!Number.isFinite(at) || at < sinceMs) continue;
     const id = `${it.username}|${it.kind}|${it.dateAdded.slice(0, 10)}`;
-    const p = posts.get(id) ?? { id, username: it.username, kind: it.kind, at, releaseIds: [] };
+    const p = posts.get(id) ?? { id, username: it.username, kind: it.kind, at, releaseIds: [], count: 0 };
     p.at = Math.max(p.at, at);
-    if (!p.releaseIds.includes(it.releaseId)) p.releaseIds.push(it.releaseId);
+    if (!p.releaseIds.includes(it.releaseId)) {
+      p.releaseIds.push(it.releaseId);
+      p.count++;
+    }
     posts.set(id, p);
   }
   return [...posts.values()]

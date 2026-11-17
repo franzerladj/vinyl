@@ -21,7 +21,7 @@ const readSeen = () => {
 };
 
 const headline = (p: FeedPost) => {
-  const n = p.releaseIds.length;
+  const n = p.count;
   if (p.kind === "coll")
     return n === 1 ? "hat eine neue Platte" : `hat ${n} neue Platten`;
   return n === 1 ? "sucht eine Platte" : `sucht ${n} Platten`;
@@ -217,7 +217,7 @@ export function FriendsHome({
                   <Avatar src={f.avatar} name={f.username} size={36} />
                   <span className="fpost-who">
                     <b>{f.name || f.username}</b>{" "}
-                    {headline({ ...p, releaseIds: rels.map((r) => r.id) })}
+                    {headline(p)}
                     <span className="fpost-when">
                       {agoText(p.at)}
                       {p.at > seen && <i className="fpost-new">neu</i>}
@@ -293,6 +293,12 @@ export function FriendsHome({
                         {tag(p, r.id)}
                       </Link>
                     ))}
+                  {p.count > rels.length && (
+                      <Link to={`/friends/${encodeURIComponent(f.username)}`} viewTransition className="fpost-more press">
+                        <b>+{p.count - rels.length}</b>
+                        <span>alle ansehen</span>
+                      </Link>
+                    )}
                   </div>
                 )}
               </article>
