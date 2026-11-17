@@ -1,4 +1,6 @@
 import { SwipeArea } from "../components/Pager";
+import { Activity } from "../components/Buzz";
+import { refreshBuzz } from "../lib/buzz";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -73,6 +75,7 @@ function FriendList() {
   const social = useLiveQuery(() => cachedSocial(), []);
   useEffect(() => {
     void refreshSocial();
+    void refreshBuzz();
   }, []);
   const [answering, setAnswering] = useState<string | null>(null);
   const answer = async (from: string, accept: boolean) => {
@@ -142,6 +145,8 @@ function FriendList() {
             </button>
           </div>
         )}
+
+        <Activity />
 
         {(social?.in.length ?? 0) > 0 && (
           <div className="group friend-requests">

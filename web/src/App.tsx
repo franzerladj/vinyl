@@ -18,6 +18,7 @@ import { startDevSync } from "./lib/devsync";
 import { noteLocation, rememberScroll, tabOf, tabTarget, takePendingScroll, type TabId } from "./lib/tabs";
 import { useLiveQuery } from "dexie-react-hooks";
 import { cachedSocial } from "./lib/social";
+import { useBuzz } from "./lib/buzz";
 // Detailseite direkt laden, damit die Cover-Animation sofort ein Ziel hat
 import ReleasePage from "./pages/Release";
 /**
@@ -283,6 +284,8 @@ async function startupSync() {
     if (!navigator.onLine) return;
     // Freundschaftsanfragen und Zusagen abholen
     void import("./lib/social").then((m) => m.refreshSocial()).catch(() => undefined);
+    // Reaktionen, Kommentare und Empfehlungen von Freunden
+    void import("./lib/buzz").then((m) => m.refreshBuzz()).catch(() => undefined);
     // Offene Ordner-Änderungen (z. B. App beim Einsortieren geschlossen) weiter zu Discogs schicken
     void import("./lib/folders").then((f) => f.resumeFolderQueue()).catch(() => undefined);
     const last = await getKV<number>("lastCollectionSync", 0);
@@ -383,6 +386,7 @@ function useBackGesture() {
 export default function App() {
   const me = useStore((s) => s.me);
   const social = useLiveQuery(() => cachedSocial(), []);
+  const buzz = useBuzz();
   const [loaded, setLoaded] = useState(false);
   const online = useOnline();
   const loc = useLocation();
@@ -594,7 +598,7 @@ export default function App() {
             <a
               key={id}
               href={root}
-              className={[activeTab === id ? "active" : "", id === "friends" && social?.in.length ? "has-dot" : ""].filter(Boolean).join(" ") || undefined}
+              className={[activeTab === id ? "active" : "", id === "friends" && (social?.in.length || buzz.unread) ? "has-dot" : ""].filter(Boolean).join(" ") || undefined}
               aria-current={activeTab === id ? "page" : undefined}
               onClick={(e) => {
                 e.preventDefault();

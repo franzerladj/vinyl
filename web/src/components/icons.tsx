@@ -52,3 +52,5 @@ export const IconThumb = P("M7 10v11H4a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zM7 10l4-7a
 export const IconPause = P("M8 5v14M16 5v14");
 export const IconStar = P("M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z");
 export const IconFolder = P("M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z");
+export const IconChat = P("M20.5 11.5a8 8 0 0 1-11.9 7L4 20l1.4-4.2A8 8 0 1 1 20.5 11.5z");
+export const IconSend = P("M5 12h13M12 5l7 7-7 7");

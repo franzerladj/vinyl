@@ -1,3 +1,4 @@
+import { useBuzz } from "../lib/buzz";
 import { apkOutdated, LATEST_APK } from "../lib/push";
 import { Hint } from "../components/Welcome";
 import { DailyRecord } from "../components/DailyRecord";
@@ -41,6 +42,7 @@ export default function Home() {
 
   const profile = useLiveQuery(() => getKV<MyProfile | null>("myProfile", null));
   const social = useLiveQuery(() => cachedSocial(), []);
+  const buzz = useBuzz();
   const stats = useLiveQuery(async () => {
     const coll = await db.collection.toArray();
     const ids = [...new Set(coll.map((c) => c.releaseId))];
@@ -178,6 +180,18 @@ export default function Home() {
             )}
             {/* Gig in den nächsten 7 Tagen: ganz nach oben, wie ein Flyer an der Wand */}
             {stats?.nextSet && gigSoon && <GigCard set={stats.nextSet} covers={stats.gigCovers} records={stats.gigRecords} />}
+            {buzz.unread > 0 && (
+              <Link to="/friends" viewTransition className="card row press friend-nudge">
+                <IconUser />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <b>{buzz.unread === 1 ? "Eine Neuigkeit von deinen Freunden" : `${buzz.unread} Neuigkeiten von deinen Freunden`}</b>
+                  <span className="sub" style={{ display: "block" }}>
+                    {buzz.inbox[0] ? `${buzz.inbox[0].from} ${buzz.inbox[0].kind === "react" ? "gefällt deine Platte" : buzz.inbox[0].kind === "comment" ? "hat kommentiert" : "empfiehlt dir eine Platte"}` : "Antippen zum Ansehen"}
+                  </span>
+                </span>
+                <span className="chev">›</span>
+              </Link>
+            )}
             <Link to="/dig" viewTransition className="dig-entry press rise" onClick={() => haptic(10)}>
               <span className="covers">
                 {(stats?.recent ?? []).filter(Boolean).slice(0, 4).map((r) => r && (

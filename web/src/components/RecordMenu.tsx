@@ -10,7 +10,8 @@ import { addWant, removeWant } from "../lib/sync";
 import { discogsReleaseUrl } from "../lib/format";
 import { toast } from "../lib/store";
 import { haptic, keepParens, overlayOpen, useBackClose, useSwipeDown } from "./bits";
-import { IconHeart, IconPlay, IconShare, IconRecord } from "./icons";
+import { IconHeart, IconPlay, IconShare, IconRecord, IconUser } from "./icons";
+import { RecommendSheet } from "./Buzz";
 
 type Ctx = { rel: Release; owned: boolean; wanted: boolean; track?: { title: string; artist: string; deezerId?: number; id: string } };
 
@@ -91,10 +92,11 @@ export function RecordMenu() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [ctx]);
+  const [rec, setRec] = useState<Release | null>(null);
   const body = useRef<HTMLDivElement>(null);
   useSwipeDown(body, () => setCtx(null), Boolean(ctx));
   useBackClose(Boolean(ctx), () => setCtx(null));
-  if (!ctx) return null;
+  if (!ctx) return <RecommendSheet release={rec} onClose={() => setRec(null)} />;
   const { rel, owned, wanted, track } = ctx;
   const close = () => setCtx(null);
   const act = (fn: () => void) => () => {
@@ -126,6 +128,7 @@ export function RecordMenu() {
           },
         ]
       : []),
+    { label: "Einem Freund empfehlen", icon: <IconUser />, run: () => setRec(rel) },
     {
       label: "Teilen",
       icon: <IconShare />,

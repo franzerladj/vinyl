@@ -12,7 +12,8 @@ import { lastfmTags } from "./lastfm";
 import { profileEmpty, sanitizeProfile, type CrateProfile } from "../shared/profile";
 import { buildIcs } from "../shared/ics";
 import { pushOps } from "./devsync";
-import { syncStore } from "./env";
+import { buzzStore, syncStore } from "./env";
+import { cleanText, validPost } from "./buzz";
 
 type C = Context<{ Bindings: Env; Variables: { cfg: Config } }>;
 
@@ -766,6 +767,95 @@ app.get("/api/profile/me", async (c) => {
   return c.json({ profile: JSON.parse((await cfg.kv.get(profKey(s.username))) ?? "null") });
 });
 
+// ---------- Soziales im Freunde-Feed: Reaktionen, Kommentare, Empfehlungen, Aktivität ----------
+// Nur unter Freunden (Server prüft die Freundschaft) und nur mit bestätigtem Discogs-Namen.
+const low = (u: string) => u.toLowerCase();
+async function buzzContext(c: C) {
+  const s = await session(c);
+  if (!s?.username) return null;
+  const soc = await loadSocial(c.var.cfg.kv, s.username);
+  return { me: low(s.username), name: s.username, friends: soc.friends.map(low), store: buzzStore(c.env ?? {}) };
+}
+const BUZZ_DAYS = 120;
+
+app.get("/api/buzz", async (c) => {
+  const b = await buzzContext(c);
+  if (!b) return c.json({ message: "nicht angemeldet" }, 401);
+  c.header("Cache-Control", "no-store");
+  const since = Date.now() - BUZZ_DAYS * 86_400_000;
+  const [posts, inbox] = await Promise.all([b.store.forOwners([b.me, ...b.friends].slice(0, 400), since), b.store.inbox(b.me, 60)]);
+  return c.json({ ...posts, inbox, unread: inbox.filter((i) => !i.read).length });
+});
+
+app.post("/api/buzz/react", async (c) => {
+  const b = await buzzContext(c);
+  if (!b) return c.json({ message: "nicht angemeldet" }, 401);
+  const j = ((await c.req.json().catch(() => null)) ?? {}) as { owner?: unknown; post?: unknown; on?: unknown; title?: unknown; releaseId?: unknown };
+  if (!validName(j.owner) || !validPost(j.post)) return c.json({ message: "ungültig" }, 400);
+  const owner = low(j.owner);
+  if (owner !== b.me && !b.friends.includes(owner)) return c.json({ message: "Nur unter Freunden" }, 403);
+  const on = j.on !== false;
+  const changed = await b.store.react({ owner, post: j.post, from: b.me, ts: Date.now() }, on);
+  if (changed && on && owner !== b.me) {
+    const title = cleanText(j.title, 140) || null;
+    await b.store.notify({ to: owner, from: b.me, kind: "react", post: j.post, releaseId: Number(j.releaseId) || null, title, ts: Date.now() });
+    await tellFriend(c.var.cfg, owner, { title: `${b.name} gefällt deine Platte`, body: title ?? "Schau in Crate nach", url: "/friends", tag: `react-${b.me}` });
+  }
+  return c.json({ ok: true, on });
+});
+
+app.post("/api/buzz/comment", async (c) => {
+  const b = await buzzContext(c);
+  if (!b) return c.json({ message: "nicht angemeldet" }, 401);
+  const j = ((await c.req.json().catch(() => null)) ?? {}) as { owner?: unknown; post?: unknown; text?: unknown; title?: unknown; releaseId?: unknown };
+  const text = cleanText(j.text, 280);
+  if (!validName(j.owner) || !validPost(j.post) || !text) return c.json({ message: "ungültig" }, 400);
+  const owner = low(j.owner);
+  if (owner !== b.me && !b.friends.includes(owner)) return c.json({ message: "Nur unter Freunden" }, 403);
+  // Bremse gegen Unfug: höchstens 40 Kommentare je Stunde
+  if ((await b.store.commentsSince(b.me, Date.now() - 3_600_000)) >= 40) return c.json({ message: "Kurz Pause, das waren viele Kommentare" }, 429);
+  const ts = Date.now();
+  const id = await b.store.comment({ owner, post: j.post, from: b.me, text, ts });
+  if (owner !== b.me) {
+    const title = cleanText(j.title, 140) || null;
+    await b.store.notify({ to: owner, from: b.me, kind: "comment", post: j.post, releaseId: Number(j.releaseId) || null, title, text, ts });
+    await tellFriend(c.var.cfg, owner, { title: `${b.name} schreibt zu deiner Platte`, body: text, url: "/friends", tag: `comment-${id}` });
+  }
+  return c.json({ id, owner, post: j.post, from: b.me, text, ts });
+});
+
+app.delete("/api/buzz/comment/:id", async (c) => {
+  const b = await buzzContext(c);
+  if (!b) return c.json({ message: "nicht angemeldet" }, 401);
+  const cm = await b.store.getComment(Number(c.req.param("id")) || 0);
+  // Löschen darf, wer ihn geschrieben hat, und wem der Beitrag gehört
+  if (!cm || (cm.from !== b.me && cm.owner !== b.me)) return c.json({ message: "nicht gefunden" }, 404);
+  await b.store.deleteComment(cm.id);
+  return c.json({ ok: true });
+});
+
+app.post("/api/buzz/recommend", async (c) => {
+  const b = await buzzContext(c);
+  if (!b) return c.json({ message: "nicht angemeldet" }, 401);
+  const j = ((await c.req.json().catch(() => null)) ?? {}) as { to?: unknown; releaseId?: unknown; title?: unknown; text?: unknown };
+  const releaseId = Number(j.releaseId);
+  const title = cleanText(j.title, 140);
+  if (!validName(j.to) || !Number.isInteger(releaseId) || releaseId <= 0 || !title) return c.json({ message: "ungültig" }, 400);
+  const to = low(j.to);
+  if (!b.friends.includes(to)) return c.json({ message: "Nur unter Freunden" }, 403);
+  const text = cleanText(j.text, 280) || null;
+  await b.store.notify({ to, from: b.me, kind: "recommend", releaseId, title, text, ts: Date.now() });
+  await tellFriend(c.var.cfg, to, { title: `${b.name} empfiehlt dir eine Platte`, body: text ? `${title}: ${text}` : title, url: `/release/${releaseId}`, tag: `rec-${b.me}-${releaseId}` });
+  return c.json({ ok: true });
+});
+
+app.post("/api/buzz/read", async (c) => {
+  const b = await buzzContext(c);
+  if (!b) return c.json({ message: "nicht angemeldet" }, 401);
+  await b.store.markRead(b.me);
+  return c.json({ ok: true });
+});
+
 // ---------- Alles löschen (App Store / Play Store: Konto- und Datenlöschung in der App) ----------
 app.delete("/api/me", async (c) => {
   const cfg = c.var.cfg;
@@ -789,6 +879,7 @@ app.delete("/api/me", async (c) => {
   }
   await cfg.kv.delete(socKey(u));
   await syncStore(c.env ?? {}).clear(u);
+  await buzzStore(c.env ?? {}).clear(u);
   deleteCookie(c, SESSION, { path: "/" });
   return c.json({ ok: true });
 });

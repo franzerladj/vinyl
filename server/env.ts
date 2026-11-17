@@ -1,5 +1,6 @@
 // Konfiguration. Auf Cloudflare kommen die Werte als Bindings (c.env),
 // lokal unter Node aus process.env (.env-Datei).
+import { d1Buzz, memoryBuzz, type BuzzStore } from "./buzz";
 import { memoryKV, type KV, type PushConfig } from "./push";
 import { VAPID_PUBLIC_KEY } from "../shared/pushKey";
 import { d1Store, memoryStore, type D1Like, type SyncStore } from "./devsync";
@@ -30,6 +31,10 @@ let localKV: KV | null = null;
 let localSync: SyncStore | null = null;
 /** Abgleich-Speicher: D1 auf Cloudflare, sonst Arbeitsspeicher (lokal, Tests) */
 export const syncStore = (env: Env): SyncStore => (env.SYNC ? d1Store(env.SYNC) : (localSync ??= memoryStore()));
+
+let localBuzz: BuzzStore | null = null;
+/** Soziales (Reaktionen, Kommentare, Aktivität): dieselbe D1-Datenbank, sonst Arbeitsspeicher */
+export const buzzStore = (env: Env): BuzzStore => (env.SYNC ? d1Buzz(env.SYNC) : (localBuzz ??= memoryBuzz()));
 
 export interface Config {
   appUrl: string;

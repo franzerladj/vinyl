@@ -7,6 +7,7 @@ import { db, type Friend, type Release } from "../lib/db";
 import { addWant } from "../lib/sync";
 import { toast } from "../lib/store";
 import { Avatar, Cover, haptic, keepParens, markHero } from "./bits";
+import { PostBar } from "./Buzz";
 import { IconHeart, IconPlus } from "./icons";
 import { agoText, feedPosts, type FeedPost } from "../../../shared/friendFeed";
 import type { FriendMatch } from "../lib/friends";
@@ -301,6 +302,7 @@ export function FriendsHome({
                     )}
                   </div>
                 )}
+                {rels[0] && <PostBar feedId={p.id} title={`${rels[0].artist} – ${rels[0].title}${p.count > 1 ? ` und ${p.count - 1} weitere` : ""}`} releaseId={rels[0].id} />}
               </article>
             );
           })}

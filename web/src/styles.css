@@ -1632,3 +1632,41 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .wiz .chips { flex-wrap: wrap; overflow: visible; }
 .push-steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; color: var(--text-2); font-size: 15px; line-height: 1.4; }
 .push-steps b { color: var(--text); }
+
+/* Soziales im Feed (Buzz.tsx): Leiste unter Beiträgen, Kommentare, Aktivität, Empfehlen */
+.fpost-bar { display: flex; align-items: center; gap: 6px; margin: -2px -4px -4px; min-height: 36px; }
+.fpost-act { display: inline-flex; align-items: center; gap: 5px; min-width: 40px; height: 36px; padding: 0 8px; border: 0; border-radius: 999px; background: transparent; color: var(--text-2); font-weight: 600; font-size: 14px; cursor: pointer; font-variant-numeric: tabular-nums; }
+.fpost-act svg { width: 21px; height: 21px; transition: transform 0.35s var(--spring); }
+.fpost-act:active svg { transform: scale(0.8); }
+.fpost-act.on { color: var(--accent); }
+.fpost-act.on svg { transform: rotate(-8deg) scale(1.08); }
+.fpost-liked { margin-left: auto; padding-right: 4px; font-size: 13px; color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.fpost-last { all: unset; display: block; font-size: 14px; line-height: 1.35; color: var(--text-2); cursor: pointer; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.fpost-last b { color: var(--text); }
+.fpost-last span { color: var(--text-3); }
+.thread { gap: 14px; }
+.thread-title { display: block; font-size: 20px; }
+.thread-sub { display: block; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-list { display: grid; gap: 14px; }
+.thread-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) 32px; gap: 10px; align-items: start; }
+.thread-body { display: grid; gap: 2px; }
+.thread-who small { color: var(--text-3); font-size: 12px; margin-left: 4px; }
+.thread-text { font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
+.thread-x { border: 0; background: transparent; color: var(--text-3); width: 32px; height: 32px; display: grid; place-items: center; cursor: pointer; }
+.thread-x svg { width: 15px; height: 15px; }
+.thread-form { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 8px; align-items: center; position: sticky; bottom: 0; background: var(--sheet-bg); padding: 6px 0 2px; }
+.thread-form .icon-btn { min-width: 44px; min-height: 44px; }
+.activity { display: grid; gap: 8px; }
+.activity h3 { margin: 0; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+.activity-n { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); }
+.activity-list { background: var(--surface); border-radius: var(--r-lg); overflow: hidden; }
+.activity-row { display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px; align-items: center; padding: 11px 14px; color: var(--text); position: relative; }
+.activity-row + .activity-row { border-top: 0.5px solid var(--hairline); }
+.activity-row.new::after { content: ""; position: absolute; right: 14px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--accent); }
+.activity-text { display: grid; gap: 1px; font-size: 14.5px; line-height: 1.35; padding-right: 14px; }
+.activity-text em { font-style: normal; color: var(--text-2); }
+.activity-text small { color: var(--text-3); font-size: 12px; }
+.activity-quote { color: var(--text-2); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.recommend-people { display: flex; gap: 12px; overflow-x: auto; padding: 4px 0 6px; scrollbar-width: none; }
+.recommend-people .fhome-person { border: 0; background: transparent; color: inherit; flex: none; opacity: 0.55; transition: opacity 0.2s var(--ease); }
+.recommend-people .fhome-person.on { opacity: 1; }
