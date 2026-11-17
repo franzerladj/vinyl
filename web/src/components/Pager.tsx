@@ -3,6 +3,7 @@ import {
   startTransition,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -58,24 +59,35 @@ export function Pager({
 }: {
   index: number;
   onIndex: (i: number) => void;
-  labels: [string, string];
-  children: [React.ReactNode, React.ReactNode];
+  labels: string[];
+  children: React.ReactNode[];
   heads?: boolean;
   switchClass?: string;
 }) {
   const [idx, setIdx] = useState(index);
   const idxRef = useRef(idx);
   idxRef.current = idx;
-  const [mounted, setMounted] = useState<[boolean, boolean]>(() => [
-    index === 0,
-    index === 1,
-  ]);
+  const n = children.length;
+  const [mounted, setMounted] = useState<boolean[]>(() =>
+    children.map((_, i) => i === index),
+  );
   const mountedRef = useRef(mounted);
   mountedRef.current = mounted;
-  const [head0, setHead0] = useState<HTMLElement | null>(null);
-  const [head1, setHead1] = useState<HTMLElement | null>(null);
-  const [fix0, setFix0] = useState<HTMLElement | null>(null);
-  const [fix1, setFix1] = useState<HTMLElement | null>(null);
+  // Plätze für Köpfe und feste Ebenen je Seite (stabile ref-Funktionen, sonst ruft React sie bei jedem Rendern)
+  const [headEls, setHeadEls] = useState<(HTMLElement | null)[]>([]);
+  const [fixEls, setFixEls] = useState<(HTMLElement | null)[]>([]);
+  const slotRefs = useMemo(() => {
+    const make = (set: typeof setHeadEls) =>
+      Array.from({ length: n }, (_, i) => (el: HTMLElement | null) =>
+        set((cur) => {
+          if (cur[i] === el) return cur;
+          const next = [...cur];
+          next[i] = el;
+          return next;
+        }),
+      );
+    return { head: make(setHeadEls), fixed: make(setFixEls) };
+  }, [n]);
   const wrap = useRef<HTMLDivElement>(null);
   const pager = useRef<HTMLDivElement>(null);
   const sw = useRef<HTMLDivElement>(null);
@@ -87,16 +99,15 @@ export function Pager({
   // Adresse oder Eltern ändern die Seite (Seitenleiste, Zurück): ohne Animation übernehmen
   useEffect(() => {
     if (index !== idxRef.current && !busy.current) {
-      setMounted((m) =>
-        m[index] ? m : index === 0 ? [true, m[1]] : [m[0], true],
-      );
+      setMounted((m) => (m[index] ? m : m.map((x, i) => x || i === index)));
       setIdx(index);
     }
   }, [index]);
 
   // Nachbarseite im Leerlauf vorbereiten (unterbrechbar, blockiert keine Eingaben)
   useEffect(() => {
-    const run = () => startTransition(() => setMounted([true, true]));
+    const run = () =>
+      startTransition(() => setMounted((m) => m.map(() => true)));
     if ("requestIdleCallback" in window) {
       const id = window.requestIdleCallback(run, { timeout: 2500 });
       return () => window.cancelIdleCallback(id);
@@ -159,7 +170,8 @@ export function Pager({
     const prepare = (target: number) => {
       from = idxRef.current;
       to = target;
-      if (!mountedRef.current[to]) flushSync(() => setMounted([true, true]));
+      if (!mountedRef.current[to])
+        flushSync(() => setMounted((m) => m.map(() => true)));
       const p = panes(),
         f = fixed(),
         h = heads();
@@ -278,9 +290,9 @@ export function Pager({
           return;
         }
         x0 = t.clientX; // ohne Sprung loslaufen
-        const target = mx < 0 ? 1 : 0;
+        const target = idxRef.current + (mx < 0 ? 1 : -1);
         busy.current = true;
-        if (target === idxRef.current) {
+        if (target < 0 || target >= box.children.length) {
           state = "band";
           W = box.clientWidth || window.innerWidth;
           root.classList.add("paging");
@@ -373,19 +385,19 @@ export function Pager({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const headEls = [head0, head1];
-  const fixEls = [fix0, fix1];
+  // Sichtbare Seite zuerst im DOM (Vorlesen, Tastatur); Verschieben kostet bei den kleinen Plätzen nichts
+  const order = [idx, ...children.map((_, i) => i).filter((i) => i !== idx)];
   return (
     <div className="pager-wrap" ref={wrap}>
       {heads && (
         <div className="pager-heads">
           {/* Sichtbarer Kopf zuerst im DOM (Vorlesen, Tastatur); Verschieben kostet hier nichts */}
-          {[idx, 1 - idx].map((i) => (
+          {order.map((i) => (
             <div
               key={i}
               data-i={i}
               className={`pager-head ${idx === i ? "on" : "off"}`}
-              ref={i === 0 ? setHead0 : setHead1}
+              ref={slotRefs.head[i]}
               inert={idx !== i}
             />
           ))}
@@ -394,10 +406,7 @@ export function Pager({
       <div className={switchClass} ref={sw}>
         <Seg
           value={String(idx)}
-          options={[
-            ["0", labels[0]],
-            ["1", labels[1]],
-          ]}
+          options={labels.map((l, i) => [String(i), l] as [string, string])}
           onChange={(v) => goRef.current(Number(v))}
         />
       </div>
@@ -422,12 +431,12 @@ export function Pager({
           </div>
         ))}
       </div>
-      {[idx, 1 - idx].map((i) => (
+      {order.map((i) => (
         <div
           key={i}
           data-i={i}
           className={`pager-fixed ${idx === i ? "on" : "off"}`}
-          ref={i === 0 ? setFix0 : setFix1}
+          ref={slotRefs.fixed[i]}
         />
       ))}
     </div>

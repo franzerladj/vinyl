@@ -21,7 +21,7 @@ const install = require("./mock.cjs");
     const inp = page.locator(".ship-row").first().locator("input").first();
     await inp.fill("6,5");
     await page.waitForTimeout(300);
-    console.log(scheme, "heading", heading, "example", await page.locator(".ship-example").textContent(), "errors", errors);
+    console.log(scheme, "heading", heading, "example", await page.locator(".pager-pane.on .ship-example").textContent(), "errors", errors);
     await ctx.close();
   }
   await b.close();

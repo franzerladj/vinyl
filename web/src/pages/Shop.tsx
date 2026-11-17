@@ -6,7 +6,8 @@ import { money } from "../lib/format";
 import { loadPriceInfo, scanFavorites, scanSeller, toggleFavorite } from "../lib/prices";
 import { planBudget } from "../../../shared/deals";
 import { toast } from "../lib/store";
-import { Cover, DealDot, DiscogsCredit, RecordRow, Seg } from "../components/bits";
+import { Cover, DealDot, DiscogsCredit, RecordRow } from "../components/bits";
+import { Pager } from "../components/Pager";
 import { IconCoin, IconExternal, IconStar, IconX } from "../components/icons";
 import { optimizeBasket, rankSellers, type Grade, type Listing, type OptimizeOptions } from "../../../shared/optimizer";
 import { DEFAULT_SHIP, estimateShipping, type ShipConfig } from "../../../shared/shipping";
@@ -38,6 +39,8 @@ export function parseSellerNames(input: string): string[] {
   ];
 }
 
+
+const TABS = ["basket", "budget", "sellers"] as const;
 
 export default function Shop() {
   const [tab, setTab] = useState<"basket" | "budget" | "sellers">("basket");
@@ -102,30 +105,8 @@ export default function Shop() {
     }
   };
 
-  return (
-    <>
-      <NavBar backLabel="Zurück" title="Shoppen" titleOnScroll />
-      <div className="page-head" style={{ paddingTop: 0 }}>
-        <div>
-          <h1>Shoppen</h1>
-          <div className="sub">
-            {data?.listings.length ?? 0} Angebote für {new Set(data?.listings.map((l) => l.releaseId)).size} Wants
-            {data?.newest ? ` · Stand ${new Date(data.newest).toLocaleString("de-DE")}` : ""}
-          </div>
-        </div>
-      </div>
-      <div className="page stack">
-        <Seg
-          value={tab}
-          options={[
-            ["basket", "Warenkorb"],
-            ["budget", "Budget"],
-            ["sellers", "Händler"],
-          ]}
-          onChange={setTab}
-        />
-
-        {tab !== "sellers" && (
+  // Versand und Regeln gelten für Warenkorb und Budget
+  const rules = (
           <details className="card">
             <summary style={{ cursor: "pointer", fontWeight: 600 }}>Versand & Regeln</summary>
             <div style={{ marginTop: 12 }}>
@@ -157,9 +138,28 @@ export default function Shop() {
             </div>
             <p className="sub">Preise in der Währung, die du bei Discogs eingestellt hast.</p>
           </details>
-        )}
-
-        {tab === "basket" &&
+  );
+  return (
+    <>
+      <NavBar backLabel="Zurück" title="Shoppen" titleOnScroll />
+      <div className="page-head" style={{ paddingTop: 0 }}>
+        <div>
+          <h1>Shoppen</h1>
+          <div className="sub">
+            {data?.listings.length ?? 0} Angebote für {new Set(data?.listings.map((l) => l.releaseId)).size} Wants
+            {data?.newest ? ` · Stand ${new Date(data.newest).toLocaleString("de-DE")}` : ""}
+          </div>
+        </div>
+      </div>
+      <Pager
+        index={TABS.indexOf(tab)}
+        onIndex={(i) => setTab(TABS[i])}
+        labels={["Warenkorb", "Budget", "Händler"]}
+        switchClass="page-switch"
+      >
+        <div className="page stack">
+          {rules}
+          {
           (result ? (
             <>
               <div className="grid3">
@@ -260,8 +260,64 @@ export default function Shop() {
               </div>
             </div>
           ))}
-
-        {tab === "sellers" && (
+        </div>
+        <div className="page stack">
+          {rules}
+          <>
+            <div className="card stack">
+              <b>Was bekomme ich für mein Budget?</b>
+              <span className="sub">Die App wählt die lohnendsten Wants: gute Preise laut Ampel, unter Wunschpreis, selten und gefragt, deine Bewertung. Pro Platte rechnet sie mit etwa {money(estimateShipping(settings.ship, null, 1))} Versand (EU-Schätzung), weil die günstigsten Angebote meist bei verschiedenen Händlern liegen.</span>
+              <div className="row">
+                <input className="input" inputMode="decimal" placeholder="Budget in €, z.B. 150" value={budget} onChange={(e) => setBudget(e.target.value)} />
+              </div>
+            </div>
+            {plan && (
+              <>
+                <div className="grid3">
+                  <div className="stat">
+                    <b>{plan.picked.length}</b>
+                    <span>Platten</span>
+                  </div>
+                  <div className="stat">
+                    <b>{money(plan.total)}</b>
+                    <span>geschätzt</span>
+                  </div>
+                  <div className="stat">
+                    <b>{money((Number(budget.replace(",", ".")) || 0) - plan.total)}</b>
+                    <span>übrig</span>
+                  </div>
+                </div>
+                <div className="list">
+                  {plan.picked.map((x) => (
+                    <RecordRow
+                      key={x.id}
+                      r={x.r}
+                      side={
+                        <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
+                          <span className="row" style={{ gap: 6 }}>
+                            <DealDot a={x.deal.ampel} />
+                            <span className="bpm" style={{ fontSize: 15 }}>{money(x.price)}</span>
+                          </span>
+                          {x.deal.reasons[0] && <span className="tiny">{x.deal.reasons[0]}</span>}
+                        </div>
+                      }
+                    />
+                  ))}
+                </div>
+                {plan.picked.length > 0 && (
+                  <>
+                    <p className="sub" style={{ margin: "14px 2px 8px", textAlign: "center" }}>Im Warenkorb bündelt Crate die Platten bei möglichst wenigen Händlern. Das spart Versand.</p>
+                    <button className="btn block tinted" onClick={() => setTab("basket")}>
+                      Zum Warenkorb
+                    </button>
+                  </>
+                )}
+                {budgetItems.length === 0 && <div className="sub">Für den Budget-Plan braucht die App Marktpreise. Die kommen beim nächsten Sync automatisch, oder in der Wantlist auf „Preise laden“ tippen.</div>}
+              </>
+            )}
+          </>
+        </div>
+        <div className="page stack">
           <>
             <div className="card stack">
               <div className="row">
@@ -330,64 +386,10 @@ export default function Shop() {
               })}
             </div>
           </>
-        )}
+        </div>
+      </Pager>
 
-        {tab === "budget" && (
-          <>
-            <div className="card stack">
-              <b>Was bekomme ich für mein Budget?</b>
-              <span className="sub">Die App wählt die lohnendsten Wants: gute Preise laut Ampel, unter Wunschpreis, selten und gefragt, deine Bewertung. Pro Platte rechnet sie mit etwa {money(estimateShipping(settings.ship, null, 1))} Versand (EU-Schätzung), weil die günstigsten Angebote meist bei verschiedenen Händlern liegen.</span>
-              <div className="row">
-                <input className="input" inputMode="decimal" placeholder="Budget in €, z.B. 150" value={budget} onChange={(e) => setBudget(e.target.value)} />
-              </div>
-            </div>
-            {plan && (
-              <>
-                <div className="grid3">
-                  <div className="stat">
-                    <b>{plan.picked.length}</b>
-                    <span>Platten</span>
-                  </div>
-                  <div className="stat">
-                    <b>{money(plan.total)}</b>
-                    <span>geschätzt</span>
-                  </div>
-                  <div className="stat">
-                    <b>{money((Number(budget.replace(",", ".")) || 0) - plan.total)}</b>
-                    <span>übrig</span>
-                  </div>
-                </div>
-                <div className="list">
-                  {plan.picked.map((x) => (
-                    <RecordRow
-                      key={x.id}
-                      r={x.r}
-                      side={
-                        <div className="stack" style={{ gap: 4, alignItems: "flex-end" }}>
-                          <span className="row" style={{ gap: 6 }}>
-                            <DealDot a={x.deal.ampel} />
-                            <span className="bpm" style={{ fontSize: 15 }}>{money(x.price)}</span>
-                          </span>
-                          {x.deal.reasons[0] && <span className="tiny">{x.deal.reasons[0]}</span>}
-                        </div>
-                      }
-                    />
-                  ))}
-                </div>
-                {plan.picked.length > 0 && (
-                  <>
-                    <p className="sub" style={{ margin: "14px 2px 8px", textAlign: "center" }}>Im Warenkorb bündelt Crate die Platten bei möglichst wenigen Händlern. Das spart Versand.</p>
-                    <button className="btn block tinted" onClick={() => setTab("basket")}>
-                      Zum Warenkorb
-                    </button>
-                  </>
-                )}
-                {budgetItems.length === 0 && <div className="sub">Für den Budget-Plan braucht die App Marktpreise. Die kommen beim nächsten Sync automatisch, oder in der Wantlist auf „Preise laden“ tippen.</div>}
-              </>
-            )}
-          </>
-        )}
-
+      <div className="page" style={{ paddingTop: 0 }}>
         <DiscogsCredit href="https://www.discogs.com/sell/mywants" />
       </div>
     </>
