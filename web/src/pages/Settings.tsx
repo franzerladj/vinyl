@@ -1285,10 +1285,18 @@ function PushBlockedHelp({ onRetry }: { onRetry?: () => void }) {
       <b className="push-help-title">Mitteilungen sind gesperrt</b>
       {canOpenAndroidSettings() ? (
         <>
-          <p className="sub">Android lässt Crate gerade nichts melden. Tippe unten, schalte „Mitteilungen erlauben“ und alle Kategorien darunter ein und komm zurück. Den Rest erledigt Crate.</p>
+          <ol className="push-steps">
+            <li>
+              <b>In Android erlauben.</b> Tippe unten und schalte dort alles ein. Ist schon alles an, weiter mit Schritt 2.
+            </li>
+            <li>
+              <b>Handy einmal neu starten</b> und Crate öffnen. Chrome, in dem Crate läuft, merkt sich die alte Sperre bis zu seinem nächsten Neustart. Danach geht der Schalter von selbst an.
+            </li>
+          </ol>
           <button className="btn primary block lg" onClick={openAndroidNotificationSettings}>
             In Android erlauben
           </button>
+          <p className="tiny">Statt Neustart geht auch: Android-Einstellungen → Apps → Chrome → „Stopp erzwingen“, dann Crate öffnen.</p>
         </>
       ) : app.android ? (
         <>

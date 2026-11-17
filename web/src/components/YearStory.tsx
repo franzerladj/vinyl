@@ -2,7 +2,7 @@
 // Flache Farbflächen (Schwarz, Lime, Papier), große Archivo-Titel, Bewegung nur über transform/opacity.
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { haptic, keepParens, useRootClass } from "./bits";
+import { haptic, keepParens, useBackClose, useRootClass } from "./bits";
 import { IconX } from "./icons";
 import type { yearReview } from "../../../shared/year";
 
@@ -231,6 +231,7 @@ export function YearStory({ data, year, name, onClose, onShare }: { data: Data; 
   const [held, setHeld] = useState(false);
   const press = useRef<{ t: number; x: number; y: number; timer?: ReturnType<typeof setTimeout> } | null>(null);
   useRootClass("in-story", true);
+  useBackClose(true, onClose);
   const go = (n: number) => {
     if (n < 0) return setI(0);
     if (n >= list.length) return onClose();

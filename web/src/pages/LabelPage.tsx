@@ -1,4 +1,5 @@
 // Label vervollständigen: was hast du, was fehlt dir noch?
+import { SwipeArea } from "../components/Pager";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -66,6 +67,7 @@ export default function LabelPage() {
               </span>
             </div>
             <Seg value={view} options={[["missing", `Fehlen (${c.missing.length})`], ["all", `Alle (${c.total})`]]} onChange={setView} />
+            <SwipeArea index={view === "missing" ? 0 : 1} count={2} onIndex={(i) => setView(i ? "all" : "missing")}>
             <div className="list">
               {list.map((e) => (
                 <div key={e.catno + e.main.id} className="rec">
@@ -90,6 +92,7 @@ export default function LabelPage() {
                 </div>
               ))}
             </div>
+            </SwipeArea>
           </>
         )}
         <DiscogsCredit href={`https://www.discogs.com/label/${id}`} />

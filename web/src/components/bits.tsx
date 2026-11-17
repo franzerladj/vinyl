@@ -172,6 +172,85 @@ export function Jobs() {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Zurück schließt, was offen ist: Blatt, Dialog, Schnellmenü, Story. Wie in nativen Apps führt die
+// Zurück-Taste von Android (und der Wisch vom Rand) erst aus dem Blatt, dann von der Seite weg.
+// Jedes offene Blatt bekommt dafür einen eigenen Verlaufseintrag (gleiche Adresse). Der Router
+// merkt davon nichts: dieser Listener ist vor ihm angemeldet und hält solche Schritte von ihm fern.
+// ---------------------------------------------------------------------------
+const openLayers = new Map<number, () => void>();
+let layerSeq = 0;
+let swallowPops = 0;
+if (typeof window !== "undefined") {
+  window.addEventListener(
+    "popstate",
+    (e) => {
+      // Unser eigenes Zurück nach dem Schließen per Tippen oder Wischen
+      if (swallowPops > 0) {
+        swallowPops--;
+        e.stopImmediatePropagation();
+        return;
+      }
+      const top = [...openLayers.keys()].pop();
+      if (top != null) {
+        const close = openLayers.get(top)!;
+        openLayers.delete(top);
+        e.stopImmediatePropagation();
+        close();
+        return;
+      }
+      // Eintrag eines längst geschlossenen Blatts (man hat aus dem Blatt heraus weitergeblättert): überspringen
+      if ((history.state as { crateLayer?: number } | null)?.crateLayer) {
+        e.stopImmediatePropagation();
+        history.back();
+      }
+    },
+    true,
+  );
+}
+
+/** Solange `open` gilt: Zurück (Taste, Geste) ruft `onClose` statt die Seite zu wechseln */
+export function useBackClose(open: boolean, onClose: () => void) {
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    if (!open) return;
+    const id = ++layerSeq;
+    try {
+      history.pushState({ ...(history.state as object | null), crateLayer: id }, "");
+    } catch {
+      return;
+    }
+    openLayers.set(id, () => close.current());
+    return () => {
+      // Schon per Zurück geschlossen: der Eintrag ist weg
+      if (!openLayers.delete(id)) return;
+      // Per Tippen/Wischen geschlossen: den eigenen Eintrag entfernen. Erst im nächsten Moment, denn
+      // oft folgt direkt ein Seitenwechsel (Menüpunkt), und dann bleibt der Eintrag besser stehen.
+      setTimeout(() => {
+        if ((history.state as { crateLayer?: number } | null)?.crateLayer === id) {
+          swallowPops++;
+          history.back();
+        }
+      }, 0);
+    };
+  }, [open]);
+}
+
+/** Liegt gerade etwas über der Seite (Blatt, Dialog, Schnellmenü, Story, Live-Modus)? Dann ruhen die Gesten der Seite darunter. */
+export const overlayOpen = () => Boolean(document.querySelector(".sheet, .dig-sheet-bg, .ctx, .ys, .ask-backdrop, .live"));
+
+/** Steckt das Element in etwas, das sich waagerecht scrollen lässt (Chips, Karussell, Kennzahlen-Leiste)? Dann gehört der Wisch dorthin. */
+export function inHorizontalScroller(el: HTMLElement | null, stop?: HTMLElement | null): boolean {
+  for (let n = el; n && n !== stop && n !== document.body; n = n.parentElement) {
+    if (n.scrollWidth > n.clientWidth + 6) {
+      const o = getComputedStyle(n).overflowX;
+      if (o === "auto" || o === "scroll") return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Wischen nach unten schließt ein Blatt, egal wo man es anfasst. Ist der Inhalt gescrollt,
  * scrollt die Geste zuerst nach oben; erst am Anfang zieht sie das Blatt mit (wie in iOS).
@@ -270,6 +349,7 @@ export function Sheet({ open, onClose, children }: { open: boolean; onClose: () 
     };
   }, [open, onClose]);
   useSwipeDown(ref, onClose, open);
+  useBackClose(open, onClose);
   if (!open) return null;
   const move = (e: React.PointerEvent) => {
     if (!drag.current || !ref.current) return;
@@ -594,6 +674,7 @@ function AskDialog() {
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [a]);
+  useBackClose(Boolean(a), () => a?.resolve(null));
   if (!a) return null;
   const confirmIt = () => (a.input ? text.trim() && a.resolve(text.trim()) : a.resolve(""));
   return (

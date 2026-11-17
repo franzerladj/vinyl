@@ -3,7 +3,7 @@
 // beim Loslassen über der Schwelle wird aktualisiert.
 import { useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
-import { haptic } from "./bits";
+import { haptic, overlayOpen } from "./bits";
 import { autoPipeline } from "../lib/sync";
 import { refreshSocial } from "../lib/social";
 import { toast } from "../lib/store";
@@ -45,7 +45,7 @@ export function PullRefresh() {
     const start = (e: TouchEvent) => {
       const t = e.touches[0];
       const target = e.target as HTMLElement;
-      if (state === "busy" || window.scrollY > 0 || e.touches.length !== 1 || target.closest(".sheet, [role=dialog], .nav, .mini-player, .carousel, input, textarea") || document.querySelector(".sheet")) {
+      if (state === "busy" || window.scrollY > 0 || e.touches.length !== 1 || target.closest(".nav, .mini-player, .jobs, input, textarea") || overlayOpen()) {
         state = "idle";
         return;
       }
@@ -61,7 +61,7 @@ export function PullRefresh() {
       const dy = t.clientY - y0, dx = t.clientX - x0;
       if (state === "maybe") {
         if (Math.abs(dy) < 8 && Math.abs(dx) < 8) return;
-        if (dy <= 0 || Math.abs(dx) > dy || window.scrollY > 0) {
+        if (dy <= 0 || Math.abs(dx) > dy || window.scrollY > 0 || overlayOpen()) {
           state = "idle";
           return;
         }

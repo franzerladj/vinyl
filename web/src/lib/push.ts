@@ -52,6 +52,10 @@ export function appInfo(): AppInfo {
     return { android: false, v: 0 };
   }
 }
+/** Aktuelle Android-App (versionCode). Ältere bekommen auf Start einen Hinweis zum Aktualisieren. */
+export const LATEST_APK = 7;
+export const apkOutdated = () => appInfo().android && appInfo().v > 0 && appInfo().v < LATEST_APK;
+
 /** Ab App-Version 1.5 öffnet ein Knopf direkt die Mitteilungs-Einstellungen von Android */
 export const canOpenAndroidSettings = () => appInfo().android && appInfo().v >= 6;
 export function openAndroidNotificationSettings() {

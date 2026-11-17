@@ -3,12 +3,13 @@ import {
   startTransition,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { haptic, Seg } from "./bits";
+import { haptic, inHorizontalScroller, overlayOpen, Seg } from "./bits";
 
 /**
  * Zwei Seiten nebeneinander, wie ein nativer Pager: der Umschalter bleibt stehen, sein Schieber folgt
@@ -262,12 +263,16 @@ export function Pager({
       const el = e.target as HTMLElement;
       // Auch unter kurzen Listen wischen können: der ganze Inhaltsbereich zählt
       const scope = root.closest(".app") ?? root;
+      // Der linke Rand gehört nur auf Seiten mit „Zurück“ der Zurück-Geste; sonst zählt er mit
+      const edge = t.clientX < 28 && Boolean(document.querySelector(".navbar"));
       if (
         busy.current ||
         e.touches.length !== 1 ||
         !scope.contains(el) ||
         el.closest(SKIP) ||
-        t.clientX < 28
+        edge ||
+        overlayOpen() ||
+        inHorizontalScroller(el, root)
       ) {
         state = "idle";
         return;
@@ -281,6 +286,10 @@ export function Pager({
     const move = (e: TouchEvent) => {
       if (state === "idle") return;
       const t = e.touches[0];
+      if (state === "maybe" && overlayOpen()) {
+        state = "idle";
+        return;
+      }
       if (state === "maybe") {
         const mx = t.clientX - x0,
           my = t.clientY - y0;
@@ -289,7 +298,9 @@ export function Pager({
           state = "idle";
           return;
         }
-        x0 = t.clientX; // ohne Sprung loslaufen
+        // Nur die Schwelle abziehen: kommt die erste Bewegung spät (schneller Schnipser, Handy beschäftigt),
+        // zählt der schon zurückgelegte Weg mit, sonst ginge der Wisch verloren
+        x0 += Math.sign(mx) * 10;
         const target = idxRef.current + (mx < 0 ? 1 : -1);
         busy.current = true;
         if (target < 0 || target >= box.children.length) {
@@ -439,6 +450,175 @@ export function Pager({
           ref={slotRefs.fixed[i]}
         />
       ))}
+    </div>
+  );
+}
+
+/**
+ * Wisch-Fläche für Umschalter, deren Seiten sich eine Liste teilen (Freund-Seite, Label, Set-Editor):
+ * der Inhalt folgt dem Finger, der Schieber des Umschalters darüber läuft mit, nach dem Loslassen
+ * gleitet der neue Inhalt von der Seite herein. Leichter als der Pager (die Nachbarseite existiert
+ * hier nicht als eigener Inhalt), gleiche Geste. `index` < 0 schaltet das Wischen ab.
+ */
+export function SwipeArea({
+  index,
+  count,
+  onIndex,
+  className,
+  children,
+}: {
+  index: number;
+  count: number;
+  onIndex: (i: number) => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const idx = useRef(index);
+  const prev = useRef(index);
+  const cb = useRef(onIndex);
+  cb.current = onIndex;
+  idx.current = index;
+
+  // Seitenwechsel (Wisch oder Tippen): neuer Inhalt gleitet aus der passenden Richtung herein
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const from = prev.current;
+    prev.current = index;
+    if (!el || from === index || from < 0 || index < 0) return;
+    const dir = index > from ? 1 : -1;
+    el.style.transition = "none";
+    el.style.transform = `translate3d(${dir * 22}%,0,0)`;
+    el.style.opacity = "0";
+    const raf = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        el.style.transition = `transform 340ms ${EASE}, opacity 240ms ${EASE}`;
+        el.style.transform = "";
+        el.style.opacity = "";
+        setTimeout(() => (el.style.transition = ""), 360);
+      }),
+    );
+    return () => cancelAnimationFrame(raf);
+  }, [index]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const thumb = () =>
+      el.parentElement?.querySelector<HTMLElement>(
+        ":scope > .seg > .seg-thumb",
+      ) ?? null;
+    let state: "idle" | "maybe" | "drag" = "idle";
+    let x0 = 0,
+      y0 = 0,
+      dx = 0,
+      lastX = 0,
+      lastT = 0,
+      vx = 0,
+      W = 1;
+    const start = (e: TouchEvent) => {
+      const t = e.touches[0];
+      const target = e.target as HTMLElement;
+      const edge = t.clientX < 28 && Boolean(document.querySelector(".navbar"));
+      if (
+        idx.current < 0 ||
+        e.touches.length !== 1 ||
+        edge ||
+        target.closest(SKIP) ||
+        overlayOpen() ||
+        inHorizontalScroller(target, el)
+      ) {
+        state = "idle";
+        return;
+      }
+      state = "maybe";
+      x0 = lastX = t.clientX;
+      y0 = t.clientY;
+      lastT = performance.now();
+      dx = vx = 0;
+    };
+    const move = (e: TouchEvent) => {
+      if (state === "idle") return;
+      const t = e.touches[0];
+      if (state === "maybe") {
+        const mx = t.clientX - x0,
+          my = t.clientY - y0;
+        if (Math.abs(mx) < 10 && Math.abs(my) < 10) return;
+        if (Math.abs(mx) <= Math.abs(my) * 1.3 || overlayOpen()) {
+          state = "idle";
+          return;
+        }
+        state = "drag";
+        x0 += Math.sign(mx) * 10;
+        W = el.clientWidth || window.innerWidth;
+        el.style.transition = "none";
+        const th = thumb();
+        if (th) th.style.transition = "none";
+      }
+      const now = performance.now();
+      vx = vx * 0.6 + ((t.clientX - lastX) / Math.max(1, now - lastT)) * 0.4;
+      lastX = t.clientX;
+      lastT = now;
+      const raw = t.clientX - x0;
+      const target = idx.current + (raw < 0 ? 1 : -1);
+      // Am Rand (keine Seite mehr) nur mit Widerstand
+      dx = target < 0 || target >= count ? raw * 0.22 : raw;
+      el.style.transform = `translate3d(${dx}px,0,0)`;
+      el.style.opacity = String(1 - Math.min(0.6, Math.abs(dx) / W));
+      const th = thumb();
+      if (th)
+        th.style.transform = `translateX(${Math.max(0, Math.min(count - 1, idx.current - dx / W)) * 100}%)`;
+    };
+    const end = () => {
+      if (state !== "drag") {
+        state = "idle";
+        return;
+      }
+      state = "idle";
+      const dir = dx < 0 ? 1 : -1;
+      const target = idx.current + dir;
+      const v = -vx * dir;
+      const th = thumb();
+      const commit =
+        target >= 0 &&
+        target < count &&
+        (Math.abs(dx) > W * 0.28 || (v > 0.35 && Math.abs(dx) > 24));
+      if (th) th.style.transition = "";
+      if (commit) {
+        haptic(6);
+        el.style.transition = `transform 150ms ${EASE}, opacity 150ms ${EASE}`;
+        el.style.transform = `translate3d(${-dir * W * 0.5}px,0,0)`;
+        el.style.opacity = "0";
+        setTimeout(() => cb.current(target), 140);
+        // Wechselt die Seite doch nicht, Inhalt wieder zeigen
+        setTimeout(() => {
+          if (idx.current === target) return;
+          el.style.transition = "";
+          el.style.transform = "";
+          el.style.opacity = "";
+        }, 500);
+      } else {
+        el.style.transition = `transform 380ms ${EASE}, opacity 240ms ${EASE}`;
+        el.style.transform = "";
+        el.style.opacity = "";
+        if (th) th.style.transform = `translateX(${idx.current * 100}%)`;
+        setTimeout(() => (el.style.transition = ""), 400);
+      }
+    };
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchmove", move, { passive: true });
+    el.addEventListener("touchend", end, { passive: true });
+    el.addEventListener("touchcancel", end, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", start);
+      el.removeEventListener("touchmove", move);
+      el.removeEventListener("touchend", end);
+      el.removeEventListener("touchcancel", end);
+    };
+  }, [count]);
+  return (
+    <div ref={ref} className={className}>
+      {children}
     </div>
   );
 }

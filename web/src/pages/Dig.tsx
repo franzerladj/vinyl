@@ -14,7 +14,7 @@ import { discogsSellUrl, money } from "../lib/format";
 import { ask, toast } from "../lib/store";
 import { getKV, setKV } from "../lib/db";
 import { ytConsent } from "../lib/theme";
-import { haptic, keepParens, DiscogsCredit, useRootClass, useSwipeDown } from "../components/bits";
+import { haptic, keepParens, DiscogsCredit, useBackClose, useRootClass, useSwipeDown } from "../components/bits";
 import { IconBack, IconCart, IconFilter, IconHeart, IconPause, IconPlay, IconPlus, IconShare, IconMore, IconSleeves, IconThumb, IconX } from "../components/icons";
 import { DECADES, decadeLabel, passesPrice, type DigCard } from "../../../shared/dig";
 import { parseDuration } from "../../../shared/match";
@@ -23,6 +23,7 @@ import { parseDuration } from "../../../shared/match";
 function DigSheet({ onClose, stack, children }: { onClose: () => void; stack?: boolean; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   useSwipeDown(ref, onClose);
+  useBackClose(true, onClose);
   return (
     <div className="dig-sheet-bg" onClick={onClose}>
       <div className={`dig-sheet${stack ? " stack" : ""}`} ref={ref} onClick={(e) => e.stopPropagation()}>

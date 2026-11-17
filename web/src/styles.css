@@ -114,7 +114,8 @@
 
 * { box-sizing: border-box; }
 /* Kein Neuladen durch Herunterziehen (Chrome) und kein Gummiband-Effekt der ganzen Seite */
-html { -webkit-text-size-adjust: 100%; overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+/* pan-x pan-y: kein Zoomen mit zwei Fingern und kein Doppeltipp-Zoom, wie in einer App (Schriftgröße folgt weiter dem System) */
+html { -webkit-text-size-adjust: 100%; overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; touch-action: pan-x pan-y; }
 /* App statt Webseite: Bedienelemente nicht markierbar, langes Drücken öffnet keine Link- oder Bildvorschau */
 a, img, .nav, .side, .chip, .seg, .tool-btn, .btn, .rec, .page-head, .toolbar-row, .set-tile, .friend-card, .fpost, .dig, .mini-player, .option, .stat, .section-head, .home-wall, .cover { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 img { -webkit-user-drag: none; }
@@ -1629,3 +1630,5 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 @media (min-width: 1024px) { .wiz { max-width: 640px; margin: 0 auto; } .wiz-foot { position: static; max-width: 640px; margin: 0 auto; border: 0; background: transparent; } }
 .in-wiz .jobs { visibility: hidden; }
 .wiz .chips { flex-wrap: wrap; overflow: visible; }
+.push-steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; color: var(--text-2); font-size: 15px; line-height: 1.4; }
+.push-steps b { color: var(--text); }

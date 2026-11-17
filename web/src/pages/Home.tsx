@@ -1,3 +1,5 @@
+import { apkOutdated, LATEST_APK } from "../lib/push";
+import { Hint } from "../components/Welcome";
 import { DailyRecord } from "../components/DailyRecord";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -143,6 +145,12 @@ export default function Home() {
               <div className="tiny" style={{ marginTop: 8 }}>Läuft im Hintergrund weiter, du kannst die App normal benutzen.</div>
             </div>
           </div>
+        )}
+        {apkOutdated() && (
+          <Hint id={`apk-${LATEST_APK}`}>
+            <b>Neue Version der Android-App.</b> Mit neuem Logo auf dem Startbildschirm und Teilen direkt in die Instagram-Story.{" "}
+            <a href="/download/crate.apk">Jetzt laden und installieren</a>
+          </Hint>
         )}
         {stylus?.wear != null && stylus.wear >= 0.9 && (
           <Link to="/settings/stylus" viewTransition className="hint" style={{ color: "inherit", textDecoration: "none" }}>

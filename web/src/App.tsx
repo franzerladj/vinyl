@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useNavigationType, useRouteError, type RouteObject } from "react-router-dom";
 import { getMe } from "./lib/api";
 import { setState, toast, useStore } from "./lib/store";
-import { haptic, Jobs, Sheet } from "./components/bits";
+import { haptic, Jobs, Sheet, overlayOpen } from "./components/bits";
 import { Welcome } from "./components/Welcome";
 import { RecordMenu } from "./components/RecordMenu";
 import { PullRefresh } from "./components/PullRefresh";
@@ -186,7 +186,9 @@ function useScrollMemory() {
   const loc = useLocation();
   const type = useNavigationType();
   useEffect(() => {
-    const key = loc.key;
+    // Der erste Eintrag nach einem (Neu-)Laden heißt immer „default“: mit der Adresse zusammen merken,
+    // sonst landet man nach dem Neuladen auf der Scroll-Position einer anderen Seite
+    const key = loc.key === "default" ? `default:${loc.pathname}` : loc.key;
     let t: ReturnType<typeof setTimeout> | undefined;
     const onScroll = () => {
       clearTimeout(t);
@@ -312,17 +314,20 @@ function useBackGesture() {
   const loc = useLocation();
   useEffect(() => {
     const standalone = matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone;
-    if (!standalone || loc.pathname === "/") return;
+    // Nur auf Unterseiten: die fünf Orte der Tab-Leiste haben kein „Zurück“, und im Diggen gehört der Wisch den Platten
+    if (!standalone || ["/", "/dig", "/collection", "/wants", "/sets", "/friends"].includes(loc.pathname)) return;
     const root = document.querySelector<HTMLElement>(".app");
     if (!root) return;
     let x0: number | null = null;
     let y0 = 0;
     let dx = 0;
     let horizontal: boolean | null = null;
+    let t0 = 0;
     const start = (e: TouchEvent) => {
       const t = e.touches[0];
-      if (t.clientX > 22) return;
+      if (t.clientX > 22 || e.touches.length !== 1 || overlayOpen()) return;
       x0 = t.clientX;
+      t0 = performance.now();
       y0 = t.clientY;
       dx = 0;
       horizontal = null;
@@ -340,7 +345,9 @@ function useBackGesture() {
     const end = () => {
       if (x0 == null) return;
       const w = window.innerWidth;
-      if (horizontal && dx > w * 0.33) {
+      // Weit genug oder schnell genug (kurzer Schnipser vom Rand)
+      const fast = dx > 50 && dx / Math.max(1, performance.now() - t0) > 0.6;
+      if (horizontal && (dx > w * 0.33 || fast)) {
         root.style.transition = "transform .22s var(--ease)";
         root.style.transform = `translateX(${w}px)`;
         document.documentElement.classList.add("vt-none");

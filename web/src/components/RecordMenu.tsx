@@ -9,7 +9,7 @@ import { previewUrl } from "../lib/free";
 import { addWant, removeWant } from "../lib/sync";
 import { discogsReleaseUrl } from "../lib/format";
 import { toast } from "../lib/store";
-import { haptic, keepParens, useSwipeDown } from "./bits";
+import { haptic, keepParens, overlayOpen, useBackClose, useSwipeDown } from "./bits";
 import { IconHeart, IconPlay, IconShare, IconRecord } from "./icons";
 
 type Ctx = { rel: Release; owned: boolean; wanted: boolean; track?: { title: string; artist: string; deezerId?: number; id: string } };
@@ -41,7 +41,7 @@ export function RecordMenu() {
     };
     const down = (e: TouchEvent) => {
       const a = target(e);
-      if (!a || e.touches.length !== 1) return;
+      if (!a || e.touches.length !== 1 || overlayOpen()) return;
       start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       timer = setTimeout(() => void open(a), 480);
     };
@@ -93,6 +93,7 @@ export function RecordMenu() {
   }, [ctx]);
   const body = useRef<HTMLDivElement>(null);
   useSwipeDown(body, () => setCtx(null), Boolean(ctx));
+  useBackClose(Boolean(ctx), () => setCtx(null));
   if (!ctx) return null;
   const { rel, owned, wanted, track } = ctx;
   const close = () => setCtx(null);

@@ -1,3 +1,4 @@
+import { SwipeArea } from "../components/Pager";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -19,6 +20,8 @@ import { Avatar, Cover, Empty, haptic, RecordRow, Seg, SkeletonRows, useDebounce
 import { IconMore, IconPlus, IconSearch, IconShare, IconSync, IconTrash, IconUser } from "../components/icons";
 import { matchesQuery } from "../../../shared/textSearch";
 import { MenuSheet, NavBar } from "../components/ui";
+
+const FRIEND_TABS = ["coll", "want", "shared"] as const;
 
 export default function Friends() {
   const { username } = useParams();
@@ -454,6 +457,7 @@ function FriendDetail({ u }: { u: string }) {
           ]}
           onChange={setTab}
         />
+        <SwipeArea index={FRIEND_TABS.indexOf(tab as (typeof FRIEND_TABS)[number])} count={3} onIndex={(i) => setTab(FRIEND_TABS[i])} className="stack">
         {((tab === "coll" && !f.collectionPrivate) || (tab === "want" && !f.wantsPrivate)) && (
           <div className="search-bar">
             <IconSearch />
@@ -480,6 +484,7 @@ function FriendDetail({ u }: { u: string }) {
             {tab === "hasYourWants" ? `${u} hat aktuell keine Platte von deiner Wantlist.` : tab === "wantsYours" ? `${u} sucht gerade nichts, was du hast.` : dq ? "Anders suchen." : ""}
           </Empty>
         )}
+        </SwipeArea>
         <DiscogsCredit href={`https://www.discogs.com/user/${encodeURIComponent(u)}`} />
         {f.lastSync && <p className="tiny" style={{ textAlign: "center" }}>Stand {new Date(f.lastSync).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}</p>}
       </div>

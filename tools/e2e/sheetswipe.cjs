@@ -33,6 +33,24 @@ const install = require("./mock.cjs");
   out.kurzBleibt = (await page.locator(".sheet").count()) === 1;
   await swipeDown(box.x + 100, box.y + 10, 200);
   out.menuZu = (await page.locator(".sheet").count()) === 0;
+  // Zurück (Android-Taste, Wisch vom Rand) schließt das Blatt und bleibt auf der Seite
+  await page.click("button[aria-label='Mehr']");
+  await page.waitForSelector(".sheet .option");
+  await page.waitForTimeout(400);
+  await page.goBack();
+  await page.waitForTimeout(500);
+  out.zurueckSchliesst = (await page.locator(".sheet").count()) === 0 && new URL(page.url()).pathname === "/collection";
+  // Menüpunkt, der weiterführt: danach bringt ein Zurück wieder zur Sammlung (kein toter Schritt)
+  await page.click("button[aria-label='Mehr']");
+  await page.waitForSelector(".sheet .option");
+  await page.waitForTimeout(400);
+  await page.click(".option:has-text('Platte hinzufügen')");
+  await page.waitForFunction(() => location.pathname === "/scan", null, { timeout: 8000 });
+  await page.waitForTimeout(600);
+  await page.goBack();
+  await page.waitForTimeout(900);
+  out.nachMenuZurueck = new URL(page.url()).pathname;
+  // Langes Drücken: Zurück schließt das Schnellmenü
   // Filter im Diggen
   await page.goto("http://localhost:8787/dig");
   await page.waitForSelector(".dig-card .dig-deck, .dig-card img", { timeout: 20000 });

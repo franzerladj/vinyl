@@ -1,3 +1,4 @@
+import { SwipeArea } from "../components/Pager";
 import { NavBar } from "../components/ui";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -78,6 +79,8 @@ function qrUrl(o: Opts, r: { id: number; artist: string; title: string }) {
 }
 
 const KIND_LABEL: Record<Kind, string> = { card: "Einleger", obi: "Obi-Streifen", sticker: "Sticker" };
+
+const KINDS = ["card", "obi", "sticker"] as const;
 
 export default function Stickers() {
   const [params] = useSearchParams();
@@ -212,6 +215,7 @@ export default function Stickers() {
           ]}
           onChange={(kind) => upd({ kind, skip: 0 })}
         />
+        <SwipeArea index={KINDS.indexOf(opts.kind)} count={3} onIndex={(k) => upd({ kind: KINDS[k], skip: 0 })} className="stack">
         <p className="sub" style={{ margin: "-2px 2px 0" }}>
           {opts.kind === "card" && "Karte, die vor dem Cover in die transparente Außenhülle kommt. Von außen lesbar, nichts klebt auf dem Original."}
           {opts.kind === "obi" && "Papierstreifen, der wie bei japanischen Pressungen um die linke Kante der Hülle gelegt wird: vorne Artist und Titel, hinten die Tracks mit BPM und Key."}
@@ -424,6 +428,7 @@ export default function Stickers() {
         <p className="tiny">
           Druckdialog: „Tatsächliche Größe / 100 %“, Kopf- und Fußzeilen aus{opts.kind !== "sticker" && ", Hintergrundgrafiken an"}. Für Einleger eignet sich mattes Papier mit 200 bis 300 g/m².
         </p>
+        </SwipeArea>
       </div>
 
       <div className="print-area print-only">

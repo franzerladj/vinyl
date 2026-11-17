@@ -12,7 +12,7 @@ import { encodeSet } from "../../../shared/setShare";
 import { playedHistory, playedText, type PlayedAt } from "../lib/setHistory";
 import { ask, toast, username } from "../lib/store";
 import { deleteTemplate, saveTemplate, stillOwned, useTemplates } from "../lib/crateTemplates";
-import { Cover, haptic, Seg, Sheet, keepParens, useRootClass } from "../components/bits";
+import { Cover, haptic, Seg, Sheet, keepParens, useRootClass, useBackClose } from "../components/bits";
 import { IconCheck, IconPlay, IconPlus, IconX } from "../components/icons";
 import { TrackLine } from "./Sets";
 import { previewUrl } from "../lib/free";
@@ -26,6 +26,7 @@ import { CalendarSheet } from "../components/CalendarSheet";
 import type { GigEvent } from "../../../shared/ics";
 import { useFolders } from "../lib/folders";
 import { fetchRelease } from "../lib/sync";
+import { SwipeArea } from "../components/Pager";
 import { SetWizard } from "../components/SetWizard";
 
 /** Zuletzt gewählter Ordner gilt für das nächste neue Set */
@@ -470,6 +471,7 @@ export default function SetEditor() {
           onChange={setView}
         />
 
+        <SwipeArea index={view === "order" ? 0 : 1} count={2} onIndex={(i) => setView(i ? "crate" : "order")} className="stack">
         {view === "order" ? (
           <>
             {tracks.length === 0 && (
@@ -530,6 +532,7 @@ export default function SetEditor() {
             onRemove={(rid) => update({ crateIds: crate.filter((x) => x !== rid), trackIds: set.trackIds.filter((tid) => data?.byId.get(tid)?.releaseId !== rid) })}
           />
         )}
+        </SwipeArea>
 
         {!isNew && (
           <button
@@ -744,7 +747,7 @@ function OrderList(p: {
               </button>
             )}
             <div className="order-row">
-              <span className="order-handle" onPointerDown={(e) => startDrag(i, e)} aria-label="Ziehen zum Umsortieren" role="button">
+              <span className="order-handle" data-no-pager onPointerDown={(e) => startDrag(i, e)} aria-label="Ziehen zum Umsortieren" role="button">
                 <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                   <path d="M5 9h14M5 15h14" />
                 </svg>
@@ -1139,6 +1142,8 @@ function LiveMode({ tracks, rels, notes, played, onPlayed, onClose }: { tracks: 
   const [menu, setMenu] = useState(false);
   const cur = tracks[i];
   const next = tracks[i + 1];
+  // Zurück (Taste, Geste) verlässt den Live-Modus, nicht das Set
+  useBackClose(true, onClose);
   useEffect(() => {
     // Bildschirm anlassen, solange der Live-Modus offen ist
     let lock: { release(): Promise<void> } | null = null;
