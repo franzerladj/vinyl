@@ -341,38 +341,75 @@ export function ChipGroup({ title, values, selected, onToggle, max = 24 }: { tit
 /** Sammlung und Wantlist teilen sich einen Platz in der Tab-Leiste: oben umschalten */
 export function LibrarySwitch({ value }: { value: "coll" | "wants" }) {
   const nav = useNavigate();
-  // Wischen: nach links von der Sammlung zur Wantlist, nach rechts zurück
+  // Wischen: nach links von der Sammlung zur Wantlist, nach rechts zurück. Die Seite folgt dem Finger,
+  // beim Loslassen gleitet sie raus und die andere Liste schiebt sich von der Seite rein (nur transform/opacity).
   useEffect(() => {
-    let x0 = 0, y0 = 0, t0 = 0, on = false;
+    const main = document.querySelector<HTMLElement>(".main");
+    if (!main) return;
+    const dir = value === "coll" ? -1 : 1; // erlaubte Wischrichtung
+    let x0 = 0, y0 = 0, t0 = 0, dx = 0;
+    let state: "idle" | "maybe" | "drag" | "off" = "idle";
+    const set = (x: number, o = 1, ms = 0, ease = "cubic-bezier(.32,.72,0,1)") => {
+      main.style.transition = ms ? `transform ${ms}ms ${ease}, opacity ${ms}ms ${ease}` : "none";
+      main.style.transform = x ? `translate3d(${x}px,0,0)` : "";
+      main.style.opacity = o === 1 ? "" : String(o);
+    };
     const start = (e: TouchEvent) => {
       const t = e.touches[0];
       const el = e.target as HTMLElement;
       // Rand links gehört der Zurück-Geste, waagerecht scrollbare Leisten und Blätter behalten ihr Wischen
-      on = e.touches.length === 1 && t.clientX > 28 && !el.closest(".carousel, .toolbar-row, .folder-tabs, .chips-scroll, .seg, .sheet, .alpha-index, input, textarea");
+      state = e.touches.length === 1 && t.clientX > 28 && !el.closest(".carousel, .toolbar-row, .folder-tabs, .chips-scroll, .seg, .sheet, .alpha-index, input, textarea") ? "maybe" : "off";
       x0 = t.clientX;
       y0 = t.clientY;
-      t0 = Date.now();
+      t0 = performance.now();
+      dx = 0;
     };
-    const end = (e: TouchEvent) => {
-      if (!on) return;
-      on = false;
-      const t = e.changedTouches[0];
-      const dx = t.clientX - x0, dy = t.clientY - y0;
-      if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.5 || Date.now() - t0 > 600) return;
-      if (dx < 0 && value === "coll") {
-        haptic(6);
-        nav("/wants", { replace: true, viewTransition: true });
-      } else if (dx > 0 && value === "wants") {
-        haptic(6);
-        document.documentElement.classList.add("vt-back");
-        nav("/collection", { replace: true, viewTransition: true });
+    const move = (e: TouchEvent) => {
+      if (state === "off" || state === "idle") return;
+      const t = e.touches[0];
+      const mx = t.clientX - x0, my = t.clientY - y0;
+      if (state === "maybe") {
+        if (Math.abs(mx) < 10 && Math.abs(my) < 10) return;
+        state = Math.abs(mx) > Math.abs(my) * 1.3 ? "drag" : "off";
+        if (state !== "drag") return;
+        x0 = t.clientX; // ohne Sprung loslaufen
       }
+      const raw = t.clientX - x0;
+      // In die falsche Richtung nur mit Widerstand
+      dx = Math.sign(raw) === dir ? raw : raw * 0.25;
+      set(dx);
+    };
+    const end = () => {
+      if (state !== "drag") {
+        state = "idle";
+        return;
+      }
+      state = "idle";
+      const w = window.innerWidth;
+      const v = Math.abs(dx) / Math.max(1, performance.now() - t0);
+      if (Math.sign(dx) === dir && (Math.abs(dx) > w * 0.28 || (v > 0.45 && Math.abs(dx) > 40))) {
+        haptic(6);
+        set(dir * w, 0.4, 180);
+        setTimeout(() => {
+          nav(value === "coll" ? "/wants" : "/collection", { replace: true });
+          // Neue Liste kommt von der anderen Seite
+          requestAnimationFrame(() => {
+            set(-dir * w * 0.35, 0, 0);
+            requestAnimationFrame(() => requestAnimationFrame(() => set(0, 1, 300)));
+            setTimeout(() => set(0, 1, 0), 360);
+          });
+        }, 170);
+      } else set(0, 1, 380, "cubic-bezier(.3,1.14,.6,1)");
     };
     window.addEventListener("touchstart", start, { passive: true });
+    window.addEventListener("touchmove", move, { passive: true });
     window.addEventListener("touchend", end, { passive: true });
+    window.addEventListener("touchcancel", end, { passive: true });
     return () => {
       window.removeEventListener("touchstart", start);
+      window.removeEventListener("touchmove", move);
       window.removeEventListener("touchend", end);
+      window.removeEventListener("touchcancel", end);
     };
   }, [value, nav]);
   return (

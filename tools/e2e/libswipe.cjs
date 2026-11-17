@@ -14,9 +14,15 @@ const B = "http://localhost:8787";
   await page.goto(B + "/collection");
   await page.waitForSelector(".rec");
   const cdp = await ctx.newCDPSession(page);
+  let mitten = [];
   const swipe = async (x0, x1, y = 500) => {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: x0, y }] });
-    for (let i = 1; i <= 6; i++) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x0 + ((x1 - x0) * i) / 6, y }] });
+    for (let i = 1; i <= 6; i++) {
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: x0 + ((x1 - x0) * i) / 6, y }] });
+      await page.waitForTimeout(16);
+    }
+    // Seite folgt dem Finger
+    mitten.push(await page.evaluate(() => document.querySelector(".main").style.transform || "-"));
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await page.waitForTimeout(900);
   };
@@ -25,6 +31,8 @@ const B = "http://localhost:8787";
   await swipe(100, 320);
   const nachRechts = new URL(page.url()).pathname;
   await swipe(320, 300); // zu kurz: bleibt
-  console.log({ nachLinks, nachRechts, kurz: new URL(page.url()).pathname, errors });
+  await page.waitForTimeout(500);
+  const ende = await page.evaluate(() => document.querySelector(".main").style.transform || "");
+  console.log({ nachLinks, nachRechts, kurz: new URL(page.url()).pathname, mitten, ende, errors });
   await b.close();
 })();
