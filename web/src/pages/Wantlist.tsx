@@ -11,8 +11,9 @@ import { DealDot, Empty, RecordRow, Sheet, SkeletonRows, useDebounced, DiscogsCr
 import { IconCart, IconCoin, IconFolder, IconMore, IconRows, IconSearch, IconSync } from "../components/icons";
 import { matchesQuery } from "../../../shared/textSearch";
 import { stripFolder } from "../../../shared/folders";
+import { PaneFixed, PaneHead } from "../components/Pager";
 import { FolderBar, FolderManager, inPick, useFolderRecords, useFolderTabs } from "../components/Folders";
-import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState, LibrarySwitch } from "../components/ui";
+import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
 
 const SORTS: SortOption[] = [
   { id: "deal", label: "Beste Deals", dirs: ["Lohnendste zuerst", "Lohnendste zuletzt"], defaultDir: "desc" },
@@ -198,14 +199,15 @@ export default function Wantlist() {
 
   return (
     <>
-      <div className="page-head">
+      <PaneHead>
+        <div className="page-head">
         <div>
           <h1>Wantlist</h1>
           <div className="sub">{data ? `${data.length} Platten${available.length ? ` · ${available.length} verfügbar` : ""}` : " "}</div>
         </div>
         <div className="row" style={{ gap: 4 }}>
-          <Link to="/shop" viewTransition className="btn small primary">
-            <IconCart /> Shoppen
+          <Link to="/shop" viewTransition className="icon-btn round primary" aria-label="Shoppen">
+            <IconCart />
           </Link>
           <Link to="/search" viewTransition className="icon-btn round" aria-label="Platte suchen">
             <IconSearch />
@@ -214,8 +216,8 @@ export default function Wantlist() {
             <IconMore />
           </button>
         </div>
-      </div>
-      <LibrarySwitch value="wants" />
+        </div>
+      </PaneHead>
       <FolderBar kind="want" recs={recs} value={folder} onChange={(f) => setFolderSel({ f })} onManage={() => setFolderSheet({ start: null })} />
       <FolderManager kind="want" open={folderSheet !== null} onClose={() => setFolderSheet(null)} recs={recs} startWith={folderSheet?.start} onShow={(f) => setFolderSel({ f })} key={folderSheet?.start ?? "list"} />
 
@@ -332,7 +334,9 @@ export default function Wantlist() {
             />
           )}
         />
-        <AlphaIndex letters={letters} offset={toolbarH} />
+        <PaneFixed>
+          <AlphaIndex letters={letters} offset={toolbarH} />
+        </PaneFixed>
         {all && all.length > 0 && data && data.length === 0 && (
           <Empty title="Ordner ist leer" action={<button className="btn tinted" onClick={() => setFolderSheet({ start: folder === "-" ? null : folder })}>Platten einsortieren</button>}>
             In diesem Ordner liegt noch nichts.

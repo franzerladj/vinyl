@@ -17,8 +17,8 @@ const B = "http://localhost:8787";
 
   // Sammlung: ohne Ordner keine Leiste, Ordner über das Menü anlegen
   await page.goto(`${B}/collection`);
-  await page.waitForSelector(".rec");
-  out.barBefore = await page.locator(".folder-tabs").count();
+  await page.waitForSelector(".pager-pane.on .rec");
+  out.barBefore = await page.locator(".pager-pane.on .folder-tabs").count();
   await page.click("button[aria-label='Mehr']");
   await page.click(".option:has-text('Ordner')");
   await page.fill("input[placeholder^='Erster Ordner']", "Auflegen");
@@ -30,20 +30,20 @@ const B = "http://localhost:8787";
   await page.click(".folder-sorter button:has-text('markieren')");
   await page.screenshot({ path: `${__dirname}/folders-sort.png` });
   await page.click(".folder-sorter button:has-text('Sichern')");
-  await page.waitForFunction((n) => document.querySelector(".folder-tab.on, .folder-tab") && [...document.querySelectorAll(".folder-tab")].some((t) => t.textContent.includes("Auflegen") && t.textContent.includes(String(n))), marked, { timeout: 30000 });
+  await page.waitForFunction((n) => document.querySelector(".pager-pane.on .folder-tab") && [...document.querySelectorAll(".pager-pane.on .folder-tab")].some((t) => t.textContent.includes("Auflegen") && t.textContent.includes(String(n))), marked, { timeout: 30000 });
   for (let i = 0; i < 60 && st.calls.filter((c) => c[0] === "move").length < marked; i++) await page.waitForTimeout(500);
   out.moved = st.calls.filter((c) => c[0] === "move").length;
   out.marked = marked;
   await page.waitForTimeout(400);
-  out.selected = await page.locator(".folder-tab.on").textContent();
-  out.listInFolder = await page.locator(".rec").count();
+  out.selected = await page.locator(".pager-pane.on .folder-tab.on").textContent();
+  out.listInFolder = await page.locator(".pager-pane.on .rec").count();
   await page.screenshot({ path: `${__dirname}/folders-coll.png` });
 
   // Wantlist: gleicher Ordner da, neuen Ordner „Metal“ anlegen und zwei Wants einsortieren
   await page.goto(`${B}/wants`);
   await page.waitForTimeout(3000);
   await page.screenshot({ path: `${__dirname}/folders-want0.png` });
-  await page.waitForSelector(".rec");
+  await page.waitForSelector(".pager-pane.on .rec");
   await page.click("button[aria-label='Mehr']");
   await page.click(".option:has-text('Ordner')");
   out.sharedInWants = await page.locator(".option-list .option:has-text('Auflegen')").count();
@@ -53,12 +53,12 @@ const B = "http://localhost:8787";
   await page.locator(".folder-sorter .pick-rec").nth(0).click();
   await page.locator(".folder-sorter .pick-rec").nth(1).click();
   await page.click(".folder-sorter button:has-text('Sichern')");
-  await page.waitForFunction(() => [...document.querySelectorAll(".folder-tab")].some((t) => t.textContent.includes("Metal") && t.textContent.includes("2")), null, { timeout: 30000 });
+  await page.waitForFunction(() => [...document.querySelectorAll(".pager-pane.on .folder-tab")].some((t) => t.textContent.includes("Metal") && t.textContent.includes("2")), null, { timeout: 30000 });
   for (let i = 0; i < 60 && st.calls.filter((c) => c[0] === "note").length < 2; i++) await page.waitForTimeout(500);
   const notes = st.calls.filter((c) => c[0] === "note");
   out.notes = notes.map((c) => c[2]);
   await page.waitForTimeout(400);
-  out.wantsInFolder = await page.locator(".rec").count();
+  out.wantsInFolder = await page.locator(".pager-pane.on .rec").count();
   await page.screenshot({ path: `${__dirname}/folders-want.png` });
 
   // Gekauft: Want aus „Metal“ landet in der Sammlung im Ordner „Metal“

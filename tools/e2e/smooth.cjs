@@ -42,7 +42,7 @@ const B = "http://localhost:8787";
   await run("Platte öffnen", async () => { await page.locator(".rec").nth(3).click(); await page.waitForSelector(".tracks"); await page.waitForTimeout(1000); });
   await run("Zurück", async () => { await page.goBack(); await page.waitForSelector(".rec"); await page.waitForTimeout(900); });
   await run("Filter-Blatt", async () => { await page.click("button:has-text('Filter')"); await page.waitForTimeout(700); await page.keyboard.press("Escape"); await page.waitForTimeout(700); });
-  await run("Wischen zur Wantlist", async () => { const pts = []; for (let i = 0; i <= 8; i++) pts.push({ x: 320 - i * 28, y: 500 }); await touch(pts); await page.waitForTimeout(900); });
+  await run("Wischen zur Wantlist", async () => { const pts = []; for (let i = 0; i <= 8; i++) pts.push({ x: 320 - i * 28, y: 330 }); await touch(pts); await page.waitForTimeout(900); });
   await run("Tab Sets", async () => { await page.click(".nav >> text=Sets"); await page.waitForTimeout(900); });
   await run("Tab Start", async () => { await page.click(".nav >> text=Start"); await page.waitForTimeout(900); });
   await run("Diggen öffnen", async () => { await page.click(".nav >> text=Diggen"); await page.waitForSelector(".dig-card"); await page.waitForTimeout(1200); });

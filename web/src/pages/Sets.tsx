@@ -1,3 +1,4 @@
+import { Pager } from "../components/Pager";
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -7,7 +8,6 @@ import {
   Empty,
   Energy,
   KeyBadge,
-  Seg,
   useDebounced,
 } from "../components/bits";
 import { IconPlus } from "../components/icons";
@@ -54,7 +54,8 @@ export default function Sets() {
   const today = new Date().toISOString().slice(0, 10);
   // Kommende Gigs zuerst (nächster oben), dann der Rest, neueste zuerst
   const ordered = [...sets].sort((a, b) => {
-    const ua = a.date && a.date >= today ? a.date : null, ub = b.date && b.date >= today ? b.date : null;
+    const ua = a.date && a.date >= today ? a.date : null,
+      ub = b.date && b.date >= today ? b.date : null;
     if (ua && ub) return ua.localeCompare(ub);
     if (ua || ub) return ua ? -1 : 1;
     return b.createdAt - a.createdAt;
@@ -70,84 +71,80 @@ export default function Sets() {
           <IconPlus /> Neues Set
         </button>
       </div>
-      <div className="page stack">
-        <Seg
-          value={tab}
-          options={[
-            ["sets", "Meine Sets"],
-            ["live", "Nächster Track"],
-          ]}
-          onChange={setTab}
-        />
-        {tab === "sets" ? (
-          <>
-            <div className="set-grid">
-              {ordered.map((s) => {
-                const c = covers.get(s.id!) ?? [];
-                const upcoming = s.date && s.date >= today;
-                return (
-                  <Link
-                    key={s.id}
-                    to={`/sets/${s.id}`}
-                    viewTransition
-                    className="set-tile press"
-                  >
-                    <span className={`set-wall n${Math.min(c.length, 4)}`}>
-                      {c.slice(0, 4).map((src, i) => (
-                        <img
-                          key={i}
-                          src={src}
-                          alt=""
-                          loading="lazy"
-                          decoding="async"
-                        />
-                      ))}
-                      {c.length === 0 && (
-                        <span className="set-count">{s.trackIds.length}</span>
-                      )}
-                      {upcoming && (
-                        <span className="wall-tag set-when">
-                          {new Date(s.date!).toLocaleDateString("de-DE", {
-                            weekday: "short",
-                            day: "numeric",
-                            month: "short",
-                          })}
-                        </span>
-                      )}
-                    </span>
-                    <b>{s.name || "Ohne Namen"}</b>
-                    <span className="sub">
-                      {[s.venue, `${s.trackIds.length} Tracks`]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                  </Link>
-                );
-              })}
-            </div>
-            <div>
-              {sets.length === 0 && (
-                <Empty
-                  title="Noch keine Sets"
-                  action={
-                    <button
-                      className="btn primary"
-                      onClick={() => nav("/sets/new", { viewTransition: true })}
-                    >
-                      Erstes Set planen
-                    </button>
-                  }
+      <Pager
+        index={tab === "sets" ? 0 : 1}
+        onIndex={(i) => setTab(i ? "live" : "sets")}
+        labels={["Meine Sets", "Nächster Track"]}
+        switchClass="page-switch"
+      >
+        <div className="page stack">
+          <div className="set-grid">
+            {ordered.map((s) => {
+              const c = covers.get(s.id!) ?? [];
+              const upcoming = s.date && s.date >= today;
+              return (
+                <Link
+                  key={s.id}
+                  to={`/sets/${s.id}`}
+                  viewTransition
+                  className="set-tile press"
                 >
-                  Die App schlägt dir ein Set vor: nach Energie-Verlauf, BPM und
-                  harmonischen Übergängen.
-                </Empty>
-              )}
-            </div>
-          </>
-        ) : (
+                  <span className={`set-wall n${Math.min(c.length, 4)}`}>
+                    {c.slice(0, 4).map((src, i) => (
+                      <img
+                        key={i}
+                        src={src}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    ))}
+                    {c.length === 0 && (
+                      <span className="set-count">{s.trackIds.length}</span>
+                    )}
+                    {upcoming && (
+                      <span className="wall-tag set-when">
+                        {new Date(s.date!).toLocaleDateString("de-DE", {
+                          weekday: "short",
+                          day: "numeric",
+                          month: "short",
+                        })}
+                      </span>
+                    )}
+                  </span>
+                  <b>{s.name || "Ohne Namen"}</b>
+                  <span className="sub">
+                    {[s.venue, `${s.trackIds.length} Tracks`]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </Link>
+              );
+            })}
+          </div>
+          <div>
+            {sets.length === 0 && (
+              <Empty
+                title="Noch keine Sets"
+                action={
+                  <button
+                    className="btn primary"
+                    onClick={() => nav("/sets/new", { viewTransition: true })}
+                  >
+                    Erstes Set planen
+                  </button>
+                }
+              >
+                Die App schlägt dir ein Set vor: nach Energie-Verlauf, BPM und
+                harmonischen Übergängen.
+              </Empty>
+            )}
+          </div>
+        </div>
+        <div className="page stack">
           <NextTrack />
-        )}
-      </div>
+        </div>
+      </Pager>
     </>
   );
 }

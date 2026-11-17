@@ -6,7 +6,8 @@ import { autoPipeline, fetchMissingDetails } from "../lib/sync";
 import { toast, username } from "../lib/store";
 import { CAMELOT_COLORS, Cover, Empty, KeyBadge, markHero, RecordRow, Sheet, SkeletonRows, useDebounced, keepParens, DiscogsCredit } from "../components/bits";
 import { IconCamera, IconCart, IconFolder, IconRecord, IconGrid, IconMore, IconRows, IconSearch, IconSync, IconTag } from "../components/icons";
-import { LibrarySwitch, ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
+import { PaneFixed, PaneHead } from "../components/Pager";
+import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
 import { matchesQuery } from "../../../shared/textSearch";
 import { gradeRank, shortGrade } from "../../../shared/vinyl";
 import { keyDistance, parseKey } from "../../../shared/music";
@@ -305,7 +306,8 @@ export default function Collection() {
 
   return (
     <>
-      <div className="page-head">
+      <PaneHead>
+        <div className="page-head">
         <div>
           <h1>Sammlung</h1>
           <div className="sub">{data ? `${data.length} Platten · ${totalTracks} Tracks` : " "}</div>
@@ -323,9 +325,9 @@ export default function Collection() {
             <IconMore />
           </button>
         </div>
-      </div>
+        </div>
+      </PaneHead>
 
-      <LibrarySwitch value="coll" />
       <FolderBar kind="coll" recs={recs} value={folder} onChange={(f) => setFolderSel({ f })} onManage={() => setFolderSheet({ start: null })} />
       <FolderManager kind="coll" open={folderSheet !== null} onClose={() => setFolderSheet(null)} recs={recs} startWith={folderSheet?.start} onShow={(f) => setFolderSel({ f })} key={folderSheet?.start ?? "list"} />
 
@@ -389,7 +391,11 @@ export default function Collection() {
             )}
           />
         )}
-        {view.v === "list" && <AlphaIndex letters={letters} offset={toolbarH} />}
+        {view.v === "list" && (
+          <PaneFixed>
+            <AlphaIndex letters={letters} offset={toolbarH} />
+          </PaneFixed>
+        )}
         {all && all.length > 0 && data && data.length === 0 && (
           <Empty title="Ordner ist leer" action={<button className="btn tinted" onClick={() => setFolderSheet({ start: folder === "-" ? null : folder })}>Platten einsortieren</button>}>
             In diesem Ordner liegt noch nichts.
@@ -408,9 +414,11 @@ export default function Collection() {
         {all && all.length > 0 && <DiscogsCredit href={`https://www.discogs.com/user/${encodeURIComponent(username())}/collection`} />}
       </div>
 
-      <Link to="/scan" viewTransition className="fab no-print" aria-label="Platte hinzufügen">
-        <IconCamera />
-      </Link>
+      <PaneFixed>
+        <Link to="/scan" viewTransition className="fab no-print" aria-label="Platte hinzufügen">
+          <IconCamera />
+        </Link>
+      </PaneFixed>
 
       <SortSheet open={sheet === "sort"} onClose={() => setSheet(null)} options={SORTS} value={sort} onChange={setSort} />
       <MenuSheet

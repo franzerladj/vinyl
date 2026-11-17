@@ -31,7 +31,10 @@ function page(load: () => Promise<PageModule>) {
   const Lazy = lazy(() => get());
   preloaders.push(get);
   return function Page() {
-    return mod ? <mod.default /> : <Lazy />;
+    // Einmal pro Seite festlegen: ein Wechsel von Lazy auf das geladene Modul würde die Seite neu aufbauen
+    // (Pager verlöre seinen Zustand, Formulare ihre Eingaben)
+    const [C] = useState<React.ComponentType>(() => (mod ? mod.default : Lazy));
+    return <C />;
   };
 }
 /** Kurzes Einblenden des Inhalts beim Tab-Wechsel (nur Deckkraft, läuft auf der Grafikkarte) */
@@ -56,8 +59,7 @@ export function preloadPages() {
   };
   idle(next);
 }
-const Collection = page(() => import("./pages/Collection"));
-const Wantlist = page(() => import("./pages/Wantlist"));
+const Library = page(() => import("./pages/Library"));
 const Search = page(() => import("./pages/Search"));
 const Scan = page(() => import("./pages/Scan"));
 const Shop = page(() => import("./pages/Shop"));
@@ -82,8 +84,8 @@ const PUBLIC = new Set(["/impressum", "/datenschutz", "/app"]);
 /** Alle Seiten der App (Data-Router, damit Seitenübergänge und Zurück-Animationen funktionieren) */
 export const routes: RouteObject[] = [
   { index: true, element: <Home /> },
-  { path: "collection", element: <Collection /> },
-  { path: "wants", element: <Wantlist /> },
+  { path: "collection", element: <Library /> },
+  { path: "wants", element: <Library /> },
   { path: "search", element: <Search /> },
   { path: "dig", element: <Dig /> },
   { path: "release/:id", element: <ReleasePage /> },
@@ -193,6 +195,13 @@ function useScrollMemory() {
       }, 120);
     };
     window.addEventListener("scroll", onScroll, { passive: true });
+    // Wechsel im Pager (Sammlung/Wantlist): Position bleibt, der Pager hat sie schon gesetzt
+    if ((loc.state as { keepScroll?: boolean } | null)?.keepScroll) {
+      return () => {
+        window.removeEventListener("scroll", onScroll);
+        clearTimeout(t);
+      };
+    }
     // Zurück/Vor: alte Position anfahren; neue Seite: nach oben
     const fromTab = takePendingScroll(loc.pathname + loc.search);
     const target = fromTab ?? (type === "POP" ? scrollMemo.get(key) ?? 0 : 0);
@@ -465,7 +474,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "/" || e.metaKey || e.ctrlKey || (e.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable]")) return;
-      const el = document.querySelector<HTMLInputElement>(".search-bar input, input[type=search]");
+      const el = document.querySelector<HTMLInputElement>(".pager-pane.on .search-bar input") ?? document.querySelector<HTMLInputElement>(".search-bar input, input[type=search]");
       e.preventDefault();
       if (el) el.focus();
       else window.location.assign("/search");

@@ -150,6 +150,21 @@ h3 { font: 600 17px/1.3 var(--font-display); margin: 18px 0 8px; }
 .nav a.has-dot::after { content: ""; position: absolute; top: 7px; left: calc(50% + 9px); width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg); }
 .lib-switch { padding: 4px var(--gutter) 8px; }
 @media (min-width: 1024px) { .lib-switch { display: none; } }
+/* Pager: zwei Seiten nebeneinander (Sammlung/Wantlist, Sets/Nächster Track). Ruhend ohne transform,
+   die Nachbarseite liegt unsichtbar, aber fertig gerechnet daneben. */
+.pager { position: relative; overflow: clip; touch-action: pan-y pinch-zoom; }
+.pager-pane.off { position: absolute; top: 0; left: 0; right: 0; visibility: hidden; content-visibility: hidden; pointer-events: none; }
+.pager-pane.off.peek { visibility: visible; content-visibility: visible; }
+/* Während des Wischens klebt in der neuen Seite nichts: sie steht so da, wie sie nach dem Loslassen steht */
+.pager-pane.peek .toolbar, .pager-pane.peek .section-head { position: relative; top: auto; }
+.pager-heads { display: grid; align-items: end; } /* verschieden hohe Köpfe: Unterzeile sitzt immer direkt über dem Umschalter */
+.pager-head { grid-area: 1 / 1; min-width: 0; }
+.pager-head.off:not(.peek) { visibility: hidden; }
+.pager-fixed { position: fixed; inset: 0; z-index: 20; pointer-events: none; }
+.pager-fixed > * { pointer-events: auto; }
+.pager-fixed.off:not(.peek) { visibility: hidden; }
+.pager-fixed.off > * { pointer-events: none; }
+.page-switch { padding: 8px var(--gutter) 0; }
 .nav a.active svg { transform: translateY(-1px) scale(1.06); }
 .nav a:active svg { transform: scale(0.86); }
 
@@ -185,6 +200,7 @@ h3 { font: 600 17px/1.3 var(--font-display); margin: 18px 0 8px; }
 .icon-btn svg { width: 24px; height: 24px; }
 .icon-btn.round { background: var(--surface-2); min-width: 36px; min-height: 36px; color: var(--text); }
 .icon-btn.round svg { width: 18px; height: 18px; }
+.icon-btn.round.primary { background: var(--accent); color: var(--accent-ink); }
 
 /* --------- Formulare --------- */
 .input, select.input, textarea.input { width: 100%; min-height: 44px; background: var(--surface-2); border: 0; border-radius: var(--r-sm); padding: 10px 14px; outline: none; font-size: 16px; transition: box-shadow 0.2s; }
@@ -730,7 +746,7 @@ details > summary { position: relative; display: block; padding-right: 26px; }
 details > summary::after { float: none; position: absolute; right: 0; top: 50%; width: 20px; height: 20px; margin-top: -10px; text-align: center; }
 /* Seitenkopf: Titel und Aktion umbrechen, wenn es eng wird */
 .page-head { flex-wrap: wrap; }
-.page-head > :first-child { flex: 1 1 150px; }
+.page-head > :first-child { flex: 1 1 150px; min-width: min-content; } /* Titel nie unter die Knöpfe schieben, lieber umbrechen */
 .page-head > :not(:first-child) { flex: none; }
 .page-head h1 { font-size: clamp(28px, 9vw, 34px); }
 @media (max-width: 360px) {
