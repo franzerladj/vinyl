@@ -514,7 +514,7 @@ export default function App() {
             [
               ["home", "/", <IconHome key="i" />, "Start"],
               ["dig", "/dig", <IconPlay key="i" />, "Diggen"],
-              ["coll", "/collection", <IconRecord key="i" />, "Sammlung"],
+              ["coll", "/collection", <IconRecord key="i" />, "Platten"],
               ["sets", "/sets", <IconList key="i" />, "Sets"],
               ["friends", "/friends", <IconUser key="i" />, "Freunde"],
             ] as [TabId, string, React.ReactNode, string][]

@@ -13,7 +13,7 @@ const B = "http://localhost:8787";
   await page.waitForTimeout(1500);
   const tab = (t) => page.click(`.nav >> text=${t}`);
   // Sammlung: runterscrollen, Platte öffnen
-  await tab("Sammlung");
+  await tab("Platten");
   await page.waitForSelector(".rec");
   await page.mouse.wheel(0, 1400);
   await page.waitForTimeout(500);
@@ -25,11 +25,11 @@ const B = "http://localhost:8787";
   // Sets, dann zurück zu Sammlung: wieder auf der Platte
   await tab("Sets");
   await page.waitForURL(/\/sets$/);
-  await tab("Sammlung");
+  await tab("Platten");
   await page.waitForTimeout(800);
   const zurueckAufPlatte = page.url() === relUrl;
   // Nochmal Sammlung antippen: zur Liste, dann Start und zurück: Scroll-Position der Liste
-  await tab("Sammlung");
+  await tab("Platten");
   await page.waitForURL(/\/collection$/);
   await page.waitForSelector(".rec");
   await page.waitForTimeout(900);
@@ -38,11 +38,11 @@ const B = "http://localhost:8787";
   const y2 = await page.evaluate(() => Math.round(scrollY));
   await tab("Start");
   await page.waitForTimeout(600);
-  await tab("Sammlung");
+  await tab("Platten");
   await page.waitForTimeout(1500);
   const yBack = await page.evaluate(() => Math.round(scrollY));
   // Aktiven Tab auf der Startseite antippen: nach oben
-  await tab("Sammlung");
+  await tab("Platten");
   await page.waitForTimeout(900);
   const yTop = await page.evaluate(() => Math.round(scrollY));
   console.log({ yColl, aktivAufPlatte, zurueckAufPlatte, y2, yBack, yTop, errors });

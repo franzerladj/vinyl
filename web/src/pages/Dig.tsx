@@ -1,5 +1,6 @@
 // Digging-Feed: eine Platte pro Bildschirm, senkrecht wischen, Hörprobe läuft automatisch.
 import { pause as pausePlayer } from "../lib/player";
+import { leaveDig } from "../lib/tabs";
 import { useEffect, useRef, useState } from "react";
 import { MenuSheet } from "../components/ui";
 import { DigCoach } from "../components/DigCoach";
@@ -320,8 +321,10 @@ export default function Dig() {
     <div className="dig">
       <audio ref={audio} preload="auto" playsInline loop />
       <header className="dig-top">
-        <button className="dig-icon" onClick={() => nav(-1)} aria-label="Zurück">
-          <IconBack />
+        {/* Zurück in die App: dorthin, wo du vor dem Diggen warst */}
+        <button className="dig-icon dig-close" onClick={() => nav(leaveDig(), { viewTransition: true })} aria-label="Diggen beenden">
+          <IconX />
+          Fertig
         </button>
         <div className="dig-chips">
           {/* Aktiver Filter zuerst, dann „Für dich“ und die Lieblings-Styles */}

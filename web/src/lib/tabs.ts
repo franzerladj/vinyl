@@ -35,7 +35,9 @@ export const tabOf = (path: string): TabId => TABS.find((t) => t.owns(path))?.id
 
 /** Bei jedem Seitenwechsel aufrufen */
 export function noteLocation(path: string, full: string) {
-  state.current = tabOf(path);
+  const next = tabOf(path);
+  if (next === "dig") noteDigEntry(state.current);
+  state.current = next;
   state.last[state.current] = full;
   save();
 }
@@ -58,7 +60,23 @@ export function tabTarget(id: TabId, full: string): string | null {
   if (state.current === id) return full === tab.root ? null : tab.root;
   const dest = state.last[id] ?? tab.root;
   pending = { full: dest, y: scrollByPath.get(dest) ?? 0 };
+  if (id === "dig") noteDigEntry(state.current);
   // Gleich umstellen: die Zielseite (z. B. eine Platte) hat keinen eigenen Tab und gehört dann hierher
+  state.current = id;
+  save();
+  return dest;
+}
+
+/** Diggen verlassen: zurück zum Tab, aus dem man kam (mit dessen Seite und Scroll-Position) */
+let beforeDig: TabId = "home";
+export function noteDigEntry(from: TabId) {
+  if (from !== "dig") beforeDig = from;
+}
+export function leaveDig(): string {
+  const id = beforeDig;
+  const tab = TABS.find((t) => t.id === id)!;
+  const dest = state.last[id] ?? tab.root;
+  pending = { full: dest, y: scrollByPath.get(dest) ?? 0 };
   state.current = id;
   save();
   return dest;

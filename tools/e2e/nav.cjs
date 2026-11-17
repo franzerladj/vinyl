@@ -10,7 +10,7 @@ const install = require("./mock.cjs");
   await page.addInitScript(() => localStorage.setItem("crate:yt", "no"));
   await page.goto("http://localhost:8787/");
   await page.waitForSelector("text=45 Platten");
-  await page.click(".nav >> text=Sammlung");
+  await page.click(".nav >> text=Platten");
   await page.waitForTimeout(1200);
   await page.evaluate(() => window.scrollTo(0, 1500));
   await page.waitForTimeout(600);

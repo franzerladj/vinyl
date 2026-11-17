@@ -564,7 +564,7 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .legal p { margin: 0 0 8px; color: var(--text-2); }
 
 /* ---------- Digging-Feed ---------- */
-.app:has(.dig) .topbar, .app:has(.dig) .jobs, .app:has(.dig) .offline-bar { display: none; }
+.app:has(.dig) .nav, .app:has(.dig) .topbar, .app:has(.dig) .jobs, .app:has(.dig) .offline-bar { display: none; }
 .dig { position: fixed; inset: 0; z-index: 30; background: #000; color: #fff; }
 .dig-feed { position: absolute; inset: 0; overflow-y: auto; scroll-snap-type: y mandatory; overscroll-behavior: contain; scrollbar-width: none; }
 .dig-feed::-webkit-scrollbar { display: none; }
@@ -1367,20 +1367,6 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .getapp-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 15px; color: var(--text-2); }
 .getapp-foot { text-align: center; margin-top: 8px; }
 
-/* Diggen mit Tab-Leiste: der Feed endet über der Leiste, so kommt man mit einem Tipp zurück in die App */
-@media (max-width: 1023px) {
-  .dig { bottom: calc(var(--nav-h) + env(safe-area-inset-bottom)); }
-  .dig-card { height: 100%; }
-  .dig-swipe { padding-bottom: calc(var(--dig-bar) + 8px); }
-  .dig-bar { height: var(--dig-bar); padding-bottom: 0; border-bottom: 0; }
-  .app:has(.dig) .nav { background: #16120f; -webkit-backdrop-filter: none; backdrop-filter: none; border-top: 0.5px solid rgba(255, 238, 214, 0.08); }
-  .app:has(.dig) .nav a { color: rgba(244, 237, 226, 0.5); }
-  .app:has(.dig) .nav a.active { color: var(--accent); }
-}
-@media (max-width: 1023px) {
-  /* Die Tab-Leiste nimmt Höhe weg: Cover entsprechend kleiner */
-  .dig-deck { width: min(100vw - 76px, 100dvh - 405px - var(--nav-h), 460px); }
-}
 
 /* Platten-Seite, „In deiner Kiste“: eine Spalte für Bezeichnungen, eine für Werte, Eingaben sehen aus wie Werte */
 .kiste .group-row { gap: 12px; min-height: 52px; }
@@ -1393,3 +1379,5 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .kiste .grade-row { gap: 8px; }
 .kiste .grade-pill { flex: 0 1 auto; min-width: 0; padding: 7px 11px; white-space: nowrap; }
 .grade-pill em { font-style: normal; font-size: 13.5px; font-weight: 600; color: var(--accent); }
+.dig-close { width: auto; padding: 0 14px 0 10px; gap: 4px; display: inline-flex; align-items: center; font-weight: 600; font-size: 15px; }
+.dig-close svg { width: 20px; height: 20px; }
