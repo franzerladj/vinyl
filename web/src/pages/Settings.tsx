@@ -8,7 +8,7 @@ import { autoPipeline, fetchMissingDetails, getAutoSettings, lookupAudioFor, tag
 import { suggestionsState } from "../lib/prices";
 import { ask, toast, useStore } from "../lib/store";
 import { getTheme, hapticsEnabled, setHaptics, setTheme, setYtConsent, ytConsent, type Theme } from "../lib/theme";
-import { Avatar, Cover, haptic, Seg, useDebounced } from "../components/bits";
+import { Avatar, Cover, haptic, Seg, Sheet, useDebounced } from "../components/bits";
 import { matchesQuery, matchScore as textScore, queryTokens } from "../../../shared/textSearch";
 import type { SearchResult } from "../lib/types";
 import type { MyProfile } from "../lib/friends";
@@ -20,7 +20,7 @@ import { renderProfileCard } from "../lib/shareCard";
 import { inviteLink } from "../lib/friends";
 import { loadMyProfile, saveMyProfile } from "../lib/profile";
 import { GEAR, linkText, LINK_LABEL, parseLink, PLAY_LABEL, sanitizeProfile, type CrateProfile, type GearSlot, type PlayMode } from "../../../shared/profile";
-import { DEFAULT_PREFS, disablePush, enablePush, isIOS, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs } from "../lib/push";
+import { appInfo, canOpenAndroidSettings, DEFAULT_PREFS, disablePush, enablePush, isIOS, openAndroidNotificationSettings, PushBlocked, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs } from "../lib/push";
 import { DEFAULT_SHIP, type ShipConfig } from "../../../shared/shipping";
 import {
   IconBell,
@@ -255,7 +255,7 @@ function Overview() {
         </Group>
 
         <Group title="Mitteilungen">
-          <Row icon={<IconBell />} label="Mitteilungen" value={pushOn ? "an" : "aus"} to="/settings/notifications" />
+          <PushRow />
         </Group>
 
         <Group title="Daten">
@@ -687,43 +687,70 @@ const PUSH_KINDS: [PushKind, string, string][] = [
   ["sets", "Set-Termine", "Am Tag des Sets: Platten einpacken"],
 ];
 
-function NotificationsPage() {
-  const support = pushSupport();
-  const [on, setOn] = useState<boolean | null>(null);
-  const [prefs, setPrefs] = useState<PushPrefs>(DEFAULT_PREFS);
+/**
+ * Ein Schalter für Mitteilungen: an = Erlaubnis holen, Gerät anmelden, Probe-Mitteilung schicken.
+ * Sperrt Android oder der Browser, erscheint die Hilfe mit dem Weg zum Erlauben; danach schaltet Crate
+ * beim Zurückkommen selbst ein (resumePushIfWanted).
+ */
+function usePushSwitch() {
+  const pushOn = useLiveQuery(() => getKV("pushOn", false), [], false);
   const [busy, setBusy] = useState(false);
-  const [available, setAvailable] = useState(true);
   const [blocked, setBlocked] = useState(false);
-  useEffect(() => {
-    void (async () => {
-      if ("Notification" in window && Notification.permission === "denied") setBlocked(true);
-      const local = await getKV("pushOn", false);
-      const st = await pushStatus().catch(() => null);
-      setAvailable(st?.available ?? true);
-      setOn(Boolean(local && st && st.devices > 0 && "Notification" in window && Notification.permission === "granted"));
-      if (st?.prefs) setPrefs(st.prefs);
-    })();
-  }, []);
-  const toggle = async (v: boolean) => {
+  const set = async (v: boolean) => {
+    if (busy) return;
     setBusy(true);
     try {
       if (v) {
-        const p = await enablePush(prefs);
-        setPrefs(p);
+        const p = await enablePush((await getKV<PushPrefs | null>("pushPrefs", null)) ?? DEFAULT_PREFS);
         await setKV("pushPrefs", p);
+        setBlocked(false);
         toast("Mitteilungen sind an");
+        void sendTestPush().catch(() => undefined);
       } else {
         await disablePush();
         toast("Mitteilungen sind aus");
       }
-      setOn(v);
     } catch (e) {
-      toast((e as Error).message);
-      if ("Notification" in window && Notification.permission === "denied") setBlocked(true);
+      if (e instanceof PushBlocked) setBlocked(true);
+      else toast((e as Error).message);
     } finally {
       setBusy(false);
     }
   };
+  return { on: Boolean(pushOn), busy, blocked, setBlocked, set };
+}
+
+function PushRow() {
+  const support = pushSupport();
+  const { on, busy, blocked, setBlocked, set } = usePushSwitch();
+  if (support !== "ok") return <Row icon={<IconBell />} label="Mitteilungen" value={support === "install" ? "erst installieren" : "nicht möglich"} to="/settings/notifications" />;
+  return (
+    <>
+      <Row icon={<IconBell />} label="Mitteilungen" sub={on ? "Wants, Freunde, Gigs" : undefined} right={<Switch checked={on} label="Mitteilungen" onChange={(v) => void set(v)} />} />
+      {on && <Row label="Was Crate meldet" to="/settings/notifications" />}
+      <Sheet open={blocked && !busy} onClose={() => setBlocked(false)}>
+        <PushBlockedHelp onRetry={() => void set(true)} />
+      </Sheet>
+    </>
+  );
+}
+
+function NotificationsPage() {
+  const support = pushSupport();
+  const { on, busy, blocked, set } = usePushSwitch();
+  const [prefs, setPrefs] = useState<PushPrefs>(DEFAULT_PREFS);
+  const [available, setAvailable] = useState(true);
+  // Gewünscht, aber gesperrt: Hilfe gleich oben zeigen
+  const wanted = useLiveQuery(() => getKV("pushWanted", false), [], false);
+  const denied = "Notification" in window && Notification.permission === "denied";
+  useEffect(() => {
+    void (async () => {
+      const st = await pushStatus().catch(() => null);
+      setAvailable(st?.available ?? true);
+      if (st?.prefs) setPrefs(st.prefs);
+    })();
+  }, []);
+  const toggle = (v: boolean) => void set(v);
   const setPref = async (k: PushKind, v: boolean) => {
     const p = { ...prefs, [k]: v };
     setPrefs(p);
@@ -734,7 +761,11 @@ function NotificationsPage() {
     <>
       <NavBar title="Mitteilungen" backTo="/settings" backLabel="Einstellungen" />
       <div className="page settings-list">
-        {blocked && <PushBlockedHelp />}
+        {(blocked || (denied && wanted)) && (
+          <div className="card" style={{ marginBottom: 16 }}>
+            <PushBlockedHelp onRetry={() => toggle(true)} />
+          </div>
+        )}
         {support === "install" ? (
           <Group title="Zuerst installieren" foot="Apple erlaubt Mitteilungen nur für Web-Apps auf dem Home-Bildschirm (ab iOS 16.4).">
             <div style={{ padding: "12px 14px" }} className="stack">
@@ -755,7 +786,7 @@ function NotificationsPage() {
                
                 label="Mitteilungen erlauben"
                 sub={on ? "Auf diesem Gerät an" : "Auf diesem Gerät aus"}
-                right={<Switch checked={Boolean(on)} label="Mitteilungen erlauben" onChange={(v) => !busy && on !== null && toggle(v)} />}
+                right={<Switch checked={on} label="Mitteilungen erlauben" onChange={(v) => !busy && toggle(v)} />}
               />
             </Group>
             <Group title="Worüber">
@@ -1204,30 +1235,45 @@ function DevicesPage() {
   );
 }
 
-/** Hilfe, wenn der Browser Mitteilungen blockiert (vor allem in der Android-App) */
-function PushBlockedHelp() {
+/** Hilfe, wenn Android oder der Browser Mitteilungen sperrt: ein Knopf statt einer Anleitung, wo es geht */
+function PushBlockedHelp({ onRetry }: { onRetry?: () => void }) {
   const ua = navigator.userAgent;
-  const android = /Android/i.test(ua);
+  const app = appInfo();
   const samsung = /SamsungBrowser/i.test(ua);
   const chrome = ua.match(/Chrome\/(\d+)/)?.[1];
-  const app = window.matchMedia?.("(display-mode: standalone)").matches;
   const tech = [
     `Erlaubnis: ${"Notification" in window ? Notification.permission : "fehlt"}`,
-    app ? "als App" : "im Browser",
+    app.android ? `Android-App ${app.v ? `(${app.v})` : "(alt)"}` : window.matchMedia?.("(display-mode: standalone)").matches ? "installiert" : "im Browser",
     samsung ? "Samsung Internet" : chrome ? `Chrome ${chrome}` : "anderer Browser",
     ua.match(/Android [\d.]+/)?.[0] ?? "",
   ].filter(Boolean).join(" · ");
   return (
-    <div className="tempo-check unsicher" style={{ marginBottom: 16 }}>
-      <b>Mitteilungen sind blockiert</b>
-      {android ? (
-        <ol className="getapp-steps">
-          <li>Crate ganz schließen: in der App-Übersicht wegwischen, dann neu öffnen. Erst dann übernimmt die App die Erlaubnis aus den Android-Einstellungen.</li>
-          <li>Hilft das nicht: Chrome öffnen, oben rechts ⋮ → Einstellungen → Website-Einstellungen → Benachrichtigungen → crate-8vf.pages.dev auf „Zulassen“ stellen.</li>
-          {samsung && <li>Crate läuft gerade in Samsung Internet. Mitteilungen gehen in der App nur mit Chrome: in den Android-Einstellungen unter Apps → Standard-Apps → Browser Chrome wählen, dann Crate neu öffnen.</li>}
-        </ol>
+    <div className="push-help">
+      <b className="push-help-title">Mitteilungen sind gesperrt</b>
+      {canOpenAndroidSettings() ? (
+        <>
+          <p className="sub">Android lässt Crate gerade nichts melden. Tippe unten, schalte „Mitteilungen erlauben“ und alle Kategorien darunter ein und komm zurück. Den Rest erledigt Crate.</p>
+          <button className="btn primary block lg" onClick={openAndroidNotificationSettings}>
+            In Android erlauben
+          </button>
+        </>
+      ) : app.android ? (
+        <>
+          <p className="sub">Deine Crate-App ist noch die alte Version. Die neue öffnet die richtige Stelle in Android mit einem Tipp.</p>
+          <a className="btn primary block lg" href="/download/crate.apk" download>
+            Neue App-Version laden
+          </a>
+          <p className="tiny">Danach installieren, Crate öffnen und hier Mitteilungen einschalten.</p>
+        </>
+      ) : /Android/i.test(ua) ? (
+        <p className="sub">In Chrome oben rechts ⋮ → Einstellungen → Website-Einstellungen → Benachrichtigungen → crate-8vf.pages.dev auf „Zulassen“, dann zurück.</p>
       ) : (
-        <span>In den Einstellungen des Browsers bei dieser Seite Mitteilungen erlauben, dann neu laden.</span>
+        <p className="sub">Erlaube Mitteilungen für diese Seite in den Einstellungen deines Browsers, dann zurück.</p>
+      )}
+      {onRetry && (
+        <button className="btn block" onClick={onRetry}>
+          Nochmal versuchen
+        </button>
       )}
       <span className="tiny mono">{tech}</span>
     </div>

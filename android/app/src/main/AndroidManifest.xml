@@ -49,6 +49,21 @@
             </intent-filter>
         </activity>
 
+        <!-- crate://notifications: Knopf in den Einstellungen der Webseite öffnet die Mitteilungs-Einstellungen von Android -->
+        <activity
+            android:name=".NotificationSettingsActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="crate" android:host="notifications" />
+            </intent-filter>
+        </activity>
+
         <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />
         <!-- Ab Android 13 fragt die App (nicht Chrome) nach der Erlaubnis für Mitteilungen -->
         <activity

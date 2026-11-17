@@ -451,6 +451,11 @@ export default function App() {
       .catch(() => setState({ me: cached }))
       .finally(() => {
         setLoaded(true);
+        // Mitteilungen gewünscht und inzwischen erlaubt (z. B. aus den Android-Einstellungen zurück): selbst einschalten
+        const resume = () =>
+          void import("./lib/push").then((p) => p.resumePushIfWanted()).then((ok) => ok && toast("Mitteilungen sind an"));
+        resume();
+        document.addEventListener("visibilitychange", () => !document.hidden && resume());
         // Nach dem ersten Bild die übrigen Seiten im Leerlauf vorladen
         setTimeout(preloadPages, 1500);
       });

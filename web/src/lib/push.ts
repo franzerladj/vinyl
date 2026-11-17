@@ -33,11 +33,45 @@ export async function currentSubscription(): Promise<PushSubscription | null> {
   return (await reg?.pushManager.getSubscription()) ?? null;
 }
 
+// ---------- Android-App (Trusted Web Activity) ----------
+// Die App startet mit ?app=android&v=<versionCode>. Ältere Versionen erkennt man am Verweis android-app://.
+interface AppInfo { android: boolean; v: number }
+export function noteAppLaunch() {
+  try {
+    const q = new URLSearchParams(location.search);
+    const fromApp = q.get("app") === "android" || document.referrer.startsWith("android-app://de.feuerpfeil.crate");
+    if (fromApp) localStorage.setItem("crate:app", JSON.stringify({ android: true, v: Number(q.get("v")) || 0 }));
+  } catch {
+    /* egal */
+  }
+}
+export function appInfo(): AppInfo {
+  try {
+    return { android: false, v: 0, ...JSON.parse(localStorage.getItem("crate:app") ?? "{}") };
+  } catch {
+    return { android: false, v: 0 };
+  }
+}
+/** Ab App-Version 1.5 öffnet ein Knopf direkt die Mitteilungs-Einstellungen von Android */
+export const canOpenAndroidSettings = () => appInfo().android && appInfo().v >= 6;
+export function openAndroidNotificationSettings() {
+  location.href = "intent://notifications#Intent;scheme=crate;package=de.feuerpfeil.crate;end";
+}
+
+/** Mitteilungen sind gesperrt (Android oder Browser): die Oberfläche zeigt dann den Weg zum Erlauben */
+export class PushBlocked extends Error {
+  constructor() {
+    super("Mitteilungen sind gesperrt");
+  }
+}
+
 /** Mitteilungen einschalten (muss aus einem Tipp heraus aufgerufen werden) */
 export async function enablePush(prefs: PushPrefs = DEFAULT_PREFS): Promise<PushPrefs> {
-  const perm = await Notification.requestPermission();
-  // Die Anleitung steht auf der Mitteilungen-Seite (PushBlockedHelp), hier nur kurz
-  if (perm !== "granted") throw new Error(perm === "denied" ? "Mitteilungen sind blockiert, Hilfe steht oben" : "Ohne Erlaubnis gehen keine Mitteilungen");
+  // Wunsch merken: kommt die Erlaubnis später (z. B. aus den Android-Einstellungen zurück), schaltet Crate selbst ein
+  await setKV("pushWanted", true);
+  const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+  if (perm === "denied") throw new PushBlocked();
+  if (perm !== "granted") throw new Error("Ohne Erlaubnis gehen keine Mitteilungen");
   const reg = await navigator.serviceWorker.ready;
   const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) }));
   const r = await json<{ prefs: PushPrefs }>("/api/push/subscribe", { subscription: sub.toJSON(), prefs });
@@ -46,7 +80,25 @@ export async function enablePush(prefs: PushPrefs = DEFAULT_PREFS): Promise<Push
   return r.prefs;
 }
 
+/**
+ * Beim Start und beim Zurückkommen in die App: war Mitteilungen gewünscht und ist die Erlaubnis jetzt da,
+ * still einschalten. So reicht es, in Android zu erlauben und zurückzukommen.
+ */
+export async function resumePushIfWanted(): Promise<boolean> {
+  if (pushSupport() !== "ok" || Notification.permission !== "granted") return false;
+  if (!(await getKV("pushWanted", false))) return false;
+  if ((await getKV("pushOn", false)) && (await currentSubscription())) return false;
+  try {
+    await enablePush((await getKV<PushPrefs | null>("pushPrefs", null)) ?? DEFAULT_PREFS);
+    await sendTestPush().catch(() => undefined);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function disablePush() {
+  await setKV("pushWanted", false);
   const sub = await currentSubscription();
   await json("/api/push/unsubscribe", { endpoint: sub?.endpoint }).catch(() => undefined);
   await sub?.unsubscribe().catch(() => undefined);

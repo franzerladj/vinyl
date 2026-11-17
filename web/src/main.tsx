@@ -11,8 +11,10 @@ import "./styles.css";
 import { applyTheme } from "./lib/theme";
 import { registerSW } from "virtual:pwa-register";
 import { getState, setState } from "./lib/store";
+import { noteAppLaunch } from "./lib/push";
 
 applyTheme();
+noteAppLaunch();
 
 // Neue Version: nicht mitten in einem Sync neu laden, sondern Bescheid geben.
 // Läuft gerade nichts und die App ist im Hintergrund, wird still aktualisiert.

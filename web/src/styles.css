@@ -1451,3 +1451,8 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .main.tab-enter { animation: tab-in 0.22s var(--ease) both; }
 @keyframes tab-in { from { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .main.tab-enter { animation: none; } }
+
+/* Mitteilungen gesperrt: Blatt mit einem Knopf */
+.push-help { display: flex; flex-direction: column; gap: 12px; padding: 4px 2px 8px; }
+.push-help-title { font: 900 28px/1 var(--font-brand); font-stretch: 62%; font-variation-settings: "wdth" 62; text-transform: uppercase; }
+.push-help p { margin: 0; }
