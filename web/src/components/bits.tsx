@@ -6,11 +6,31 @@ import { useStore } from "../lib/store";
 import { hapticsEnabled } from "../lib/theme";
 import { estimateTapTempo, type TapResult } from "../../../shared/tap";
 
-/** Kurzes haptisches Feedback (Android; iOS-Safari ignoriert es) */
+// iOS kennt navigator.vibrate nicht. Safari ab iOS 18 gibt aber beim Umlegen eines System-Schalters
+// (<input type="checkbox" switch>) ein spürbares Tick. Ein unsichtbarer Schalter liefert so echtes Feedback.
+let iosSwitch: HTMLLabelElement | null = null;
+const isIOS = typeof navigator !== "undefined" && /iP(hone|ad|od)/.test(navigator.userAgent) && !("vibrate" in navigator);
+function iosTick() {
+  if (!iosSwitch) {
+    iosSwitch = document.createElement("label");
+    iosSwitch.setAttribute("aria-hidden", "true");
+    iosSwitch.style.cssText = "position:fixed;left:-100px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;overflow:hidden";
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.setAttribute("switch", "");
+    input.tabIndex = -1;
+    iosSwitch.appendChild(input);
+    document.body.appendChild(iosSwitch);
+  }
+  iosSwitch.click();
+}
+
+/** Kurzes haptisches Feedback (Android über vibrate, iPhone über den Schalter-Trick) */
 export const haptic = (ms = 8) => {
   if (!hapticsEnabled()) return;
   try {
-    navigator.vibrate?.(ms);
+    if (isIOS) iosTick();
+    else navigator.vibrate?.(ms);
   } catch {
     /* nicht unterstützt */
   }

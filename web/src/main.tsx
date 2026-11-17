@@ -16,6 +16,14 @@ import { noteAppLaunch } from "./lib/push";
 applyTheme();
 noteAppLaunch();
 
+// iPhone: kein Heranzoomen beim Tippen in ein Feld (Zoomen mit zwei Fingern bleibt möglich,
+// iOS ignoriert maximum-scale dafür). Und :active-Zustände brauchen einen Touch-Listener.
+if (/iP(hone|ad|od)/.test(navigator.userAgent)) {
+  document.querySelector('meta[name="viewport"]')?.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover");
+  document.documentElement.classList.add("ios");
+}
+document.addEventListener("touchstart", () => undefined, { passive: true });
+
 // Neue Version: nicht mitten in einem Sync neu laden, sondern Bescheid geben.
 // Läuft gerade nichts und die App ist im Hintergrund, wird still aktualisiert.
 const startedAt = Date.now();

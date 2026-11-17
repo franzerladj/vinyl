@@ -4,6 +4,7 @@ import { getMe } from "./lib/api";
 import { setState, toast, useStore } from "./lib/store";
 import { haptic, Jobs, Sheet } from "./components/bits";
 import { Welcome } from "./components/Welcome";
+import { PullRefresh } from "./components/PullRefresh";
 import { MiniPlayer } from "./components/MiniPlayer";
 import { claimDevice } from "./lib/account";
 import { IconCart, IconGear, IconHeart, IconHome, IconList, IconPlay, IconRecord, IconSearch, IconUser } from "./components/icons";
@@ -566,6 +567,7 @@ export default function App() {
         </Suspense>
       </main>
       <MiniPlayer />
+      <PullRefresh />
       <Jobs />
       {me?.username && <Welcome username={me.username} />}
       {/* Fünf Orte: Start, Diggen, Sammlung (mit Wantlist), Sets, Freunde. Suche, Scannen und Shop hängen an diesen Seiten. */}
