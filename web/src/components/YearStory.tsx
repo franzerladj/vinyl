@@ -301,7 +301,7 @@ export function YearStory({ data, year, name, onClose, onShare }: { data: Data; 
             </b>
             <div className="ys-actions" style={d(2)}>
               <button className="btn lg ys-btn" onClick={onShare}>
-                Als Story teilen
+                In die Story teilen
               </button>
               <button className="btn lg ys-btn ghost" onClick={() => setI(0)}>
                 Nochmal ansehen

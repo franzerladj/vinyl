@@ -8,8 +8,8 @@ import { ShareCardSheet } from "../components/ShareCard";
 import { YearStory } from "../components/YearStory";
 import { IconPlay } from "../components/icons";
 import { db } from "../lib/db";
-import { useStore } from "../lib/store";
-import { renderYearCard } from "../lib/shareCard";
+import { toast, useStore } from "../lib/store";
+import { renderYearCard, shareImage } from "../lib/shareCard";
 import { durationSeconds } from "../../../shared/stylus";
 import { yearReview } from "../../../shared/year";
 
@@ -68,6 +68,18 @@ export default function YearPage() {
       },
     [data, year, me?.username],
   );
+  // Karte schon gestalten, während die Story läuft: dann öffnet der letzte Knopf das Teilen-Menü sofort
+  // (das Handy erlaubt Teilen nur direkt im Tipp, nicht erst nach Sekunden des Rechnens)
+  const [ready, setReady] = useState<Blob | null>(null);
+  useEffect(() => {
+    if (!story || !card) return;
+    let alive = true;
+    setReady(null);
+    renderYearCard(card).then((b) => alive && setReady(b), () => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [story, card]);
   return (
     <>
       <NavBar title={`Rückblick ${year}`} titleOnScroll />
@@ -159,8 +171,12 @@ export default function YearPage() {
                 name={me?.username ?? ""}
                 onClose={() => setStory(false)}
                 onShare={() => {
-                  setStory(false);
-                  setSharing(true);
+                  if (!ready) {
+                    setStory(false);
+                    setSharing(true);
+                    return;
+                  }
+                  void shareImage(ready, `crate-${year}.png`).then((r) => r === "downloaded" && toast("Bild gespeichert"));
                 }}
               />
             )}

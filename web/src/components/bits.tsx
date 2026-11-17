@@ -172,7 +172,90 @@ export function Jobs() {
   );
 }
 
-/** Bottom-Sheet mit Griff, Feder-Animation und Wischen nach unten zum Schließen */
+/**
+ * Wischen nach unten schließt ein Blatt, egal wo man es anfasst. Ist der Inhalt gescrollt,
+ * scrollt die Geste zuerst nach oben; erst am Anfang zieht sie das Blatt mit (wie in iOS).
+ */
+export function useSwipeDown(ref: React.RefObject<HTMLElement | null>, onClose: () => void, active = true) {
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !active) return;
+    let y0 = 0, x0 = 0, dy = 0, lastY = 0, lastT = 0, v = 0;
+    let state: "idle" | "maybe" | "drag" = "idle";
+    /** Liegt zwischen Finger und Blatt etwas Gescrolltes, gehört die Geste dem Scrollen */
+    const scrolled = (t: HTMLElement | null) => {
+      for (let n = t; n; n = n.parentElement) {
+        if (n.scrollTop > 0) return true;
+        if (n === el) break;
+      }
+      return false;
+    };
+    const start = (e: TouchEvent) => {
+      const t = e.target as HTMLElement;
+      if (e.touches.length !== 1 || t.closest("input[type=range], textarea, [data-no-swipe]") || scrolled(t)) {
+        state = "idle";
+        return;
+      }
+      state = "maybe";
+      y0 = lastY = e.touches[0].clientY;
+      x0 = e.touches[0].clientX;
+      lastT = performance.now();
+      dy = v = 0;
+    };
+    const move = (e: TouchEvent) => {
+      if (state === "idle") return;
+      const t = e.touches[0];
+      if (state === "maybe") {
+        const my = t.clientY - y0, mx = t.clientX - x0;
+        if (Math.abs(my) < 8 && Math.abs(mx) < 8) return;
+        if (my <= 0 || Math.abs(mx) > my || scrolled(e.target as HTMLElement)) {
+          state = "idle";
+          return;
+        }
+        state = "drag";
+        y0 = t.clientY;
+        el.style.transition = "none";
+      }
+      const now = performance.now();
+      v = v * 0.6 + ((t.clientY - lastY) / Math.max(1, now - lastT)) * 0.4;
+      lastY = t.clientY;
+      lastT = now;
+      dy = Math.max(0, t.clientY - y0);
+      el.style.transform = `translate3d(0,${dy}px,0)`;
+    };
+    const end = () => {
+      if (state !== "drag") {
+        state = "idle";
+        return;
+      }
+      state = "idle";
+      if (dy > 110 || (v > 0.5 && dy > 30)) {
+        el.style.transition = "transform .24s cubic-bezier(.32,.72,0,1)";
+        el.style.transform = "translate3d(0,100%,0)";
+        setTimeout(() => close.current(), 210);
+      } else {
+        el.style.transition = "transform .45s var(--spring)";
+        el.style.transform = "";
+        setTimeout(() => (el.style.transition = ""), 460);
+      }
+    };
+    el.addEventListener("touchstart", start, { passive: true });
+    el.addEventListener("touchmove", move, { passive: true });
+    el.addEventListener("touchend", end, { passive: true });
+    el.addEventListener("touchcancel", end, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", start);
+      el.removeEventListener("touchmove", move);
+      el.removeEventListener("touchend", end);
+      el.removeEventListener("touchcancel", end);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+}
+
+/** Bottom-Sheet mit Griff, Feder-Animation und Wischen nach unten zum Schließen (überall am Blatt) */
 export function Sheet({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<{ y: number; dy: number } | null>(null);
@@ -186,6 +269,7 @@ export function Sheet({ open, onClose, children }: { open: boolean; onClose: () 
       document.body.style.overflow = "";
     };
   }, [open, onClose]);
+  useSwipeDown(ref, onClose, open);
   if (!open) return null;
   const move = (e: React.PointerEvent) => {
     if (!drag.current || !ref.current) return;
@@ -213,6 +297,7 @@ export function Sheet({ open, onClose, children }: { open: boolean; onClose: () 
         <div
           className="sheet-grab"
           onPointerDown={(e) => {
+            if (e.pointerType === "touch") return;
             (e.target as HTMLElement).setPointerCapture(e.pointerId);
             drag.current = { y: e.clientY, dy: 0 };
           }}

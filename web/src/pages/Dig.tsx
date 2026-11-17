@@ -14,10 +14,23 @@ import { discogsSellUrl, money } from "../lib/format";
 import { ask, toast } from "../lib/store";
 import { getKV, setKV } from "../lib/db";
 import { ytConsent } from "../lib/theme";
-import { haptic, keepParens, DiscogsCredit, useRootClass } from "../components/bits";
+import { haptic, keepParens, DiscogsCredit, useRootClass, useSwipeDown } from "../components/bits";
 import { IconBack, IconCart, IconFilter, IconHeart, IconPause, IconPlay, IconPlus, IconShare, IconMore, IconSleeves, IconThumb, IconX } from "../components/icons";
 import { DECADES, decadeLabel, passesPrice, type DigCard } from "../../../shared/dig";
 import { parseDuration } from "../../../shared/match";
+
+/** Blatt im Diggen: Hintergrund tippen oder irgendwo nach unten wischen schließt */
+function DigSheet({ onClose, stack, children }: { onClose: () => void; stack?: boolean; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useSwipeDown(ref, onClose);
+  return (
+    <div className="dig-sheet-bg" onClick={onClose}>
+      <div className={`dig-sheet${stack ? " stack" : ""}`} ref={ref} onClick={(e) => e.stopPropagation()}>
+        {children}
+      </div>
+    </div>
+  );
+}
 
 type Audio = "idle" | "loading" | "playing" | "paused" | "none";
 
@@ -560,8 +573,8 @@ export default function Dig() {
       )}
       <TasteSheet open={tasteOpen} onClose={() => setTasteOpen(false)} onChanged={() => void favoriteStyles(8).then(setStyles)} />
       {likedOpen && (
-        <div className="dig-sheet-bg" onClick={() => setLikedOpen(false)}>
-          <div className="dig-sheet stack" onClick={(e) => e.stopPropagation()}>
+        <DigSheet onClose={() => setLikedOpen(false)} stack={true}>
+          <>
             <div className="sheet-grab" />
             <b style={{ fontSize: 18 }}>Likes</b>
             <span className="sub">Deine Likes prägen, was der Feed dir zeigt. Auf die Wantlist kommen sie nur, wenn du sie dort hinsetzt.</span>
@@ -584,12 +597,12 @@ export default function Dig() {
                 </div>
               ))}
             </div>
-          </div>
-        </div>
+          </>
+        </DigSheet>
       )}
       {filterOpen && (
-        <div className="dig-sheet-bg" onClick={() => setFilterOpen(false)}>
-          <div className="dig-sheet stack" onClick={(e) => e.stopPropagation()}>
+        <DigSheet onClose={() => setFilterOpen(false)} stack={true}>
+          <>
             <div className="sheet-grab" />
             <b style={{ fontSize: 18 }}>Filter</b>
             <span className="sub">Jahrzehnt</span>
@@ -618,13 +631,13 @@ export default function Dig() {
             >
               Anwenden
             </button>
-          </div>
-        </div>
+          </>
+        </DigSheet>
       )}
 
       {sheet != null && detail.get(sheet) && (
-        <div className="dig-sheet-bg" onClick={() => setSheet(null)}>
-          <div className="dig-sheet" onClick={(e) => e.stopPropagation()}>
+        <DigSheet onClose={() => setSheet(null)} stack={false}>
+          <>
             <div className="sheet-grab" />
             <b>{cards.find((c) => c.id === sheet)?.title}</b>
             <div className="list" style={{ marginTop: 8 }}>
@@ -651,8 +664,8 @@ export default function Dig() {
             <button className="btn block" style={{ marginTop: 12 }} onClick={() => nav(`/release/${sheet}`)}>
               Alle Details
             </button>
-          </div>
-        </div>
+          </>
+        </DigSheet>
       )}
     </div>
   );

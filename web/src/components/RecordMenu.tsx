@@ -1,6 +1,6 @@
 // Langes Drücken auf eine Platte (überall, wo sie verlinkt ist): Schnellmenü wie in iOS,
 // mit großer Vorschau und den häufigsten Aktionen. Am Computer per Rechtsklick.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { db, type Release } from "../lib/db";
@@ -9,7 +9,7 @@ import { previewUrl } from "../lib/free";
 import { addWant, removeWant } from "../lib/sync";
 import { discogsReleaseUrl } from "../lib/format";
 import { toast } from "../lib/store";
-import { haptic, keepParens } from "./bits";
+import { haptic, keepParens, useSwipeDown } from "./bits";
 import { IconHeart, IconPlay, IconShare, IconRecord } from "./icons";
 
 type Ctx = { rel: Release; owned: boolean; wanted: boolean; track?: { title: string; artist: string; deezerId?: number; id: string } };
@@ -91,6 +91,8 @@ export function RecordMenu() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [ctx]);
+  const body = useRef<HTMLDivElement>(null);
+  useSwipeDown(body, () => setCtx(null), Boolean(ctx));
   if (!ctx) return null;
   const { rel, owned, wanted, track } = ctx;
   const close = () => setCtx(null);
@@ -135,7 +137,7 @@ export function RecordMenu() {
   ];
   return createPortal(
     <div className="ctx" onClick={close} role="dialog" aria-modal="true" aria-label={rel.title}>
-      <div className="ctx-body" onClick={(e) => e.stopPropagation()}>
+      <div className="ctx-body" ref={body} onClick={(e) => e.stopPropagation()}>
         <div className="ctx-preview">
           {(rel.cover || rel.thumb) && <img src={rel.cover || rel.thumb} alt="" />}
           <div>

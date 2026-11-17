@@ -584,10 +584,15 @@ export async function shareImage(blob: Blob, filename: string, text?: string): P
       return "cancelled";
     }
   }
+  saveImage(blob, filename);
+  return "downloaded";
+}
+
+/** Bild in die Downloads bzw. Fotos legen */
+export function saveImage(blob: Blob, filename: string) {
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  return "downloaded";
 }

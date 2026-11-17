@@ -13,6 +13,9 @@ describe("Platte des Tages", () => {
     expect(dailyPick(recs, "2028-03-10")).toEqual({ id: 3, reason: "Heute vor 3 Jahren gekauft" });
     expect(dailyPick(recs, "2026-03-10")!.reason).toBe("Heute vor einem Jahr gekauft");
   });
+  it("nimmt lieber eine Platte mit Hörprobe", () => {
+    for (const d of ["2026-11-17", "2026-11-18", "2026-11-19"]) expect(dailyPick(recs, d, new Set(), new Set([2]))!.id).toBe(2);
+  });
   it("lässt kürzlich Gespieltes aus", () => {
     const out = dailyPick(recs, "2026-11-17", new Set([1, 2, 3, 4]));
     expect(out!.id).toBe(5);

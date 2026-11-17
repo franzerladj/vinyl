@@ -42,6 +42,7 @@ import {
   IconRecord,
 } from "../components/icons";
 import { computeStylus, hoursText, saveStylus, today } from "../lib/stylus";
+import { stylusLife } from "../../../shared/stylusLife";
 import { deleteDevSyncData, devSyncOff, lastDevSync, pushEverything, setDevSync, syncNow } from "../lib/devsync";
 
 const TABLES = ["releases", "collection", "wants", "tracks", "recordMeta", "sets", "marketStats", "listings", "kv", "priceHistory", "priceSuggestions", "wantMeta", "sellers", "friends", "friendItems"] as const;
@@ -1093,6 +1094,29 @@ function StylusPage() {
     if (data?.state.lifeHours) setLife(String(data.state.lifeHours));
   }, [data?.state.lifeHours]);
   const st = data?.state ?? { since: today(), extraMinutes: 0 };
+  // Nadel: Name aus dem Profil-Setup übernehmen, Lebensdauer laut Hersteller nachschlagen
+  const [name, setName] = useState("");
+  const setupCarts = useLiveQuery(async () => (await getKV<{ setup?: { carts?: string } } | null>("crateProfile:me", null))?.setup?.carts ?? "", []);
+  useEffect(() => {
+    if (data?.state.name) setName(data.state.name);
+    else if (data && setupCarts) {
+      setName(setupCarts);
+      const known = stylusLife(setupCarts);
+      void saveStylus({ ...data.state, name: setupCarts, lifeHours: data.state.lifeHours ?? known?.hours });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data?.state.name, setupCarts, Boolean(data)]);
+  const known = stylusLife(name);
+  const saveName = () => {
+    const n = name.trim();
+    if (n === (st.name ?? "")) return;
+    const k = stylusLife(n);
+    // Herstellerangabe übernehmen, außer es steht schon ein eigener Wert drin
+    const prev = stylusLife(st.name);
+    const own = st.lifeHours && st.lifeHours !== prev?.hours;
+    void saveStylus({ ...st, name: n || undefined, lifeHours: own ? st.lifeHours : k?.hours ?? st.lifeHours });
+    if (k && !own) toast(`Lebensdauer eingetragen: ${k.hours} Stunden`);
+  };
   // Beim ersten Öffnen ab heute zählen; der Einbautag lässt sich unten zurückdatieren
   useEffect(() => {
     if (data === null) void saveStylus({ since: today(), extraMinutes: 0 });
@@ -1134,7 +1158,16 @@ function StylusPage() {
             ))}
           </div>
         </Group>
-        <Group title="Nadel">
+        <Group title="Nadel" foot={known ? `${known.note} Beim Scratchen, mit viel Auflagekraft oder staubigen Platten hält sie kürzer.` : name.trim() ? "Zu dieser Nadel kennt Crate keine Herstellerangabe. Trag den Wert aus der Anleitung ein." : undefined}>
+          <label className="pe-field">
+            <span>Welche Nadel?</span>
+            <input className="input" list="stylus-names" placeholder="z. B. Ortofon Concorde Nightclub" value={name} onChange={(e) => setName(e.target.value)} onBlur={saveName} enterKeyHint="done" />
+            <datalist id="stylus-names">
+              {(GEAR.find((g) => g.id === "carts")?.suggest ?? []).map((x) => (
+                <option key={x} value={x} />
+              ))}
+            </datalist>
+          </label>
           <label className="pe-field">
             <span>Eingebaut am</span>
             <input className="input" type="date" max={today()} value={st.since} onChange={(e) => e.target.value && void saveStylus({ ...st, since: e.target.value })} />
@@ -1156,7 +1189,7 @@ function StylusPage() {
             onClick={async () => {
               if (!(await ask({ title: "Neue Nadel eingebaut?", body: "Die Stunden zählen ab heute neu.", ok: "Ja, neu" }))) return;
               haptic(15);
-              void saveStylus({ since: today(), lifeHours: Number(life) || undefined, extraMinutes: 0 }).then(() => toast("Neue Nadel, frischer Klang"));
+              void saveStylus({ since: today(), name: st.name, lifeHours: Number(life) || undefined, extraMinutes: 0 }).then(() => toast("Neue Nadel, frischer Klang"));
             }}
           />
         </Group>

@@ -23,9 +23,12 @@ const OUT = process.env.OUT || __dirname;
     if (await page.locator(".ys-btn").count()) break;
     await page.mouse.click(340, 400);
   }
-  await page.click(".ys-btn:has-text('Als Story teilen')");
-  await page.waitForSelector(".sheet img", { timeout: 20000 });
-  const closed = (await page.locator(".ys").count()) === 0;
-  console.log({ seen, closed, errors });
+  // Die Karte ist vorbereitet: ein Tipp teilt sofort (im Test ohne Teilen-Menü: Bild wird gespeichert)
+  await page.waitForTimeout(2500);
+  const dl = page.waitForEvent("download", { timeout: 15000 }).then((d) => d.suggestedFilename(), () => null);
+  await page.click(".ys-btn:has-text('In die Story teilen')");
+  const file = await dl;
+  const sheet = await page.locator(".sheet img").count();
+  console.log({ seen, file, sheet, errors });
   await b.close();
 })();

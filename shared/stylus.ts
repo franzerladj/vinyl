@@ -4,6 +4,8 @@
 export interface StylusState {
   /** Tag des Einbaus, YYYY-MM-DD */
   since: string;
+  /** Welche Nadel (für die Herstellerangabe zur Lebensdauer) */
+  name?: string;
   /** Lebensdauer laut Hersteller in Stunden (freiwillig) */
   lifeHours?: number;
   /** Eigene Einträge in Minuten */
