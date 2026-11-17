@@ -166,7 +166,10 @@ function Overview() {
 
   return (
     <>
-      <NavBar title="Einstellungen" backTo="/" backLabel="Start" />
+      <NavBar title="Einstellungen" titleOnScroll backTo="/" backLabel="Start" />
+      <div className="page-head" style={{ paddingTop: 0 }}>
+        <h1>Einstellungen</h1>
+      </div>
       <div className="page settings-list">
         <div className="group">
           <div className="profile-card">
@@ -187,14 +190,13 @@ function Overview() {
           <Row icon={<IconSync />} label="Abgleich & Ergänzen" value={stats?.lastSync ? relDay(stats.lastSync) : "nie"} to="/settings/sync" />
           <Row icon={<IconCoin />} label="Preise & Shopping" value={stats?.currency} to="/settings/prices" />
           <Row icon={<IconWave />} label="Datenquellen" value={`${sources} aktiv`} to="/settings/sources" />
-          <Row icon={<IconDownload />} label="App aufs Handy holen" sub="Android-App, iPhone, Link für Freunde" to="/app" />
-          <Row icon={<IconSync />} label="Handy und Computer" sub="BPM, Keys, Sets und Notizen auf allen Geräten gleich" value={devLast ? relTime(devLast) : "gleich"} to="/settings/devices" />
-        </Group>
-
-        <Group title="Freunde">
-          <Row icon={<IconUser />} label="Freunde" value={stats?.friends ?? 0} to="/friends" />
           <Row icon={<IconShare />} label="Verliehene Platten" value={stats?.lent ?? 0} to="/friends?tab=lent" />
           <Row icon={<IconRecord />} label="Nadel-Stunden" value={stylus ? hoursText(stylus.minutes) : "einrichten"} to="/settings/stylus" />
+        </Group>
+
+        <Group title="Geräte">
+          <Row icon={<IconSync />} label="Handy und Computer" sub="BPM, Keys, Sets und Notizen auf allen Geräten gleich" value={devLast ? relTime(devLast) : "gleich"} to="/settings/devices" />
+          <Row icon={<IconDownload />} label="App aufs Handy holen" sub="Android-App, iPhone, Link für Freunde" to="/app" />
         </Group>
 
         <Group title="Darstellung" foot="„System“ folgt der Einstellung deines Handys.">
