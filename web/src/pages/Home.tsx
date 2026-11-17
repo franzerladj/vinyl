@@ -213,20 +213,32 @@ export default function Home() {
             </Link>
             {stats?.recent.length ? (
               <>
-                <h2 style={{ marginTop: 12 }}>Zuletzt hinzugefügt</h2>
-                <div className="carousel rise">
-                  {stats.recent.map((r) => (
+                {/* Schaufenster: die neuesten Platten als Cover-Wand, die jüngste groß */}
+                <div className="row home-wall-head">
+                  <h2>Neu in der Kiste</h2>
+                  <span className="spacer" />
+                  <Link to="/collection" viewTransition className="btn small ghost" style={{ paddingRight: 0 }}>
+                    Alle
+                  </Link>
+                </div>
+                <div className="home-wall rise">
+                  {stats.recent.slice(0, 9).map((r, i) => (
                     <Link
                       key={r!.id}
                       to={`/release/${r!.id}`}
                       viewTransition
                       state={{ preview: { thumb: r!.thumb, cover: r!.cover, title: r!.title, artist: r!.artist } }}
                       onClick={(e) => markHero(e.currentTarget)}
-                      className="press"
+                      className={`press${i === 0 ? " big" : ""}`}
+                      aria-label={`${r!.title} von ${r!.artist}`}
                     >
-                      <Cover src={r!.cover || r!.thumb} />
-                      <div className="t">{r!.title}</div>
-                      <div className="a">{r!.artist}</div>
+                      <Cover src={i === 0 ? r!.cover || r!.thumb : r!.thumb || r!.cover} />
+                      {i === 0 && (
+                        <span className="wall-tag">
+                          <b>{r!.title}</b>
+                          <span>{r!.artist}</span>
+                        </span>
+                      )}
                     </Link>
                   ))}
                 </div>
