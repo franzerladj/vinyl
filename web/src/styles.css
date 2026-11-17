@@ -258,6 +258,24 @@ details[open] > summary::after { transform: rotate(270deg); }
 /* --------- Fortschritt, Jobs, Toast --------- */
 .progress { height: 6px; background: var(--surface-2); border-radius: 6px; overflow: hidden; }
 .progress > div { height: 100%; background: var(--accent); border-radius: 6px; transition: width 0.6s var(--ease); }
+/* Mini-Player über der Tab-Leiste */
+.mini-player { position: fixed; z-index: 19; left: 8px; right: 8px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 6px); max-width: 744px; margin: 0 auto; height: 58px; display: flex; align-items: center; gap: 4px; padding: 0 6px 0 7px; border-radius: 14px; background: var(--material); -webkit-backdrop-filter: saturate(180%) blur(22px); backdrop-filter: saturate(180%) blur(22px); box-shadow: 0 6px 22px -8px rgba(22, 18, 15, 0.35), inset 0 0 0 0.5px var(--hairline); animation: mp-in 0.35s var(--spring) both; }
+@keyframes mp-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.mp-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; color: var(--text); }
+.mp-cover .cover { width: 44px; height: 44px; border-radius: 6px; display: block; }
+.mini-player.on .mp-cover .cover { animation: none; }
+.mp-text { min-width: 0; display: flex; flex-direction: column; }
+.mp-text b { font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp-text span { font-size: 13px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mp-btn { flex: none; width: 44px; height: 44px; border: 0; background: none; color: var(--text); display: grid; place-items: center; border-radius: 50%; cursor: pointer; }
+.mp-btn svg { width: 24px; height: 24px; }
+.mp-btn.sub { color: var(--text-3); }
+.mp-btn.sub svg { width: 18px; height: 18px; }
+.mp-btn:active { transform: scale(0.9); }
+.app:has(.mini-player) { padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 84px); }
+.app:has(.mini-player) .jobs, .app:has(.mini-player) .fab { translate: 0 -64px; }
+.app:has(.mini-player):has(.jobs) .fab { translate: 0 -110px; }
+@media (min-width: 1024px) { .mini-player { left: calc(var(--side) + 24px); right: 24px; bottom: 20px; max-width: 560px; } .app:has(.mini-player) { padding-bottom: 96px; } .app:has(.mini-player) .jobs, .app:has(.mini-player) .fab { translate: 0 -72px; } }
 .jobs { position: fixed; left: 12px; right: 12px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px); max-width: 520px; margin: 0 auto; z-index: 15; display: flex; justify-content: center; pointer-events: none; }
 .job-pill { pointer-events: auto; display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 8px 14px 8px 10px; border-radius: 999px; background: var(--material); -webkit-backdrop-filter: saturate(180%) blur(22px); backdrop-filter: saturate(180%) blur(22px); border: 0.5px solid var(--hairline); box-shadow: var(--shadow); font-size: 14px; font-weight: 600; color: var(--text); text-decoration: none; animation: pop 0.5s var(--spring) both; }
 .job-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

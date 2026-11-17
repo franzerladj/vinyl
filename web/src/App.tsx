@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigationType, useRouteError, type RouteObject } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate, useNavigationType, useRouteError, type RouteObject } from "react-router-dom";
 import { getMe } from "./lib/api";
 import { setState, toast, useStore } from "./lib/store";
 import { haptic, Jobs, Sheet } from "./components/bits";
 import { Welcome } from "./components/Welcome";
+import { MiniPlayer } from "./components/MiniPlayer";
 import { claimDevice } from "./lib/account";
 import { IconCart, IconGear, IconHeart, IconHome, IconList, IconPlay, IconRecord, IconSearch, IconUser } from "./components/icons";
 import { LogoMark, Wordmark } from "./components/Logo";
@@ -12,6 +13,7 @@ import Login, { LoginFinish } from "./pages/Login";
 import { claimIdentity, verifyInBackground } from "./lib/auth";
 // Früh laden: die Hooks schreiben jede eigene Änderung für den Geräte-Abgleich mit
 import { startDevSync } from "./lib/devsync";
+import { noteLocation, rememberScroll, tabOf, tabTarget, takePendingScroll, type TabId } from "./lib/tabs";
 import { useLiveQuery } from "dexie-react-hooks";
 import { cachedSocial } from "./lib/social";
 // Detailseite direkt laden, damit die Cover-Animation sofort ein Ziel hat
@@ -146,12 +148,14 @@ function useScrollMemory() {
       clearTimeout(t);
       t = setTimeout(() => {
         scrollMemo.set(key, window.scrollY);
+        rememberScroll(loc.pathname + loc.search, window.scrollY);
         saveScrollMemo();
       }, 120);
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     // Zurück/Vor: alte Position anfahren; neue Seite: nach oben
-    const target = type === "POP" ? scrollMemo.get(key) ?? 0 : 0;
+    const fromTab = takePendingScroll(loc.pathname + loc.search);
+    const target = fromTab ?? (type === "POP" ? scrollMemo.get(key) ?? 0 : 0);
     let tries = 0;
     const restore = () => {
       const max = document.documentElement.scrollHeight - window.innerHeight;
@@ -321,6 +325,11 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const online = useOnline();
   const loc = useLocation();
+  const navigate = useNavigate();
+  const activeTab = tabOf(loc.pathname);
+  useEffect(() => {
+    noteLocation(loc.pathname, loc.pathname + loc.search);
+  }, [loc.pathname, loc.search]);
   const [barTitle, setBarTitle] = useState<string | null>(null);
   useScrollMemory();
   useBackGesture();
@@ -495,31 +504,38 @@ export default function App() {
           <Outlet />
         </Suspense>
       </main>
+      <MiniPlayer />
       <Jobs />
       {me?.username && <Welcome username={me.username} />}
       {/* Fünf Orte: Start, Diggen, Sammlung (mit Wantlist), Sets, Freunde. Suche, Scannen und Shop hängen an diesen Seiten. */}
       <nav className="nav no-print">
         <div className="nav-inner">
-          <NavLink to="/" end viewTransition onClick={() => haptic(5)}>
-            <IconHome />
-            Start
-          </NavLink>
-          <NavLink to="/dig" viewTransition onClick={() => haptic(5)}>
-            <IconPlay />
-            Diggen
-          </NavLink>
-          <NavLink to="/collection" viewTransition onClick={() => haptic(5)} className={/^\/(collection|wants|shop|labels?|stickers)(\/|$)/.test(loc.pathname) ? "active" : undefined}>
-            <IconRecord />
-            Sammlung
-          </NavLink>
-          <NavLink to="/sets" viewTransition onClick={() => haptic(5)}>
-            <IconList />
-            Sets
-          </NavLink>
-          <NavLink to="/friends" viewTransition onClick={() => haptic(5)} className={social?.in.length ? "has-dot" : undefined}>
-            <IconUser />
-            Freunde
-          </NavLink>
+          {(
+            [
+              ["home", "/", <IconHome key="i" />, "Start"],
+              ["dig", "/dig", <IconPlay key="i" />, "Diggen"],
+              ["coll", "/collection", <IconRecord key="i" />, "Sammlung"],
+              ["sets", "/sets", <IconList key="i" />, "Sets"],
+              ["friends", "/friends", <IconUser key="i" />, "Freunde"],
+            ] as [TabId, string, React.ReactNode, string][]
+          ).map(([id, root, icon, label]) => (
+            <a
+              key={id}
+              href={root}
+              className={[activeTab === id ? "active" : "", id === "friends" && social?.in.length ? "has-dot" : ""].filter(Boolean).join(" ") || undefined}
+              aria-current={activeTab === id ? "page" : undefined}
+              onClick={(e) => {
+                e.preventDefault();
+                haptic(5);
+                const dest = tabTarget(id, loc.pathname + loc.search);
+                if (dest == null) window.scrollTo({ top: 0, behavior: "smooth" });
+                else navigate(dest, { viewTransition: true });
+              }}
+            >
+              {icon}
+              {label}
+            </a>
+          ))}
         </div>
       </nav>
     </div>

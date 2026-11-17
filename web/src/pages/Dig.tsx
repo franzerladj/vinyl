@@ -1,4 +1,5 @@
 // Digging-Feed: eine Platte pro Bildschirm, senkrecht wischen, Hörprobe läuft automatisch.
+import { pause as pausePlayer } from "../lib/player";
 import { useEffect, useRef, useState } from "react";
 import { MenuSheet } from "../components/ui";
 import { DigCoach } from "../components/DigCoach";
@@ -47,6 +48,10 @@ export default function Dig() {
   const [video, setVideo] = useState<string | null>(null);
   const [sheet, setSheet] = useState<number | null>(null);
   const audio = useRef<HTMLAudioElement>(null);
+  // Diggen hat einen eigenen Player: der der App schweigt solange
+  useEffect(() => {
+    pausePlayer();
+  }, []);
   const feed = useRef<HTMLDivElement>(null);
   const loadingMore = useRef(false);
   const shownAt = useRef(Date.now());

@@ -4,6 +4,7 @@ import { MenuSheet, NavBar } from "../components/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
+import { play as playPlayer, toggle as togglePlayer, usePlayer } from "../lib/player";
 import { db, getKV, realTracks, type DJSet, type Release, type TrackMeta } from "../lib/db";
 import { ShareCardSheet } from "../components/ShareCard";
 import { renderSetCard } from "../lib/shareCard";
@@ -68,13 +69,14 @@ export default function SetEditor() {
   const [noteFor, setNoteFor] = useState<string | null>(null);
   const [live, setLive] = useState(false);
   const [wide, setWide] = useState(false);
-  const [playing, setPlaying] = useState<string | null>(null);
+  // Hörproben über den App-Player: laufen beim Verlassen des Editors weiter (Leiste unten)
+  const player = usePlayer();
+  const playing = player.playing ? player.now?.trackId ?? null : null;
   const [shareMenu, setShareMenu] = useState(false);
   const [card, setCard] = useState(false);
   const allSets = useLiveQuery(() => db.sets.toArray(), [], []);
   const history = useMemo(() => playedHistory(allSets, set.id), [allSets, set.id]);
   const djName = useLiveQuery(async () => (await getKV<{ djName?: string } | null>("crateProfile:me", null))?.djName ?? (await getKV<{ name?: string } | null>("myProfile", null))?.name);
-  const audio = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
     if (!isNew) db.sets.get(Number(id)).then((s) => s && setSet({ crateIds: [], mixNotes: {}, ...s }));
@@ -253,23 +255,10 @@ export default function SetEditor() {
 
   // Reinhören: ein Audio-Element für alles (iOS spielt nur nach Tippen)
   const togglePreview = (t: TrackMeta) => {
-    const a = audio.current;
-    if (!a) return;
-    if (playing === t.id) {
-      a.pause();
-      setPlaying(null);
-      return;
-    }
-    a.src = t.deezerId ? `/api/audio/preview/${t.deezerId}` : previewUrl(t.artist, t.title, durOf(t));
-    a.play().then(
-      () => setPlaying(t.id),
-      () => toast("Keine Hörprobe gefunden"),
-    );
+    if (player.now?.trackId === t.id) return togglePlayer();
+    const r = data?.rels.get(t.releaseId);
+    void playPlayer({ src: t.deezerId ? `/api/audio/preview/${t.deezerId}` : previewUrl(t.artist, t.title, durOf(t)), title: t.title, artist: t.artist, cover: r?.cover || r?.thumb, releaseId: t.releaseId, trackId: t.id }).then((ok) => !ok && toast("Keine Hörprobe gefunden"));
   };
-  useEffect(() => {
-    const a = audio.current;
-    return () => a?.pause();
-  }, []);
 
   const share = async () => {
     const text =
@@ -304,7 +293,6 @@ export default function SetEditor() {
 
   return (
     <>
-      <audio ref={audio} onEnded={() => setPlaying(null)} onPause={() => setPlaying(null)} />
       <CalendarSheet
         open={calOpen}
         onClose={() => setCalOpen(false)}

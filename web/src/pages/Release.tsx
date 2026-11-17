@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { pause as pausePlayer, play as playPlayer, toggle as togglePlayer, usePlayer } from "../lib/player";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { api } from "../lib/api";
@@ -34,7 +35,10 @@ export default function ReleasePage() {
   const me = useStore((s) => s.me);
   const [loading, setLoading] = useState(false);
   const [edit, setEdit] = useState<TrackMeta | null>(null);
-  const [playing, setPlaying] = useState(false);
+  // Ton läuft über den App-Player (läuft beim Weiterblättern weiter), YouTube hier auf der Seite
+  const player = usePlayer();
+  const [ytPlaying, setYtPlaying] = useState(false);
+  const playing = ytPlaying || (player.playing && player.now?.releaseId === id);
   const [media, setMedia] = useState<Media | null>(null);
   const [lendSheet, setLendSheet] = useState(false);
   const [folderSheet, setFolderSheet] = useState<"coll" | "want" | null>(null);
@@ -47,7 +51,6 @@ export default function ReleasePage() {
   const market = useLiveQuery(() => marketValueOf(id, copies[0]?.media), [id, copies[0]?.media]);
   const buddies = useLiveQuery(() => friendsFor(id), [id]);
   const friendNames = useLiveQuery(async () => (await db.friends.toArray()).map((f) => f.username), [], [] as string[]);
-  const audioRef = useRef<HTMLAudioElement>(null);
   // Nadel setzt auf: kurzes Klopfen, wenn der Tonarm die Platte erreicht
   useEffect(() => {
     if (!playing) return;
@@ -144,24 +147,22 @@ export default function ReleasePage() {
   /** Track antippen: passendes YouTube-Video starten, sonst die Deezer-Hörprobe (direkt in der Tipp-Geste, damit Browser das Abspielen erlauben) */
   const openTrack = (m: TrackMeta, t: { title: string; duration?: string }) => {
     haptic(5);
-    const audio = audioRef.current;
     const dur = parseDuration(t.duration);
     const video = matchVideo({ title: t.title, artist: m.artist, duration: dur }, rel.videos, tl.length);
     if (video) {
-      audio?.pause();
+      pausePlayer();
       setMedia({ type: "yt", id: youtubeId(video.uri)!, title: video.title });
-      setPlaying(true);
-    } else if (audio) {
-      audio.src = m.deezerId ? `/api/audio/preview/${m.deezerId}` : previewUrl(m.artist, m.title, dur);
-      audio.play().catch(() => undefined);
+      setYtPlaying(true);
+    } else {
+      void playPlayer({ src: m.deezerId ? `/api/audio/preview/${m.deezerId}` : previewUrl(m.artist, m.title, dur), title: m.title, artist: m.artist, cover: rel.cover || rel.thumb, releaseId: id, trackId: m.id });
       setMedia({ type: "deezer" });
     }
     setEdit(m);
   };
   const closeTrack = () => {
-    audioRef.current?.pause();
+    // Die Hörprobe läuft weiter (Leiste unten), nur ein Video endet mit dem Blatt
     setMedia(null);
-    setPlaying(false);
+    setYtPlaying(false);
     setEdit(null);
   };
 
@@ -613,7 +614,6 @@ export default function ReleasePage() {
           },
         ]}
       />
-      <audio ref={audioRef} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)} onError={() => media?.type === "deezer" && setMedia({ type: "none" })} hidden />
       <Sheet open={listenSide} onClose={() => setListenSide(false)}>
         {listenSide && (
           <ListenSide
@@ -633,19 +633,17 @@ export default function ReleasePage() {
           <TrackEdit
             t={edit}
             hints={hintsFor(edit)}
-            media={media}
+            media={player.failed && media?.type === "deezer" && player.now?.trackId === edit.id ? { type: "none" } : media}
             playing={playing}
             videos={rel.videos ?? []}
             onMedia={(m) => {
-              audioRef.current?.pause();
+              pausePlayer();
               setMedia(m);
-              setPlaying(m.type === "yt");
+              setYtPlaying(m.type === "yt");
             }}
             onToggleAudio={() => {
-              const a = audioRef.current;
-              if (!a) return;
-              if (a.paused) a.play().catch(() => undefined);
-              else a.pause();
+              if (player.now?.trackId === edit.id) togglePlayer();
+              else void playPlayer({ src: edit.deezerId ? `/api/audio/preview/${edit.deezerId}` : previewUrl(edit.artist, edit.title), title: edit.title, artist: edit.artist, cover: rel.cover || rel.thumb, releaseId: id, trackId: edit.id });
             }}
             onSave={(p) => saveTrack(edit, p).then(() => (closeTrack(), toast("Gespeichert")))}
           />
