@@ -1,3 +1,4 @@
+import { NavBar } from "../components/ui";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -78,7 +79,8 @@ export default function Search() {
 
   return (
     <>
-      <div className="page-head">
+      <NavBar title="Suche" titleOnScroll />
+      <div className="page-head" style={{ paddingTop: 0 }}>
         <h1>Suche</h1>
         <button className="btn small tinted" onClick={() => nav("/scan", { viewTransition: true })}>
           <IconBarcode /> Scan

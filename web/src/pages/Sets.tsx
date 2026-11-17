@@ -24,7 +24,7 @@ export default function Sets() {
           value={tab}
           options={[
             ["sets", "Meine Sets"],
-            ["live", "Was passt als Nächstes?"],
+            ["live", "Nächster Track"],
           ]}
           onChange={setTab}
         />

@@ -125,7 +125,7 @@ export default function Scan() {
         scan.current = s;
         setTorch(s.torch ? false : null);
       })
-      .catch((e: Error) => setCamError(e.name === "NotAllowedError" ? "Kein Zugriff auf die Kamera. Bitte in den Einstellungen des Browsers erlauben." : `Kamera nicht verfügbar (${e.message}).`));
+      .catch((e: Error) => setCamError(e.name === "NotAllowedError" ? "Kein Zugriff auf die Kamera. Bitte in den Einstellungen des Browsers erlauben." : "Keine Kamera gefunden. Nimm „Foto“ oder tipp die Katalognummer ein."));
     return () => {
       cancelled = true;
       scan.current?.stop();
