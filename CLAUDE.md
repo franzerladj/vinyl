@@ -22,6 +22,7 @@ Mobile Web-App (PWA) für Vinyl-DJs auf Basis von Discogs. Besitzer: Franz Krali
 - Tab-Verlauf (`web/src/lib/tabs.ts`): jeder Tab merkt sich die zuletzt offene Seite und deren Scroll-Position, Seiten ohne eigenen Tab (Platte, Suche, Einstellungen) gehören zum Tab, aus dem man kam. Aktiven Tab nochmal antippen = Startseite des Tabs, dort = nach oben. Test: `tools/e2e/tabs.cjs`.
 - Player (`web/src/lib/player.ts`, Leiste `web/src/components/MiniPlayer.tsx`): ein einziges Audio-Element für Platten-Seite und Set-Editor, läuft beim Seitenwechsel weiter, Leiste über der Tab-Leiste (am Computer unten im Inhalt). Diggen hat seinen eigenen Player und pausiert den der App. YouTube-Videos bleiben im Track-Blatt. Test: `tools/e2e/player.cjs`.
 - iPhone/App-Gefühl: Startbilder je iPhone-Größe (`web/public/splash/`, Links in `index.html`, aus `icon-1024.png` mit Pillow, Logo an der Stelle des HTML-Startbildschirms), kein Zoom beim Tippen in Felder (`maximum-scale=1` nur auf iOS, in `main.tsx`), Bedienelemente nicht markierbar und ohne Link-Vorschau beim langen Drücken (`-webkit-touch-callout`), `touch-action: manipulation`, Haptik auf dem iPhone über einen unsichtbaren System-Schalter (`haptic` in `bits.tsx`, ab iOS 18). Ziehen zum Aktualisieren auf Start, Platten, Sets, Freunde (`PullRefresh.tsx`, Test `tools/e2e/pull.cjs`; feste Knöpfe werden beim Ziehen ausgeblendet, Klasse `pulling`).
+- Schnellmenü (`RecordMenu.tsx`, Test `tools/e2e/ctxmenu.cjs`): langes Drücken (480 ms) oder Rechtsklick auf jeden Link `/release/<id>` öffnet Vorschau mit Anhören, Platte öffnen, Wantlist (nur wenn nicht in der Sammlung), Teilen; der Tipp danach wird verschluckt. Nicht im Diggen, in Blättern, Dialogen und der Story.
 - UI-Anspruch: wirkt wie eine große native iOS-App (Apple-Design, Motion, Haptik). Änderungen immer im Handy-Viewport (Playwright, „iPhone 13“) prüfen, hell und dunkel, und mit `tools/e2e/wrap.cjs` auf 320 px gegenprüfen.
 - Umbrüche: Silbentrennung nur in Fließtext, nie in Labels, Fragen, Titeln oder Knöpfen. Kurze Labels statt Trennung. Klammern in Titeln brechen als Ganzes um (`keepParens` in `bits.tsx`, Klasse `.nobr`; auf Teilen-Karten in `wrap()`), Klammern über 40 Zeichen dürfen brechen.
 
@@ -128,6 +129,7 @@ node tools/e2e/tempocheck.cjs # Tempo-Gegenprüfung am Altbestand (doppeltes Tem
 node tools/e2e/like.cjs     # Digging: Like, Likes-Liste, keine Wantlist
 node tools/e2e/year.cjs     # Jahresrückblick und Story-Karte
 node tools/e2e/pull.cjs     # Ziehen zum Aktualisieren
+node tools/e2e/ctxmenu.cjs  # Langes Drücken auf eine Platte: Schnellmenü
 node tools/e2e/yearstory.cjs # Rückblick als animierte Story durchblättern
 node tools/e2e/repress.cjs  # Repress-Alarm auf der Wantlist
 node tools/e2e/gigcal.cjs   # Gig: Zeiten, Kalender-Angebot, Google-Link
