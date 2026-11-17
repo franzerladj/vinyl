@@ -144,21 +144,21 @@ function fitFont(ctx: CanvasRenderingContext2D, text: string, width: number, lin
   return minPx;
 }
 
-/** Logo-Kiste klein plus Schriftzug, mittig */
+/** Logo klein plus Schriftzug „crate“ (breit, klein geschrieben), mittig */
 function wordmark(ctx: CanvasRenderingContext2D, y: number, label: string) {
-  const mark = 92;
-  ctx.font = `900 76px ${HEAD}`;
-  condensed(ctx, true);
-  ctx.letterSpacing = "2px";
-  const text = label.toUpperCase();
+  const mark = 84;
+  ctx.font = `900 68px ${HEAD}`;
+  (ctx as Ctx2).fontStretch = "ultra-expanded";
+  ctx.letterSpacing = "-2px";
+  const text = label.toLowerCase();
   const tw = ctx.measureText(text).width;
-  const x = (W - (mark + 22 + tw)) / 2;
-  if (logoImg) ctx.drawImage(logoImg, x, y - mark + 14, mark, mark * (380 / 392));
+  const x = (W - (mark + 20 + tw)) / 2;
+  if (logoImg) ctx.drawImage(logoImg, x, y - mark + 10, mark, mark);
   ctx.textAlign = "left";
-  ctx.fillStyle = "#f3ede2";
-  ctx.fillText(text, x + mark + 22, y);
+  ctx.fillStyle = "#f5f5f4";
+  ctx.fillText(text, x + mark + 20, y);
   ctx.letterSpacing = "0px";
-  condensed(ctx, false);
+  (ctx as Ctx2).fontStretch = "normal";
   ctx.textAlign = "center";
 }
 

@@ -1,30 +1,21 @@
-// Logo „Die Kiste“: Plattenkiste mit gezogener Platte. Erzeugt alle Icons aus einer Quelle.
+// Logo „C mit Rillen“: ein C aus zwei Plattenrillen mit Mittelloch. Erzeugt alle Icons aus einer Quelle.
 // node tools/brand/logo.cjs
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");
 
 const INK = "#0b0b0b";
-const ORANGE = "#c6ff3a";
-const ART = `
-  <g transform="rotate(-11 200 220)"><rect x="104" y="112" width="196" height="196" rx="6" fill="#f2f2f0"/></g>
-  <g transform="rotate(9 320 220)"><rect x="214" y="104" width="196" height="196" rx="6" fill="#bdbdb8"/></g>
-  <circle cx="256" cy="196" r="118" fill="#050505"/>
-  <g fill="none" stroke="#262626" stroke-width="3"><circle cx="256" cy="196" r="104"/><circle cx="256" cy="196" r="90"/><circle cx="256" cy="196" r="76"/><circle cx="256" cy="196" r="62"/></g>
-  <circle cx="256" cy="196" r="40" fill="${ORANGE}"/>
-  <circle cx="256" cy="196" r="7" fill="#050505"/>
-  <rect x="72" y="262" width="368" height="178" rx="30" fill="${ORANGE}"/>
-  <rect x="72" y="262" width="368" height="22" rx="11" fill="#d8ff6e"/>
-  <rect x="196" y="306" width="120" height="38" rx="19" fill="${INK}"/>
-  <rect x="104" y="384" width="304" height="8" rx="4" fill="#9fd11e"/>`;
+const LIME = "#c6ff3a";
+const PAPER = "#f5f5f4";
+// Logo „C mit Rillen“: zwei Rillen bilden ein C, in der Mitte das Loch der Platte
+const RINGS = (c) => `<path d="M372 140A164 164 0 1 0 372 372" fill="none" stroke="${c}" stroke-width="44" stroke-linecap="round"/><path d="M323 189A95 95 0 1 0 323 323" fill="none" stroke="${c}" stroke-width="44" stroke-linecap="round"/>`;
+const ART = `${RINGS(LIME)}<circle cx="256" cy="256" r="24" fill="${PAPER}"/>`;
 
 const svg = (body, { rx = 112, scale = 1 } = {}) =>
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="${rx}" fill="${INK}"/><g transform="translate(256 259) scale(${scale}) translate(-256 -259)">${body}</g></svg>`;
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="${rx}" fill="${INK}"/><g transform="translate(256 256) scale(${scale * 0.86}) translate(-256 -256)">${body}</g></svg>`;
 
 // Mitteilungs-Badge: nur die Form zählt (Android nutzt den Alphakanal)
-const BADGE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><g transform="translate(256 259) scale(0.92) translate(-256 -259)" fill="#fff">
-  <path fill-rule="evenodd" d="M256 78a118 118 0 1 1 0 236a118 118 0 1 1 0-236zm0 78a40 40 0 1 0 0 80a40 40 0 1 0 0-80z"/>
-  <path fill-rule="evenodd" d="M102 262h308a30 30 0 0 1 30 30v118a30 30 0 0 1-30 30H102a30 30 0 0 1-30-30V292a30 30 0 0 1 30-30zm113 44a19 19 0 0 0 0 38h82a19 19 0 0 0 0-38z"/></g></svg>`;
+const BADGE = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><g transform="translate(256 256) scale(0.96) translate(-256 -256)">${RINGS("#fff")}<circle cx="256" cy="256" r="26" fill="#fff"/></g></svg>`;
 
 const pub = path.join(__dirname, "../../web/public");
 const files = {

@@ -18,10 +18,10 @@ export default function Login({ me }: { me: Me | null }) {
     <div className="app" style={{ paddingBottom: 0 }}>
       <div className="hero">
         <div className="login-mark">
-          <LogoMark size={168} animate />
+          <LogoMark size={128} animate />
         </div>
         <Wordmark className="login-word" />
-        <p className="login-claim">Aus der Kiste auf den Teller.</p>
+        <p className="login-claim">Dig deeper.</p>
         <ol className="side-list">
           {SIDES.map(([pos, t, d], i) => (
             <li key={pos} style={{ animation: `rise .6s var(--ease) ${0.45 + i * 0.07}s both` }}>

@@ -51,7 +51,7 @@ export default function GetApp() {
       <header className="getapp-head">
         <LogoMark size={88} />
         <Wordmark className="getapp-word" />
-        <p className="sub">Aus der Kiste auf den Teller.</p>
+        <p className="sub">Dig deeper.</p>
       </header>
       {standalone ? (
         <section className="getapp-card lead">
