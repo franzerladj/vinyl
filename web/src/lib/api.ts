@@ -23,6 +23,9 @@ const BACKGROUND_PER_MIN_BUSY = 14;
 // Der Hintergrund nimmt höchstens drei Plätze, damit für das, was du antippst, immer einer frei ist.
 const MAX_PARALLEL = 4;
 const MAX_BACKGROUND = 3;
+// Was du antippst, hat eigene Plätze: vorher teilte es sich die vier mit dem Abgleich und bekam, solange
+// dieser lief, oft nur einen. Die sieben Suchen für eine neue Kiste beim Diggen liefen dann nacheinander.
+const MAX_USER = 4;
 // Der Hintergrund bekommt einen Vorrat für den schnellen Start und danach einen gleichmäßigen Takt.
 // Vorher durfte er das ganze Minuten-Kontingent in den ersten Sekunden verbrauchen: dann stand alles,
 // was man antippte (Diggen, Platten-Seite), bis zu 48 Sekunden. So wird ständig wieder etwas frei.
@@ -47,12 +50,12 @@ export const discogsPauseMs = () => (queue.length ? Math.max(0, pausedUntil - cl
 const clock = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
 function pump() {
-  while (queue.length && active < MAX_PARALLEL) {
+  while (queue.length) {
     queue.sort((a, b) => b.priority - a.priority);
     const job = queue[0];
     const bg = job.priority <= 0;
     // Vorn steht ein Hintergrund-Job (also wartet nichts Angetipptes) und seine Plätze sind belegt
-    if (bg && activeBackground >= MAX_BACKGROUND) return;
+    if (bg ? active >= MAX_PARALLEL || activeBackground >= MAX_BACKGROUND : active - activeBackground >= MAX_USER) return;
     const now = clock();
     while (recent.length && now - recent[0] > 60_000) recent.shift();
     // Volles Fenster: warten, bis die älteste Anfrage herausfällt.
@@ -129,6 +132,7 @@ function pump() {
 const JOB_WATCHDOG_MS = 60_000;
 /** Eine einzelne Anfrage darf höchstens so lange dauern, dann wird sie abgebrochen und wiederholt */
 const REQUEST_TIMEOUT_MS = 20_000;
+const QUICK_TIMEOUT_MS = 7_000;
 let remaining: number | null = null;
 
 /**
@@ -175,6 +179,8 @@ export interface DiscogsOptions {
   soon?: boolean;
   /** Schreibende Anfrage, die man gefahrlos wiederholen kann (z. B. in einen Ordner verschieben) */
   retry?: boolean;
+  /** Eine von mehreren Quellen, auf die niemand lange warten soll: nach 7 s aufgeben, nicht wiederholen */
+  quick?: boolean;
 }
 
 /**
@@ -185,14 +191,14 @@ export interface DiscogsOptions {
 let directFails = 0;
 let directOffUntil = 0;
 
-async function sendDirect(path: string, method: string, body?: string): Promise<Response | null> {
+async function sendDirect(path: string, method: string, body?: string, ms = REQUEST_TIMEOUT_MS): Promise<Response | null> {
   if (clock() < directOffUntil) return null;
   const sig = await fetchWithTimeout("/api/sign", {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ method, path }),
-  });
+  }, ms);
   if (!sig.ok) return null;
   const s = (await sig.json()) as { mode: "direct" | "proxy"; url?: string; authorization?: string };
   if (s.mode !== "direct" || !s.url || !s.authorization) return null;
@@ -201,7 +207,7 @@ async function sendDirect(path: string, method: string, body?: string): Promise<
       method,
       headers: { Authorization: s.authorization, ...(body ? { "Content-Type": "application/json" } : {}) },
       body,
-    });
+    }, ms);
     directFails = 0;
     return r;
   } catch (e) {
@@ -215,8 +221,8 @@ async function sendDirect(path: string, method: string, body?: string): Promise<
   }
 }
 
-const sendProxy = (path: string, method: string, body?: string) =>
-  fetchWithTimeout(`/api/discogs${path}`, { method, credentials: "include", headers: body ? { "Content-Type": "application/json" } : undefined, body });
+const sendProxy = (path: string, method: string, body?: string, ms = REQUEST_TIMEOUT_MS) =>
+  fetchWithTimeout(`/api/discogs${path}`, { method, credentials: "include", headers: body ? { "Content-Type": "application/json" } : undefined, body }, ms);
 
 export function discogs<T>(path: string, opts: DiscogsOptions = {}): Promise<T> {
   const method = opts.method ?? "GET";
@@ -225,10 +231,11 @@ export function discogs<T>(path: string, opts: DiscogsOptions = {}): Promise<T> 
     for (let attempt = 0; attempt < 4; attempt++) {
       let res: Response;
       try {
-        res = (await sendDirect(path, method, body)) ?? (await sendProxy(path, method, body));
+        const ms = opts.quick ? QUICK_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+        res = (await sendDirect(path, method, body, ms)) ?? (await sendProxy(path, method, body, ms));
       } catch (e) {
         // Hängende Anfrage abgebrochen: kurz warten und neu versuchen
-        const again = method === "GET" || opts.retry;
+        const again = (method === "GET" || opts.retry) && !opts.quick;
         // Ohne Netz bringt Wiederholen nichts: sofort melden statt mehrere Sekunden zu warten
         const offline = typeof navigator !== "undefined" && navigator.onLine === false;
         if (!offline && (isAbort(e) || (again && e instanceof TypeError)) && attempt < 3 && again) {

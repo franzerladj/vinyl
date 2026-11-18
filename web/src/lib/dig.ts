@@ -154,9 +154,10 @@ function toCard(r: SearchResult, source: DigSource, reason: string): DigCard | n
   };
 }
 
-async function search(params: string, source: DigSource, reason: string): Promise<DigCard[]> {
+async function search(params: string, source: DigSource, reason: string, soon = false): Promise<DigCard[]> {
   try {
-    const d = await discogs<{ results: SearchResult[] }>(`/database/search?type=release&format=Vinyl&per_page=30&${params}`);
+    // Eine von mehreren Quellen: antwortet Discogs nicht in 7 s, geht es ohne sie weiter
+    const d = await discogs<{ results: SearchResult[] }>(`/database/search?type=release&format=Vinyl&per_page=30&${params}`, { quick: true, soon });
     return d.results.map((r) => toCard(r, source, reason)).filter(Boolean) as DigCard[];
   } catch (e) {
     console.warn("Diggen", params, e);
@@ -184,8 +185,15 @@ export interface DigFilter {
   maxPrice?: number;
 }
 
+export interface QueueOptions {
+  /** Erste Karten, sobald die erste Quelle geantwortet hat (der Rest folgt als Ergebnis) */
+  early?: (cards: DigCard[]) => void;
+  /** Vorpacken im Leerlauf: steht hinter allem, was du antippst */
+  soon?: boolean;
+}
+
 /** Neue Runde Karten: Quellen nach dem Geschmacksprofil ziehen, dann für dich ordnen */
-export async function buildQueue(f: DigFilter = {}, exclude: Set<number> = new Set(), before: DigCard[] = []): Promise<DigCard[]> {
+export async function buildQueue(f: DigFilter = {}, exclude: Set<number> = new Set(), before: DigCard[] = [], opts: QueueOptions = {}): Promise<DigCard[]> {
   const t = await loadTaste();
   const enc = encodeURIComponent;
   const rnd = (n: number) => 1 + Math.floor(Math.random() * n);
@@ -204,39 +212,121 @@ export async function buildQueue(f: DigFilter = {}, exclude: Set<number> = new S
   const dec = f.decade;
   const ys = dec ? decadeYears(dec, 4) : favDecade ? decadeYears(favDecade, 2) : [];
   const decYear = (i: number) => (ys.length ? `&year=${ys[i % ys.length]}` : "");
-  const jobs: Promise<DigCard[]>[] = [
-    search(`style=${enc(s1)}${dec ? decYear(0) : ""}&page=${rnd(4)}`, "foryou", `Für dich: ${s1}`),
+  const find = (params: string, source: DigSource, reason: string) => search(params, source, reason, opts.soon);
+  const net: Promise<DigCard[]>[] = [
+    find(`style=${enc(s1)}${dec ? decYear(0) : ""}&page=${rnd(4)}`, "foryou", `Für dich: ${s1}`),
     dec
-      ? search(`style=${enc(s2)}${decYear(1)}&page=${rnd(2)}`, "foryou", `${s2} aus den ${decadeLabel(dec)}`)
-      : search(`style=${enc(s1)}&year=${year - Math.floor(Math.random() * 2)}`, "new", `Neu in ${s1}`),
-    search(`style=${enc(s2)}${dec ? decYear(2) : ""}&page=${rnd(5)}`, "rare", `Gesucht in ${s2}`).then((cs) => cs.filter((c) => (c.want ?? 0) > 30 && (c.want ?? 0) / Math.max(1, c.have ?? 0) > 1)),
-    search(`style=${enc(sx)}${dec ? decYear(3) : ""}&page=${rnd(8)}`, "random", f.style ? `Zufallsfund ${sx}` : `Mal was anderes: ${sx}`),
+      ? find(`style=${enc(s2)}${decYear(1)}&page=${rnd(2)}`, "foryou", `${s2} aus den ${decadeLabel(dec)}`)
+      : find(`style=${enc(s1)}&year=${year - Math.floor(Math.random() * 2)}`, "new", `Neu in ${s1}`),
+    find(`style=${enc(s2)}${dec ? decYear(2) : ""}&page=${rnd(5)}`, "rare", `Gesucht in ${s2}`).then((cs) => cs.filter((c) => (c.want ?? 0) > 30 && (c.want ?? 0) / Math.max(1, c.have ?? 0) > 1)),
+    find(`style=${enc(sx)}${dec ? decYear(3) : ""}&page=${rnd(8)}`, "random", f.style ? `Zufallsfund ${sx}` : `Mal was anderes: ${sx}`),
   ];
-  if (favLabel) jobs.push(search(`label=${enc(favLabel)}&page=${rnd(2)}`, "foryou", `Weil du ${favLabel} magst`));
-  if (!dec && favDecade && ys.length) jobs.push(search(`style=${enc(s2)}${decYear(0)}`, "foryou", `${s2} aus den ${decadeLabel(favDecade)}`));
-  if (!f.style && !dec) jobs.push(friendCards());
-  const sources = await Promise.all(jobs);
+  if (favLabel) net.push(find(`label=${enc(favLabel)}&page=${rnd(2)}`, "foryou", `Weil du ${favLabel} magst`));
+  if (!dec && favDecade && ys.length) net.push(find(`style=${enc(s2)}${decYear(0)}`, "foryou", `${s2} aus den ${decadeLabel(favDecade)}`));
+  const local: Promise<DigCard[]>[] = !f.style && !dec ? [friendCards()] : [];
+  // Was schon da ist (Sammlung, Wants, Weggewischtes), liegt auf dem Gerät: gleich laden, nicht erst nach den Suchen
+  const known = Promise.all([
+    db.collection.toArray().then((c) => c.map((x) => x.releaseId)),
+    db.wants.toCollection().primaryKeys(),
+    getKV<number[]>("digSkipped", []),
+    getKV<number[]>("digSeen", []),
+  ]);
+  const settle = async (sources: DigCard[][]) => {
+    const [owned, wanted, skipped, seen] = await known;
+    const ex = new Set([...exclude, ...owned, ...wanted, ...skipped]);
+    const seenSet = new Set(seen.slice(-1500));
+    const all = new Map<number, DigCard>();
+    for (const c of sources.flat()) {
+      if (ex.has(c.id) || all.has(c.id)) continue;
+      // Stil- und Jahrzehnt-Filter gelten für alle Quellen (auch Label und Freunde)
+      if ((f.style && !c.styles.includes(f.style)) || !inDecade(c.year, f.decade)) continue;
+      all.set(c.id, c);
+    }
+    // Schon Gesehenes nur, wenn sonst kaum etwas da ist
+    let list = [...all.values()];
+    const fresh = list.filter((c) => !seenSet.has(c.id));
+    if (fresh.length >= 8) list = fresh;
+    return arrange(t, list, session, { before });
+  };
+  if (opts.early) {
+    // Nicht auf die langsamste Suche warten: sobald eine Quelle Karten hat, noch einen Augenblick
+    // auf die anderen warten und dann zeigen, was da ist. Discogs braucht je Suche oft Sekunden.
+    const got: DigCard[][] = [];
+    let state: "wait" | "armed" | "done" = "wait";
+    const fire = async () => {
+      if (state === "done") return;
+      state = "done";
+      const first = await settle(got);
+      if (first.length) opts.early?.(first);
+    };
+    const localGot = local.map((p) => p.then((cs) => void got.push(cs)));
+    for (const p of net)
+      void p.then(async (cs) => {
+        got.push(cs);
+        if (state !== "wait" || !cs.length) return;
+        state = "armed";
+        await Promise.all(localGot);
+        setTimeout(() => void fire(), EARLY_GRACE_MS);
+      });
+    const sources = await Promise.all([...net, ...local]);
+    // Alles war schneller als die Frist: die frühe Auswahl braucht es nicht mehr
+    state = "done";
+    return settle(sources);
+  }
+  return settle(await Promise.all([...net, ...local]));
+}
+/** So lange wartet die erste Auswahl noch auf weitere Quellen, nachdem die erste da ist */
+const EARLY_GRACE_MS = 350;
+
+// Die Kiste liegt bereit: was beim letzten Mal nicht mehr dran kam, bleibt (höchstens 6 Stunden, so alt dürfen
+// Discogs-Daten sein), und nach dem Start der App wird im Leerlauf eine neue Runde gepackt. Beim Antippen von
+// „Diggen“ steht die erste Karte dann sofort da, statt erst nach mehreren Suchen bei Discogs.
+const QUEUE_MAX_AGE = 6 * 3600_000;
+const QUEUE_KEEP = 40;
+interface StoredQueue {
+  at: number;
+  filter: string;
+  cards: DigCard[];
+}
+const filterKey = (f: DigFilter) => `${f.style ?? ""}|${f.decade ?? ""}|${f.maxPrice ?? ""}`;
+
+/** Übrige Karten merken (die aktuelle und alles davor ist gesehen) */
+export function keepQueue(f: DigFilter, rest: DigCard[]) {
+  return setKV("digQueue", { at: Date.now(), filter: filterKey(f), cards: rest.slice(0, QUEUE_KEEP) } satisfies StoredQueue);
+}
+
+/** Bereitliegende Karten für diesen Filter, ohne inzwischen Gekauftes, Gewolltes, Weggewischtes und Gesehenes */
+export async function keptQueue(f: DigFilter): Promise<DigCard[]> {
+  if (warming) await warming.catch(() => undefined);
+  const q = await getKV<StoredQueue | null>("digQueue", null);
+  if (!q || q.filter !== filterKey(f) || Date.now() - q.at > QUEUE_MAX_AGE) return [];
   const [owned, wanted, skipped, seen] = await Promise.all([
     db.collection.toArray().then((c) => c.map((x) => x.releaseId)),
     db.wants.toCollection().primaryKeys(),
     getKV<number[]>("digSkipped", []),
     getKV<number[]>("digSeen", []),
   ]);
-  const ex = new Set([...exclude, ...owned, ...wanted, ...skipped]);
-  const seenSet = new Set(seen.slice(-1500));
-  const all = new Map<number, DigCard>();
-  for (const c of sources.flat()) {
-    if (ex.has(c.id) || all.has(c.id)) continue;
-    // Stil- und Jahrzehnt-Filter gelten für alle Quellen (auch Label und Freunde)
-    if ((f.style && !c.styles.includes(f.style)) || !inDecade(c.year, f.decade)) continue;
-    all.set(c.id, c);
-  }
-  // Schon Gesehenes nur, wenn sonst kaum etwas da ist
-  let list = [...all.values()];
-  const fresh = list.filter((c) => !seenSet.has(c.id));
-  if (fresh.length >= 8) list = fresh;
-  return arrange(t, list, session, { before });
+  const gone = new Set<number>([...owned, ...(wanted as number[]), ...skipped, ...seen.slice(-1500)]);
+  return q.cards.filter((c) => !gone.has(c.id));
 }
+
+let warming: Promise<void> | null = null;
+/** Im Leerlauf nach dem Start: eine Runde vorpacken, wenn man schon einmal gediggt hat und nichts bereitliegt */
+export function warmDig(): Promise<void> {
+  warming ??= (async () => {
+    const seen = await getKV<number[]>("digSeen", []);
+    if (!seen.length || (typeof navigator !== "undefined" && navigator.onLine === false)) return;
+    const f = await getKV<DigFilter>("digFilter", {});
+    const q = await getKV<StoredQueue | null>("digQueue", null);
+    if (q && q.filter === filterKey(f) && Date.now() - q.at < QUEUE_MAX_AGE && q.cards.length >= 8) return;
+    const cards = await buildQueue(f, new Set(), [], { soon: true });
+    if (cards.length) await keepQueue(f, cards);
+  })().finally(() => (warming = null));
+  return warming;
+}
+
+/** „Diggen“ wurde angetippt, während noch vorgepackt wird: die Suchen rücken nach vorn */
+export const hurryDig = () => hurryDiscogs("/database/search");
 
 /** „Mehr davon“: gleiche Label, Artist und Style */
 export async function moreLike(c: DigCard, exclude: Set<number>): Promise<DigCard[]> {

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate, useNavigationType, useRouteError, type RouteObject } from "react-router-dom";
 import { getMe } from "./lib/api";
-import { setState, toast, useStore } from "./lib/store";
+import { getState, setState, toast, useStore } from "./lib/store";
 import { haptic, Jobs, Sheet, overlayOpen } from "./components/bits";
 import { Welcome } from "./components/Welcome";
 import { RecordMenu } from "./components/RecordMenu";
@@ -492,6 +492,8 @@ export default function App() {
         document.addEventListener("visibilitychange", () => !document.hidden && resume());
         // Nach dem ersten Bild die übrigen Seiten im Leerlauf vorladen
         setTimeout(preloadPages, 1500);
+        // Die Kiste fürs Diggen vorpacken (nur wer schon gediggt hat): beim Antippen steht die erste Karte sofort da
+        setTimeout(() => getState().me?.username && void import("./lib/dig").then((d) => d.warmDig()), 2500);
       });
   }, []);
 

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { MenuSheet } from "../components/ui";
 import { DigCoach } from "../components/DigCoach";
 import { useNavigate } from "react-router-dom";
-import { buildQueue, digDetail, favoriteStyles, likedCards, markSeen, markSkipped, moreLike, rearrange, recordAction, recordSignal, recordView, setLiked, type DigDetail, type DigFilter } from "../lib/dig";
+import { buildQueue, digDetail, hurryDig, keepQueue, keptQueue, favoriteStyles, likedCards, markSeen, markSkipped, moreLike, rearrange, recordAction, recordSignal, recordView, setLiked, type DigDetail, type DigFilter } from "../lib/dig";
 import { TasteSheet } from "../components/TasteSheet";
 import { previewUrl } from "../lib/free";
 import { addToCollection, addWant } from "../lib/sync";
@@ -106,6 +106,7 @@ export default function Dig() {
   useRootClass("in-dig", true);
   const feed = useRef<HTMLDivElement>(null);
   const loadingMore = useRef(false);
+  const fillRound = useRef(0);
   const shownAt = useRef(Date.now());
   const lastTap = useRef(0);
 
@@ -115,10 +116,29 @@ export default function Dig() {
       setStyles(await favoriteStyles(8));
       const f = await getKV<DigFilter>("digFilter", {});
       setFilter(f);
-      setCards(await buildQueue(f));
-      setLoading(false);
+      // Liegt noch eine Kiste bereit (vom letzten Mal oder nach dem Start vorgepackt), steht sie sofort da.
+      // Nachschub holt der Kartenwechsel von selbst, sobald weniger als fünf übrig sind.
+      hurryDig();
+      const kept = await keptQueue(f);
+      if (kept.length >= 3) {
+        setCards(kept);
+        setLoading(false);
+        return;
+      }
+      await fill(f);
     })();
   }, []);
+
+  /** Neue Kiste: die ersten Karten zeigen, sobald eine Quelle geantwortet hat, der Rest kommt hinten dran */
+  const fill = async (f: DigFilter) => {
+    const round = ++fillRound.current;
+    const add = (list: DigCard[]) => {
+      if (round !== fillRound.current) return;
+      setCards((cs) => (cs.length ? [...cs, ...list.filter((m) => !cs.some((c) => c.id === m.id))] : list));
+      setLoading(false);
+    };
+    add(await buildQueue(f, new Set(), [], { early: add }));
+  };
 
   const applyFilter = async (f: DigFilter) => {
     haptic(6);
@@ -128,8 +148,7 @@ export default function Dig() {
     setActive(0);
     feed.current?.scrollTo({ top: 0 });
     void setKV("digFilter", f);
-    setCards(await buildQueue(f));
-    setLoading(false);
+    await fill(f);
   };
   const changeStyle = (s?: string) => applyFilter({ ...filter, style: s });
   const extraFilters = (filter.decade ? 1 : 0) + (filter.maxPrice ? 1 : 0);
@@ -172,6 +191,8 @@ export default function Dig() {
     }, 350);
     setVideo(null);
     void markSeen(current.id);
+    // Was noch nicht dran war, liegt beim nächsten Öffnen sofort bereit
+    void keepQueue(filter, cards.slice(active + 1));
     let cancelled = false;
     const a = audio.current!;
     a.pause();
