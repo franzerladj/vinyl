@@ -301,6 +301,12 @@ async function startupSync() {
     else if (Date.now() - hiddenAt > 20_000) void run();
   });
   window.addEventListener("online", () => void run());
+  // Mitteilung kam an, während Crate offen ist: Anfragen und Aktivität gleich nachladen
+  navigator.serviceWorker?.addEventListener("message", (e) => {
+    if ((e.data as { type?: string } | null)?.type !== "crate-push") return;
+    void import("./lib/social").then((m) => m.refreshSocial()).catch(() => undefined);
+    void import("./lib/buzz").then((m) => m.refreshBuzz()).catch(() => undefined);
+  });
   // Versehentliches Neuladen während eines Syncs: Browser fragt nach
   window.addEventListener("beforeunload", (e) => {
     if (pipelineBusy()) {

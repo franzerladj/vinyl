@@ -53,8 +53,11 @@ export function appInfo(): AppInfo {
   }
 }
 /** Aktuelle Android-App (versionCode). Ältere bekommen auf Start einen Hinweis zum Aktualisieren. */
-export const LATEST_APK = 7;
+export const LATEST_APK = 8;
 export const apkOutdated = () => appInfo().android && appInfo().v > 0 && appInfo().v < LATEST_APK;
+
+/** Ab App-Version 1.7 fragt die App selbst (Dialog, sonst Einstellungen) und meldet Chrome nie mehr „gesperrt“ */
+export const appAsksItself = () => appInfo().android && appInfo().v >= 8;
 
 /** Ab App-Version 1.5 öffnet ein Knopf direkt die Mitteilungs-Einstellungen von Android */
 export const canOpenAndroidSettings = () => appInfo().android && appInfo().v >= 6;
@@ -75,7 +78,7 @@ export async function enablePush(prefs: PushPrefs = DEFAULT_PREFS): Promise<Push
   await setKV("pushWanted", true);
   const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
   if (perm === "denied") throw new PushBlocked();
-  if (perm !== "granted") throw new Error("Ohne Erlaubnis gehen keine Mitteilungen");
+  if (perm !== "granted") throw new Error(appAsksItself() ? "Mitteilungen sind in Android noch aus. Tipp den Schalter nochmal an und erlaube sie." : "Ohne Erlaubnis gehen keine Mitteilungen");
   const reg = await navigator.serviceWorker.ready;
   const sub = (await reg.pushManager.getSubscription()) ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: keyBytes(VAPID_PUBLIC_KEY) }));
   const r = await json<{ prefs: PushPrefs }>("/api/push/subscribe", { subscription: sub.toJSON(), prefs });

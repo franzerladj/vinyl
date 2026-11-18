@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">Crate</string>
     <!-- app=android: die Webseite weiß, dass sie in der App läuft (Knopf für die Android-Einstellungen). v = versionCode -->
-    <string name="launch_url">https://crate-8vf.pages.dev/?app=android&amp;v=7</string>
+    <string name="launch_url">https://crate-8vf.pages.dev/?app=android&amp;v=8</string>
     <!-- Digital Asset Links: bestätigt, dass App und Webseite zusammengehören (dann ohne Adressleiste) -->
     <string name="asset_statements" translatable="false">[{\"relation\": [\"delegate_permission/common.handle_all_urls\"], \"target\": {\"namespace\": \"web\", \"site\": \"https://crate-8vf.pages.dev\"}}]</string>
 </resources>

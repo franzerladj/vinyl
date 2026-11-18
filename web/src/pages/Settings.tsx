@@ -20,7 +20,7 @@ import { renderProfileCard } from "../lib/shareCard";
 import { inviteLink } from "../lib/friends";
 import { loadMyProfile, saveMyProfile } from "../lib/profile";
 import { GEAR, linkText, LINK_LABEL, parseLink, PLAY_LABEL, sanitizeProfile, type CrateProfile, type GearSlot, type PlayMode } from "../../../shared/profile";
-import { appInfo, canOpenAndroidSettings, DEFAULT_PREFS, disablePush, enablePush, isIOS, openAndroidNotificationSettings, PushBlocked, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs } from "../lib/push";
+import { appInfo, canOpenAndroidSettings, DEFAULT_PREFS, disablePush, enablePush, isIOS, openAndroidNotificationSettings, PushBlocked, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs, appAsksItself } from "../lib/push";
 import { DEFAULT_SHIP, type ShipConfig } from "../../../shared/shipping";
 import {
   IconBell,
@@ -1283,7 +1283,12 @@ function PushBlockedHelp({ onRetry }: { onRetry?: () => void }) {
   return (
     <div className="push-help">
       <b className="push-help-title">Mitteilungen sind gesperrt</b>
-      {canOpenAndroidSettings() ? (
+      {appAsksItself() ? (
+        <>
+          <p className="sub">Chrome, in dem Crate läuft, hat sich noch eine alte Sperre gemerkt. Starte dein Handy einmal neu und öffne Crate. Danach reicht der Schalter: Crate fragt selbst und führt dich bei Bedarf in die Android-Einstellungen.</p>
+          <p className="tiny">Statt Neustart geht auch: Android-Einstellungen → Apps → Chrome → „Stopp erzwingen“, dann Crate öffnen.</p>
+        </>
+      ) : canOpenAndroidSettings() ? (
         <>
           <ol className="push-steps">
             <li>
@@ -1296,6 +1301,9 @@ function PushBlockedHelp({ onRetry }: { onRetry?: () => void }) {
           <button className="btn primary block lg" onClick={openAndroidNotificationSettings}>
             In Android erlauben
           </button>
+          <a className="btn block" href="/download/crate.apk" download>
+            Neue App-Version laden (macht das künftig von selbst)
+          </a>
           <p className="tiny">Statt Neustart geht auch: Android-Einstellungen → Apps → Chrome → „Stopp erzwingen“, dann Crate öffnen.</p>
         </>
       ) : app.android ? (

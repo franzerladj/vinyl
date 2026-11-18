@@ -58,6 +58,8 @@ export interface Message {
   body: string;
   url?: string;
   tag?: string;
+  /** Sofort zustellen, auch wenn das Handy ruht (Anfragen, Likes, Kommentare). Sonst darf der Push-Dienst warten. */
+  urgent?: boolean;
 }
 
 const enc = new TextEncoder();
@@ -128,7 +130,7 @@ export async function sendPush(cfg: PushConfig, sub: PushSub, msg: Message): Pro
         "Content-Encoding": "aes128gcm",
         "Content-Type": "application/octet-stream",
         TTL: String(24 * 3600),
-        Urgency: "normal",
+        Urgency: msg.urgent ? "high" : "normal",
         ...(msg.tag ? { Topic: msg.tag.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32) } : {}),
       },
       body,

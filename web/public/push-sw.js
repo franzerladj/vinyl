@@ -7,14 +7,18 @@ self.addEventListener("push", (event) => {
     d = { body: event.data ? event.data.text() : "" };
   }
   event.waitUntil(
-    self.registration.showNotification(d.title || "Crate", {
-      body: d.body || "",
-      tag: d.tag || undefined,
-      renotify: Boolean(d.tag),
-      icon: "/icon-192.png",
-      badge: "/badge-96.png",
-      data: { url: d.url || "/" },
-    }),
+    Promise.all([
+      self.registration.showNotification(d.title || "Crate", {
+        body: d.body || "",
+        tag: d.tag || undefined,
+        renotify: Boolean(d.tag),
+        icon: "/icon-192.png",
+        badge: "/badge-96.png",
+        data: { url: d.url || "/" },
+      }),
+      // Ist Crate gerade offen, holt die Seite den neuen Stand sofort (Punkt am Freunde-Tab, Aktivität)
+      self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => list.forEach((c) => c.postMessage({ type: "crate-push", tag: d.tag || "" }))),
+    ]),
   );
 });
 

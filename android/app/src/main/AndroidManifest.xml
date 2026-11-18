@@ -87,6 +87,12 @@
             android:name="com.google.androidbrowserhelper.trusted.NotificationPermissionRequestActivity"
             android:exported="false"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <!-- Eigener Erlaubnis-Ablauf für Mitteilungen: Dialog, sonst Einstellungen, Antwort nie „gesperrt“ -->
+        <activity
+            android:name=".CratePermissionActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <activity android:name="com.google.androidbrowserhelper.trusted.WebViewFallbackActivity" android:configChanges="orientation|screenSize" />
 
         <provider
@@ -99,7 +105,7 @@
 
         <!-- Mitteilungen der Webseite als echte Android-Mitteilungen -->
         <service
-            android:name="com.google.androidbrowserhelper.trusted.DelegationService"
+            android:name=".CrateDelegationService"
             android:enabled="true"
             android:exported="true">
             <meta-data android:name="android.support.customtabs.trusted.SMALL_ICON" android:resource="@drawable/ic_notification" />

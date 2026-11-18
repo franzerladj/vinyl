@@ -503,7 +503,8 @@ const validName = (u: unknown): u is string => typeof u === "string" && /^[\w.\-
 /** Mitteilung an einen anderen Nutzer, falls er sie eingeschaltet hat */
 async function tellFriend(cfg: Config, to: string, msg: Message) {
   const rec = await loadUser(cfg.kv, to);
-  if (rec?.subs.length) await notifyUser(cfg.kv, cfg.push, to, rec, "friends", msg).catch(() => 0);
+  // Soziales soll sofort ankommen, nicht erst, wenn das Handy aufwacht
+  if (rec?.subs.length) await notifyUser(cfg.kv, cfg.push, to, rec, "friends", { ...msg, urgent: true }).catch(() => 0);
 }
 async function befriend(cfg: Config, me: string, other: string, mine: Social, theirs: Social) {
   mine.friends = [...without(mine.friends, other), other];
@@ -593,7 +594,7 @@ app.post("/api/push/test", async (c) => {
   const rec = await loadUser(cfg.kv, s.username);
   if (!rec?.subs.length) return c.json({ message: "Auf diesem Gerät sind Mitteilungen aus" }, 404);
   let ok = 0;
-  for (const sub of rec.subs) if ((await sendPush(cfg.push, sub, { title: "Crate", body: "So sehen Mitteilungen aus. Alles eingerichtet.", url: "/settings/notifications", tag: "test" })) === "ok") ok++;
+  for (const sub of rec.subs) if ((await sendPush(cfg.push, sub, { title: "Crate", body: "So sehen Mitteilungen aus. Alles eingerichtet.", url: "/settings/notifications", tag: "test", urgent: true })) === "ok") ok++;
   return c.json({ sent: ok, devices: rec.subs.length });
 });
 
