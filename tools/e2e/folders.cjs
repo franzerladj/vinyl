@@ -65,11 +65,33 @@ const B = "http://localhost:8787";
   const wid = notes[0][1];
   await page.goto(`${B}/release/${wid}`);
   await page.waitForSelector(".actions");
-  out.releaseRow = await page.locator(".group-row:has-text('Ordner')").first().textContent();
+  // Platten-Seite einer Want: der Ordner steht oben bei den Aktionen
+  out.releaseRow = await page.locator(".action:has(.action-label)").textContent();
   await page.click(".action:has-text('Sammlung')");
   await page.waitForFunction(() => [...document.querySelectorAll(".action")].some((a) => a.textContent.includes("Drucken")), null, { timeout: 15000 });
   const metal = st.folders.find((f) => f.name === "Metal");
   out.boughtInto = st.calls.find((c) => c[0] === "add")?.[2] === metal.id;
+
+  // Platten-Seite: einzelne Platte direkt einsortieren, Want (noch ohne Ordner) und Sammlung
+  const freeWant = [...Array(25)].map((_, i) => 46 + i).find((n) => !notes.some((x) => x[1] === n) && n !== wid);
+  await page.goto(`${B}/release/${freeWant}`);
+  await page.waitForSelector(".action:has(.action-label)");
+  out.wantButton = await page.locator(".action:has(.action-label)").textContent();
+  await page.click(".action:has(.action-label)");
+  await page.click(".sheet .option:has-text('Metal')");
+  await page.waitForFunction(() => document.querySelector(".action .action-label")?.textContent === "Metal", null, { timeout: 15000 });
+  // Discogs folgt über die Warteschlange, das dauert einen Moment
+  for (let i = 0; i < 40 && !st.calls.some((c) => c[0] === "note" && c[1] === freeWant); i++) await page.waitForTimeout(250);
+  out.wantFiled = st.calls.some((c) => c[0] === "note" && c[1] === freeWant && /Metal/.test(c[2]));
+  await page.goto(`${B}/release/3`);
+  await page.waitForSelector(".action:has(.action-label)");
+  await page.click(".action:has(.action-label)");
+  await page.fill(".sheet input[placeholder='Neuer Ordner']", "Disco");
+  await page.click(".sheet button:has-text('Anlegen')");
+  await page.waitForFunction(() => document.querySelector(".action .action-label")?.textContent === "Disco", null, { timeout: 15000 });
+  await page.waitForTimeout(1500);
+  out.collFiled = st.calls.some((c) => c[0] === "move" && c[1] === 3);
+  await page.screenshot({ path: `${__dirname}/folders-release.png` });
 
   // Set: nur aus „Auflegen“
   await page.goto(`${B}/sets/new`);

@@ -21,7 +21,7 @@ import { setYtConsent, ytConsent } from "../lib/theme";
 import { Hint } from "../components/Welcome";
 import { playedHistory, playedText } from "../lib/setHistory";
 import { matchVideo, parseDuration, youtubeId } from "../../../shared/match";
-import { IconBack, IconCart, IconCheck, IconExternal, IconShare, IconHeart, IconPause, IconPlay, IconPlus, IconMic, IconPrint, IconWave } from "../components/icons";
+import { IconBack, IconCart, IconCheck, IconExternal, IconFolder, IconShare, IconHeart, IconPause, IconPlay, IconPlus, IconMic, IconPrint, IconWave } from "../components/icons";
 import { Listen } from "../components/Listen";
 import { estimateBpm } from "../../../shared/vibes";
 import { FolderChooser } from "../components/Folders";
@@ -167,6 +167,9 @@ export default function ReleasePage() {
     setEdit(null);
   };
 
+  // Aktueller Ordner: bei Platten aus der Sammlung der Discogs-Ordner, bei Wants die Marke in der Notiz
+  const curFolder = inColl > 0 ? (folders.find((f) => copies.some((c) => c.folderId === f.id))?.name ?? null) : isWant ? wantFolderOf(wantNotes) : null;
+
   const toggleWant = () => {
     haptic();
     (isWant ? removeWant(id).then(() => toast("Aus der Wantlist entfernt")) : addWant(id).then(() => toast("Auf der Wantlist"))).catch((e) => toast(e.message));
@@ -193,6 +196,13 @@ export default function ReleasePage() {
             <IconHeart />
             {isWant ? "Gewünscht" : "Wantlist"}
           </button>
+          {/* Einsortieren direkt von hier, für Platten aus der Sammlung und für Wants */}
+          {(inColl > 0 || isWant) && (
+            <button className={`action ${curFolder ? "has-folder" : ""}`} onClick={() => (haptic(5), setFolderSheet(inColl > 0 ? "coll" : "want"))} aria-label={curFolder ? `Ordner: ${curFolder}` : "In einen Ordner legen"}>
+              <IconFolder />
+              <span className="action-label">{curFolder ?? "Ordner"}</span>
+            </button>
+          )}
           <a className="action" href={discogsSellUrl(id)} target="_blank" rel="noreferrer">
             <IconCart />
             Marktplatz
@@ -214,16 +224,6 @@ export default function ReleasePage() {
             {rel.community && <span className="tiny">{rel.community.have} haben</span>}
           </div>
         </div>
-
-        {isWant && !inColl && wantFolderNames.length > 0 && (
-          <div className="group" style={{ marginTop: 10 }}>
-            <button className="group-row" onClick={() => setFolderSheet("want")}>
-              <span style={{ width: 92 }} className="sub">Ordner</span>
-              <span style={{ flex: 1 }}>{wantFolderOf(wantNotes) ?? "Ohne Ordner"}</span>
-              <span className="chev">›</span>
-            </button>
-          </div>
-        )}
 
         {isWant && price && (
           <div className="card stack" style={{ marginTop: 10, gap: 10 }}>
