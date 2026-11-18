@@ -527,9 +527,13 @@ export function SwipeArea({
       const t = e.touches[0];
       const target = e.target as HTMLElement;
       const edge = t.clientX < 28 && Boolean(document.querySelector(".navbar"));
+      // Auch unter kurzem Inhalt wischen können: alles im Inhaltsbereich ab der Oberkante der Fläche zählt
+      const scope = el.closest(".app") ?? el;
+      const inside = el.contains(target) || (scope.contains(target) && t.clientY >= el.getBoundingClientRect().top);
       if (
         idx.current < 0 ||
         e.touches.length !== 1 ||
+        !inside ||
         edge ||
         target.closest(SKIP) ||
         overlayOpen() ||
@@ -612,15 +616,15 @@ export function SwipeArea({
         setTimeout(() => (el.style.transition = ""), 400);
       }
     };
-    el.addEventListener("touchstart", start, { passive: true });
-    el.addEventListener("touchmove", move, { passive: true });
-    el.addEventListener("touchend", end, { passive: true });
-    el.addEventListener("touchcancel", end, { passive: true });
+    window.addEventListener("touchstart", start, { passive: true });
+    window.addEventListener("touchmove", move, { passive: true });
+    window.addEventListener("touchend", end, { passive: true });
+    window.addEventListener("touchcancel", end, { passive: true });
     return () => {
-      el.removeEventListener("touchstart", start);
-      el.removeEventListener("touchmove", move);
-      el.removeEventListener("touchend", end);
-      el.removeEventListener("touchcancel", end);
+      window.removeEventListener("touchstart", start);
+      window.removeEventListener("touchmove", move);
+      window.removeEventListener("touchend", end);
+      window.removeEventListener("touchcancel", end);
     };
   }, [count]);
   return (

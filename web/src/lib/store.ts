@@ -7,6 +7,8 @@ export interface JobState {
   label: string;
   done: number;
   total: number;
+  /** Beginn des Schritts, für die Restzeit */
+  startedAt: number;
   error?: string;
 }
 
@@ -57,7 +59,7 @@ export function jobUpdate(id: string, patch: Partial<JobState> | null) {
   setState((s) => {
     const jobs = { ...s.jobs };
     if (patch === null) delete jobs[id];
-    else jobs[id] = { ...(jobs[id] ?? { id, label: id, done: 0, total: 0 }), ...patch };
+    else jobs[id] = { ...(jobs[id] ?? { id, label: id, done: 0, total: 0, startedAt: Date.now() }), ...patch };
     return { jobs };
   });
 }

@@ -1,3 +1,4 @@
+import { SwipeArea } from "../components/Pager";
 import { NavBar } from "../components/ui";
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -69,6 +70,8 @@ async function findCandidates(p: Partial<Fields> & { q?: string }): Promise<Sear
   }
   return out;
 }
+
+const SCAN_MODES = ["scan", "photo", "manual"] as const;
 
 export default function Scan() {
   const nav = useNavigate();
@@ -222,6 +225,7 @@ export default function Scan() {
           ]}
           onChange={(m) => reset(m)}
         />
+        <SwipeArea index={SCAN_MODES.indexOf(mode)} count={3} onIndex={(k) => reset(SCAN_MODES[k])} className="stack">
 
         {mode === "scan" && !results && (
           <>
@@ -346,6 +350,7 @@ export default function Scan() {
             {results.length > 0 && <DiscogsCredit href={results.length === 1 ? `https://www.discogs.com/release/${results[0].id}` : "https://www.discogs.com/search"} />}
           </>
         )}
+        </SwipeArea>
       </div>
     </>
   );

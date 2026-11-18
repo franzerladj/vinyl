@@ -5,6 +5,9 @@ import type { Release } from "../lib/db";
 import { useStore } from "../lib/store";
 import { hapticsEnabled } from "../lib/theme";
 import { estimateTapTempo, type TapResult } from "../../../shared/tap";
+import { jobText } from "../../../shared/syncText";
+import { SyncSheet, useTick } from "./SyncStatus";
+import { discogsPauseMs } from "../lib/api";
 
 // iOS kennt navigator.vibrate nicht. Safari ab iOS 18 gibt aber beim Umlegen eines System-Schalters
 // (<input type="checkbox" switch>) ein spürbares Tick. Ein unsichtbarer Schalter liefert so echtes Feedback.
@@ -131,8 +134,11 @@ export function Jobs() {
   const toastMsg = useStore((s) => s.toast);
   const update = useStore((s) => s.updateReady);
   const list = Object.values(jobs);
-  const showJobs = list.length > 0 && loc.pathname !== "/" && loc.pathname !== "/scan";
+  const showJobs = list.length > 0 && loc.pathname !== "/scan";
+  const [sheet, setSheet] = useState(false);
   useRootClass("has-jobs", showJobs);
+  // Restzeit und Pause zählen auch dann herunter, wenn gerade kein Schritt etwas meldet
+  useTick(showJobs);
   return (
     <>
       <AskDialog />
@@ -152,22 +158,25 @@ export function Jobs() {
             const done = list.reduce((a, j) => a + j.done, 0);
             const total = list.reduce((a, j) => a + (j.total || 0), 0);
             const pct = total ? Math.min(100, (100 * done) / total) : 6;
+            const t = jobText(list[0], list, Date.now(), discogsPauseMs());
             return (
-              <Link to="/settings/sync" className="job-pill press" aria-label="Sync-Status">
+              <button className="job-pill press" aria-label="Abgleich ansehen" onClick={() => (haptic(5), setSheet(true))}>
                 <svg viewBox="0 0 20 20" width="18" height="18" style={{ flex: "none" }}>
                   <circle cx="10" cy="10" r="8" fill="none" stroke="var(--surface-3)" strokeWidth="2.5" />
                   <circle cx="10" cy="10" r="8" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeDasharray={`${(pct / 100) * 50.3} 50.3`} transform="rotate(-90 10 10)" />
                 </svg>
-                <span className="job-label">{list[0].label}</span>
-                <span className="sub" style={{ fontVariantNumeric: "tabular-nums" }}>
-                  {list[0].done}/{list[0].total || "?"}
+                <span className="job-label">{t.short}</span>
+                <span className="sub job-count">
+                  {list[0].total > 1 ? `${list[0].done} von ${list[0].total}` : "läuft"}
+                  {t.eta && t.eta !== "gleich fertig" ? ` · ${t.eta.replace("noch etwa ", "")}` : ""}
                 </span>
                 {list.length > 1 && <span className="badge">+{list.length - 1}</span>}
-              </Link>
+              </button>
             );
           })()}
         </div>
       )}
+      <SyncSheet open={sheet} onClose={() => setSheet(false)} />
     </>
   );
 }

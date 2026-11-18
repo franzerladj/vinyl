@@ -33,9 +33,13 @@ function record(op: SyncOp) {
 }
 function enqueue(op: SyncOp) {
   outbox.push(op);
-  // Außerhalb der laufenden Transaktion speichern und später hochladen
-  clearTimeout(persistTimer);
-  persistTimer = setTimeout(() => void persistOutbox(), 400);
+  // Außerhalb der laufenden Transaktion speichern und später hochladen. Spätestens 300 ms nach der ersten
+  // Änderung, nicht erst wenn Ruhe ist: läuft nebenher die Analyse, kommt ständig etwas dazu, und ein gerade
+  // gespeichertes Set wäre beim Schließen der App nur im Arbeitsspeicher gewesen
+  persistTimer ??= setTimeout(() => {
+    persistTimer = undefined;
+    void persistOutbox();
+  }, 300);
   // Spätestens nach 4 s hochladen, auch wenn im Hintergrund laufend weitere Änderungen dazukommen
   flushTimer ??= setTimeout(() => {
     flushTimer = undefined;
@@ -43,7 +47,14 @@ function enqueue(op: SyncOp) {
   }, 4000);
 }
 
-const persistOutbox = () => setKV(OUTBOX, { user: outboxUser, ops: compact(outbox) });
+/** Erst wenn der gespeicherte Ausgang geladen ist, darf er überschrieben werden */
+let outboxLoaded = false;
+// Ändert sich gleich nach dem Start etwas (der Abgleich mit Discogs läuft sofort los), stünde hier sonst nur
+// das Neue: was beim letzten Mal nicht mehr hochgeladen wurde (App direkt nach dem Speichern geschlossen), wäre weg
+const persistOutbox = async () => {
+  if (!outboxLoaded) return;
+  await setKV(OUTBOX, { user: outboxUser, ops: compact(outbox) });
+};
 
 /** Welche Tabelle unter welchem Schlüssel abgeglichen wird */
 const keyOf: Record<Exclude<SyncTable, "kv">, (pk: unknown, obj: Record<string, unknown>) => string | null> = {
@@ -143,12 +154,20 @@ export function flush(): Promise<void> {
         if (!r.ok && r.status !== 400) break;
         outbox = [...all.slice(300), ...outbox.slice(taken)];
         if (r.ok) await setKV(LAST, Date.now());
+        // Nur weitermachen, wenn ein voller Stapel übrig war. Was inzwischen dazukam (laufende Analyse),
+        // geht gesammelt mit dem nächsten Takt raus statt in Dutzenden winziger Anfragen
+        if (all.length <= 300) break;
       }
     } catch {
       /* offline: beim nächsten Mal */
     } finally {
       await persistOutbox().catch(() => undefined);
       flushing = null;
+      if (outbox.length)
+        flushTimer ??= setTimeout(() => {
+          flushTimer = undefined;
+          void flush();
+        }, 4000);
     }
   })();
   return flushing;
@@ -281,6 +300,7 @@ export async function startDevSync() {
   outboxUser = u;
   // Ausgang eines anderen Kontos gehört nicht hierher
   outbox = saved && saved.user === u ? [...saved.ops, ...outbox] : outbox;
+  outboxLoaded = true;
   started = true;
   await syncNow().catch(() => undefined);
   let hiddenAt = 0;
@@ -289,6 +309,11 @@ export async function startDevSync() {
       hiddenAt = Date.now();
       void flush();
     } else if (Date.now() - hiddenAt > 15_000) void syncNow().catch(() => undefined);
+  });
+  // Seite wird verlassen oder neu geladen: Ausgang sichern und losschicken
+  window.addEventListener("pagehide", () => {
+    void persistOutbox();
+    void flush();
   });
   window.addEventListener("online", () => void syncNow().catch(() => undefined));
   // Offen nebeneinander (Handy und Laptop): alle zwei Minuten nachsehen

@@ -55,19 +55,28 @@ export const FIELD = { media: 1, sleeve: 2, note: 3 } as const;
 const field = (n: { field_id: number; value: string }[] | undefined, id: number) => n?.find((x) => x.field_id === id)?.value || undefined;
 interface WantPage { pagination: Pagination; wants: { id: number; date_added: string; rating: number; notes?: string; basic_information: BasicInformation }[] }
 
-export async function syncCollection() {
+/**
+ * Sammlung abgleichen. Hat sich seit dem letzten Mal nichts getan (gleiche Anzahl, die neuesten
+ * hundert sind bekannt), reicht die erste Seite: das ist der Normalfall beim Öffnen der App.
+ * Änderungen an älteren Platten von anderswo (Notiz, Ordner auf discogs.com) holt der ganze
+ * Durchlauf: einmal am Tag von selbst und immer, wenn man ihn selbst anstößt (full).
+ */
+export async function syncCollection(full = false) {
   const job = "collection";
   jobUpdate(job, { label: "Sammlung laden", done: 0, total: 1 });
   try {
     const seen = new Set<number>();
     const startedAt = Date.now();
-    let page = 1;
+    let loaded = 0;
     let pages = 1;
-    const known = new Set((await db.collection.toArray()).map((c) => c.releaseId));
+    const local = await db.collection.toArray();
+    const known = new Set(local.map((c) => c.releaseId));
+    const knownInstances = new Set(local.map((c) => c.instanceId));
     let added = 0;
     // Ordnerliste mitnehmen (eine Anfrage), Fehler hier sollen den Sync nicht stoppen
     await import("./folders").then((f) => f.syncFolders()).catch((e) => console.warn("Ordner", e));
-    do {
+    // Seite 1 nennt die Seitenzahl, die übrigen kommen zu dritt gleichzeitig
+    const loadPage = async (page: number) => {
       const data = await discogs<CollPage>(`/users/${u()}/collection/folders/0/releases?per_page=100&page=${page}&sort=added&sort_order=desc`, { background: true });
       pages = data.pagination.pages;
       await upsertBasics(data.releases.map((r) => r.basic_information));
@@ -78,9 +87,21 @@ export async function syncCollection() {
         seen.add(r.instance_id);
         if (!known.has(r.id)) added++;
       }
-      jobUpdate(job, { done: page, total: pages });
-      page++;
-    } while (page <= pages);
+      jobUpdate(job, { done: ++loaded, total: pages });
+      return data;
+    };
+    const first = await loadPage(1);
+    const lastFull = await getKV<number>("lastFullCollectionSync", 0);
+    if (!full && pages > 1 && Date.now() - lastFull < 24 * 3600_000 && first.pagination.items === local.length && first.releases.every((r) => knownInstances.has(r.instance_id))) {
+      await import("./folders").then((f) => f.reapplyPending()).catch(() => undefined);
+      await setKV("lastCollectionSync", Date.now());
+      return;
+    }
+    // Schlägt eine Seite fehl, bricht der Abgleich ab: sonst gälten ihre Platten unten als entfernt
+    let failed: unknown = null;
+    await pool(Array.from({ length: Math.max(0, pages - 1) }, (_, i) => i + 2), 3, (p) => loadPage(p).then(() => undefined, (e) => void (failed ??= e)));
+    if (failed) throw failed;
+    await setKV("lastFullCollectionSync", Date.now());
     // Entfernte Einträge löschen
     // (was während des Abgleichs hinzugefügt wurde, stand noch nicht in der schon geladenen Seite: behalten)
     const stale = (await db.collection.toArray()).filter((c) => !seen.has(c.instanceId) && !(Date.parse(c.dateAdded) >= startedAt - 60_000)).map((c) => c.instanceId);
@@ -99,17 +120,20 @@ export async function syncWants() {
   try {
     const seen = new Set<number>();
     const startedAt = Date.now();
-    let page = 1;
+    let loaded = 0;
     let pages = 1;
-    do {
+    const loadPage = async (page: number) => {
       const data = await discogs<WantPage>(`/users/${u()}/wants?per_page=100&page=${page}`, { background: true });
       pages = data.pagination.pages;
       await upsertBasics(data.wants.map((w) => w.basic_information));
       await db.wants.bulkPut(data.wants.map((w) => ({ releaseId: w.id, dateAdded: w.date_added, rating: w.rating, notes: w.notes })));
       data.wants.forEach((w) => seen.add(w.id));
-      jobUpdate(job, { done: page, total: pages });
-      page++;
-    } while (page <= pages);
+      jobUpdate(job, { done: ++loaded, total: pages });
+    };
+    await loadPage(1);
+    let failed: unknown = null;
+    await pool(Array.from({ length: Math.max(0, pages - 1) }, (_, i) => i + 2), 3, (p) => loadPage(p).catch((e) => void (failed ??= e)));
+    if (failed) throw failed;
     const stale = (await db.wants.toArray()).filter((w) => !seen.has(w.releaseId) && !(Date.parse(w.dateAdded) >= startedAt - 60_000)).map((w) => w.releaseId);
     await db.wants.bulkDelete(stale);
     await import("./folders").then((f) => f.reapplyPending()).catch(() => undefined);
@@ -153,18 +177,24 @@ export async function fetchMissingDetails(scope: "collection" | "wants" = "colle
   const rels = await db.releases.bulkGet(ids);
   const todo = ids.filter((_, i) => !rels[i]?.detailFetchedAt);
   if (!todo.length) return;
+  // Neueste zuerst: was du gerade gekauft oder auf die Wantlist gesetzt hast, ist als Erstes vollständig
+  const added = new Map<number, string>();
+  if (scope === "collection") for (const c of await db.collection.toArray()) added.set(c.releaseId, c.dateAdded);
+  else for (const w of await db.wants.toArray()) added.set(w.releaseId, w.dateAdded);
+  todo.sort((a, b) => (added.get(b) ?? "").localeCompare(added.get(a) ?? ""));
   const job = `details-${scope}`;
-  jobUpdate(job, { label: "Tracklists laden", done: 0, total: todo.length });
+  jobUpdate(job, { label: scope === "collection" ? "Tracklists deiner Platten" : "Details deiner Wants", done: 0, total: todo.length });
   try {
     let done = 0;
-    for (const id of todo) {
+    // Drei gleichzeitig (die Warteschlange hält das Discogs-Limit ein)
+    await pool(todo, 3, async (id) => {
       try {
         await fetchRelease(id, true);
       } catch (e) {
         console.warn("Release", id, e);
       }
       jobUpdate(job, { done: ++done });
-    }
+    });
   } finally {
     jobUpdate(job, null);
   }
@@ -189,7 +219,7 @@ export async function lookupAudioFor(trackIds?: string[]) {
   todo.forEach((t) => byRelease.set(t.releaseId, [...(byRelease.get(t.releaseId) ?? []), t]));
 
   const job = "audio";
-  jobUpdate(job, { label: "BPM & Key suchen", done: 0, total: todo.length });
+  jobUpdate(job, { label: "Tempo nachschlagen", done: 0, total: todo.length });
   let found = 0;
   let done = 0;
   try {
@@ -361,13 +391,13 @@ export async function rateRelease(releaseId: number, rating: number) {
 }
 
 export async function fullSync() {
-  await syncLists();
+  await syncLists(true);
   await fetchMissingDetails("collection");
 }
 
 /** Nur Sammlung und Wantlist abgleichen (schnell, wenige Anfragen) */
-export async function syncLists() {
-  await Promise.all([syncCollection(), syncWants()]);
+export async function syncLists(full = false) {
+  await Promise.all([syncCollection(full), syncWants()]);
 }
 
 export interface AutoSettings {
@@ -413,7 +443,7 @@ export async function autoPipeline(opts: { force?: boolean; resume?: boolean } =
   pipelineRunning = true;
   const release = await keepAwake();
   try {
-    if (!opts.resume) await step("Sync", syncLists);
+    if (!opts.resume) await step("Sync", () => syncLists(opts.force));
     const auto = await getAutoSettings();
     if (!auto.analyze && !opts.force) {
       await step("Tracklists", () => fetchMissingDetails("collection"));

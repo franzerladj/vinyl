@@ -30,10 +30,14 @@ for (const ev of ["touchend", "click"] as const) document.addEventListener(ev, (
 // Neue Version: nicht mitten in einem Sync neu laden, sondern Bescheid geben.
 // Läuft gerade nichts und die App ist im Hintergrund, wird still aktualisiert.
 const startedAt = Date.now();
+// Aus der Update-Mitteilung geöffnet („?update=1“): neue Version sofort holen und ohne Nachfrage laden
+const wantUpdate = new URLSearchParams(location.search).has("update");
+if (wantUpdate) history.replaceState(history.state, "", location.pathname);
 const updateSW = registerSW({
   // Beim Zurückkommen in die App nach neuer Version sehen (sonst merkt die installierte App es erst Tage später)
   onRegisteredSW(_url, reg) {
     if (!reg) return;
+    if (wantUpdate) void reg.update().catch(() => undefined);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) void reg.update().catch(() => undefined);
     });
@@ -41,7 +45,7 @@ const updateSW = registerSW({
   onNeedRefresh() {
     const apply = () => updateSW(true);
     // Gleich beim Öffnen gefunden: sofort neu laden, es wurde noch nichts angetippt
-    if (Date.now() - startedAt < 5000 && Object.keys(getState().jobs).length === 0) return apply();
+    if ((wantUpdate && Date.now() - startedAt < 30000) || (Date.now() - startedAt < 5000 && Object.keys(getState().jobs).length === 0)) return apply();
     setState({ updateReady: apply });
     document.addEventListener("visibilitychange", () => {
       if (document.hidden && Object.keys(getState().jobs).length === 0) apply();

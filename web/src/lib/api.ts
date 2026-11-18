@@ -12,45 +12,77 @@ export class ApiError extends Error {
 
 type Job = { run: () => Promise<void>; fail: (e: Error) => void; priority: number };
 const queue: Job[] = [];
-let running = false;
-let lastCall = 0;
 /** Zeitstempel der letzten Anfragen (gleitendes 60-Sekunden-Fenster) */
 const recent: number[] = [];
-const LIMIT_PER_MIN = 55;
+const LIMIT_PER_MIN = 58;
+/** So viele davon darf der Hintergrund nehmen (der Rest bleibt frei für das, was du antippst) */
+const BACKGROUND_PER_MIN = 50;
+// Mehrere Anfragen gleichzeitig: Discogs zählt pro Minute, nicht pro Sekunde. Ein kleiner Abgleich
+// (ein paar Dutzend Anfragen) ist so in Sekunden durch statt in einer Minute. Der Hintergrund nimmt
+// höchstens drei Plätze, damit für das, was du antippst, immer einer frei ist.
+const MAX_PARALLEL = 4;
+const MAX_BACKGROUND = 3;
+let active = 0;
+let activeBackground = 0;
+let lastCall = -Infinity;
+let wake: ReturnType<typeof setTimeout> | null = null;
+let pausedUntil = 0;
+/** Wie lange die Schlange noch wartet, weil Discogs für diese Minute genug hat (ms, 0 = läuft) */
+export const discogsPauseMs = () => (queue.length ? Math.max(0, pausedUntil - clock()) : 0);
+// Gleichmäßig laufende Uhr statt Systemzeit: stellt jemand die Uhr zurück (Zeitzone, Zeitabgleich),
+// würde die Schlange sonst so lange stehen, bis die alte Zeit wieder erreicht ist
+const clock = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
-async function pump() {
-  if (running) return;
-  running = true;
-  while (queue.length) {
+function pump() {
+  while (queue.length && active < MAX_PARALLEL) {
     queue.sort((a, b) => b.priority - a.priority);
-    const job = queue.shift()!;
-    const now = Date.now();
+    const job = queue[0];
+    const bg = job.priority <= 0;
+    // Vorn steht ein Hintergrund-Job (also wartet nichts Angetipptes) und seine Plätze sind belegt
+    if (bg && activeBackground >= MAX_BACKGROUND) return;
+    const now = clock();
     while (recent.length && now - recent[0] > 60_000) recent.shift();
-    // Volles Fenster: warten, bis die älteste Anfrage herausfällt
-    // Hintergrund-Jobs lassen 10 Anfragen pro Minute frei: was du antippst, kommt auch bei laufendem Sync sofort dran
-    const cap = job.priority > 0 ? LIMIT_PER_MIN : LIMIT_PER_MIN - 10;
+    // Volles Fenster: warten, bis die älteste Anfrage herausfällt.
+    // Hintergrund-Jobs lassen Anfragen frei: was du antippst, kommt auch bei laufendem Sync sofort dran
+    const cap = bg ? BACKGROUND_PER_MIN : LIMIT_PER_MIN;
     let wait = recent.length >= cap ? recent[recent.length - cap] + 60_000 - now : 0;
-    // Hintergrund-Jobs gleichmäßig verteilen, Nutzeraktionen sofort
-    wait = Math.max(wait, lastCall + (job.priority > 0 ? 150 : 1050) - now);
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    lastCall = Date.now();
-    recent.push(lastCall);
-    // Wächter: hängt eine Anfrage, läuft die Warteschlange nach spätestens einer Minute weiter
+    pausedUntil = wait > 0 ? now + wait : 0;
+    // Kurzer Abstand, damit nicht alles im selben Augenblick losgeht
+    wait = Math.max(wait, lastCall + (bg ? 220 : 60) - now);
+    if (wait > 0) {
+      if (!wake)
+        wake = setTimeout(() => {
+          wake = null;
+          // Der Abstand ist abgewartet, egal was die Uhr sagt
+          lastCall = -Infinity;
+          pump();
+        }, wait);
+      return;
+    }
+    queue.shift();
+    lastCall = now;
+    recent.push(now);
+    active++;
+    if (bg) activeBackground++;
+    // Wächter: hängt eine Anfrage, wird ihr Platz nach spätestens einer Minute frei.
     // Der Aufrufer bekommt dann einen Fehler statt ewig zu warten (sonst hängt z. B. das Einsortieren)
     let timer: ReturnType<typeof setTimeout> | undefined;
-    await Promise.race([
+    void Promise.race([
       job.run(),
       new Promise<void>((r) => (timer = setTimeout(() => (job.fail(new ApiError(408, "Discogs antwortet gerade nicht")), r()), JOB_WATCHDOG_MS))),
-    ]);
-    clearTimeout(timer);
-    // Discogs meldet, wie viele Anfragen in dieser Minute noch gehen: kurz vor null kurz durchatmen
-    if (remaining != null && remaining <= 2) {
-      const t = Date.now();
-      while (recent.length < LIMIT_PER_MIN) recent.push(t);
-      remaining = null;
-    }
+    ]).finally(() => {
+      clearTimeout(timer);
+      active--;
+      if (bg) activeBackground--;
+      // Discogs meldet, wie viele Anfragen in dieser Minute noch gehen: kurz vor null durchatmen
+      if (remaining != null && remaining <= 3) {
+        const t = clock();
+        while (recent.length < LIMIT_PER_MIN) recent.push(t);
+        remaining = null;
+      }
+      pump();
+    });
   }
-  running = false;
 }
 
 const JOB_WATCHDOG_MS = 60_000;
@@ -78,7 +110,7 @@ const isAbort = (e: unknown) => (e as { name?: string })?.name === "AbortError";
 function enqueue<T>(fn: () => Promise<T>, priority: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     queue.push({ priority, run: () => fn().then(resolve, reject), fail: reject });
-    void pump();
+    pump();
   });
 }
 
@@ -100,7 +132,7 @@ let directFails = 0;
 let directOffUntil = 0;
 
 async function sendDirect(path: string, method: string, body?: string): Promise<Response | null> {
-  if (Date.now() < directOffUntil) return null;
+  if (clock() < directOffUntil) return null;
   const sig = await fetchWithTimeout("/api/sign", {
     method: "POST",
     credentials: "include",
@@ -122,7 +154,7 @@ async function sendDirect(path: string, method: string, body?: string): Promise<
     // Zeitüberschreitung: einfach nochmal versuchen (der Aufrufer wiederholt), nicht abschalten
     if (isAbort(e)) throw e;
     if (++directFails >= 3) {
-      directOffUntil = Date.now() + 120_000;
+      directOffUntil = clock() + 120_000;
       directFails = 0;
     }
     return null;
@@ -155,7 +187,7 @@ export function discogs<T>(path: string, opts: DiscogsOptions = {}): Promise<T> 
       if (Number.isFinite(left) && res.headers.has("X-Discogs-Ratelimit-Remaining")) remaining = left;
       if (res.status === 429) {
         // Fenster als voll markieren und warten
-        const t = Date.now();
+        const t = clock();
         while (recent.length < LIMIT_PER_MIN) recent.push(t);
         await new Promise((r) => setTimeout(r, Math.min(30_000, 8_000 * (attempt + 1))));
         continue;

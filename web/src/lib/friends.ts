@@ -1,5 +1,6 @@
 // Freunde: öffentliche Discogs-Sammlungen und Wantlists anderer Nutzer.
 // Alles läuft über die offizielle API, gespeichert wird lokal auf dem Gerät.
+import { pool } from "./pool";
 import { ApiError, discogs } from "./api";
 import { db, getKV, setKV, type Friend, type FriendItem } from "./db";
 import { upsertBasics } from "./sync";
@@ -52,37 +53,63 @@ export async function removeFriend(name: string) {
 type CollPage = { pagination: Pagination; releases: { id: number; date_added: string; basic_information: BasicInformation }[] };
 type WantPage = { pagination: Pagination; wants: { id: number; date_added: string; basic_information: BasicInformation }[] };
 
-async function loadList(u: string, kind: "coll" | "want", background = true): Promise<{ items: FriendItem[]; private: boolean }> {
+async function loadList(
+  u: string,
+  kind: "coll" | "want",
+  background = true,
+  onPage?: (pages: number) => void,
+  /** Stand vom letzten Mal: passt die erste Seite dazu, hat sich nichts geändert */
+  known?: { count: number; items: FriendItem[] },
+): Promise<{ items: FriendItem[]; private: boolean; count: number }> {
   const items: FriendItem[] = [];
-  let page = 1;
   let pages = 1;
+  let same = false;
+  const loadPage = async (page: number) => {
+    const path = kind === "coll" ? `/users/${encodeURIComponent(u)}/collection/folders/0/releases?per_page=100&page=${page}&sort=added&sort_order=desc` : `/users/${encodeURIComponent(u)}/wants?per_page=100&page=${page}`;
+    const d = await discogs<CollPage & WantPage>(path, { background });
+    pages = Math.min(d.pagination.pages, 60);
+    const rows = kind === "coll" ? d.releases : d.wants;
+    await upsertBasics(rows.map((r) => r.basic_information));
+    for (const r of rows) items.push({ key: `${u}:${kind}:${r.id}`, username: u, kind, releaseId: r.id, dateAdded: r.date_added });
+    // Neueste zuerst: gleiche Anzahl und die erste Seite komplett bekannt heißt, es kam nichts dazu und ging nichts weg
+    if (page === 1 && known && pages > 1 && d.pagination.items === known.count) {
+      const ids = new Set(known.items.map((i) => i.releaseId));
+      same = rows.every((r) => ids.has(r.id));
+    }
+    onPage?.(same ? 1 : pages);
+  };
   try {
-    do {
-      const path = kind === "coll" ? `/users/${encodeURIComponent(u)}/collection/folders/0/releases?per_page=100&page=${page}&sort=added&sort_order=desc` : `/users/${encodeURIComponent(u)}/wants?per_page=100&page=${page}`;
-      const d = await discogs<CollPage & WantPage>(path, { background });
-      pages = Math.min(d.pagination.pages, 60);
-      const rows = kind === "coll" ? d.releases : d.wants;
-      await upsertBasics(rows.map((r) => r.basic_information));
-      for (const r of rows) items.push({ key: `${u}:${kind}:${r.id}`, username: u, kind, releaseId: r.id, dateAdded: r.date_added });
-      jobUpdate(`friend-${u}`, { done: page, total: pages });
-      page++;
-    } while (page <= pages);
+    await loadPage(1);
+    if (same && known) return { items: known.items, private: false, count: known.count };
+    // Die übrigen Seiten zu dritt gleichzeitig. Fehlt eine, gilt die Liste als nicht geladen (sonst fehlten Platten)
+    let failed: unknown = null;
+    await pool(Array.from({ length: Math.max(0, pages - 1) }, (_, i) => i + 2), 3, (p) => loadPage(p).catch((e) => void (failed ??= e)));
+    if (failed) throw failed;
   } catch (e) {
     // 403: der Freund hat diese Liste auf privat gestellt
-    if (e instanceof ApiError && (e.status === 403 || e.status === 401)) return { items: [], private: true };
+    if (e instanceof ApiError && (e.status === 403 || e.status === 401)) return { items: [], private: true, count: 0 };
     throw e;
   }
-  return { items, private: false };
+  return { items, private: false, count: items.length };
 }
 
 /** now: gerade hinzugefügt oder von Hand angestoßen, dann mit Vorrang vor dem Hintergrund-Sync laden */
 export async function syncFriend(u: string, now = false) {
   const job = `friend-${u}`;
-  jobUpdate(job, { label: `Sammlung von ${u}`, done: 0, total: 1 });
+  jobUpdate(job, { label: `Platten von ${u}`, done: 0, total: 2 });
   try {
-    const coll = await loadList(u, "coll", !now);
-    jobUpdate(job, { label: `Wantlist von ${u}`, done: 0, total: 1 });
-    const wants = await loadList(u, "want", !now);
+    // Sammlung und Wantlist gleichzeitig; der Fortschritt zählt die Seiten beider Listen zusammen
+    let done = 0;
+    const totals = { coll: 1, want: 1 };
+    const page = (kind: "coll" | "want") => (pages: number) => {
+      totals[kind] = pages;
+      jobUpdate(job, { done: ++done, total: totals.coll + totals.want });
+    };
+    const before = await db.friends.get(u);
+    const had = (await db.friendItems.where("username").equals(u).toArray()).filter((i) => i.kind === "coll");
+    // Nur die Sammlung kommt nach Datum sortiert, deshalb gilt der Kurzweg nur für sie
+    const known = before?.lastSync && before.numCollection != null && had.length ? { count: before.numCollection, items: had } : undefined;
+    const [coll, wants] = await Promise.all([loadList(u, "coll", !now, page("coll"), known), loadList(u, "want", !now, page("want"))]);
     await db.transaction("rw", db.friends, db.friendItems, async () => {
       await db.friendItems.where("username").equals(u).delete();
       await db.friendItems.bulkPut([...coll.items, ...wants.items]);
@@ -93,7 +120,7 @@ export async function syncFriend(u: string, now = false) {
           lastSync: Date.now(),
           collectionPrivate: coll.private,
           wantsPrivate: wants.private,
-          numCollection: coll.private ? null : coll.items.length,
+          numCollection: coll.private ? null : coll.count,
           numWantlist: wants.private ? null : wants.items.length,
         });
     });
@@ -104,14 +131,9 @@ export async function syncFriend(u: string, now = false) {
 
 /** Alle Freunde aktualisieren, deren letzter Abgleich länger als maxAgeHours her ist */
 export async function syncFriends(maxAgeHours = 6) {
-  for (const f of await db.friends.toArray()) {
-    if (f.lastSync && Date.now() - f.lastSync < maxAgeHours * 3600_000) continue;
-    try {
-      await syncFriend(f.username);
-    } catch (e) {
-      console.warn("Freund", f.username, e);
-    }
-  }
+  const due = (await db.friends.toArray()).filter((f) => !f.lastSync || Date.now() - f.lastSync >= maxAgeHours * 3600_000);
+  // Zwei Freunde gleichzeitig (Fehler bei einem halten die anderen nicht auf)
+  await pool(due, 2, (f) => syncFriend(f.username));
 }
 
 export interface FriendMatch {

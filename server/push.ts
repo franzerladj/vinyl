@@ -50,6 +50,8 @@ export interface UserRec {
   cursor: number;
   /** schon erinnert (Schlüssel → Zeitpunkt) */
   sent: Record<string, number>;
+  /** Zuletzt zugestellte Update-Mitteilung (shared/announce.ts) */
+  announce?: string;
   updatedAt: number;
 }
 

@@ -1,4 +1,5 @@
 // Einstellungen im iOS-Stil: Übersicht mit Gruppen, Unterseiten pro Bereich.
+import { SyncStatus } from "../components/SyncStatus";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -371,6 +372,14 @@ function SyncPage() {
           </p>
         </div>
 
+        {busy && (
+          <Group title="Gerade läuft" foot="Du kannst die App dabei normal benutzen.">
+            <div className="set-row" style={{ cursor: "default", display: "block" }}>
+              <SyncStatus />
+            </div>
+          </Group>
+        )}
+
         <Group title="Automatisch" foot="Nach jedem Sync ergänzt die App fehlende Tracklists, BPM, Keys, Vibes und Preise. Deine Aktionen haben dabei immer Vorrang.">
           <Row label="Nach dem Sync ergänzen" right={<Switch checked={auto.analyze} label="Nach dem Sync ergänzen" onChange={(v) => save({ ...auto, analyze: v })} />} />
           <Row label="Hörproben ausmessen" sub="Tempo, Tonart, Energie · ca. 0,5 MB pro Track" right={<Switch checked={auto.audio} label="Hörproben ausmessen" onChange={(v) => save({ ...auto, audio: v })} />} />
@@ -381,9 +390,9 @@ function SyncPage() {
             (
               [
                 ["Tracklists", info.withDetail, info.records],
-                ["BPM & Key gesucht", info.lookedUp, info.tracks],
+                ["Tempo nachgeschlagen", info.lookedUp, info.tracks],
                 ["Hörproben gemessen", info.analyzed, info.tracks],
-                ["Vibes & Energie", info.vibes, info.tracks],
+                ["Stimmung und Energie", info.vibes, info.tracks],
                 ["Preise der Wants", info.priced, info.wants],
               ] as [string, number, number][]
             ).map(([l, a, b]) => (

@@ -3,6 +3,7 @@
 import { ApiError, discogs } from "./api";
 import { db, getKV, setKV, type MarketStat, type PricePoint, type PriceSuggestion } from "./db";
 import { jobUpdate } from "./store";
+import { pool } from "./pool";
 import { evaluateDeal, type Deal } from "../../../shared/deals";
 import type { Listing } from "../../../shared/optimizer";
 
@@ -35,7 +36,8 @@ export async function refreshPrices(ids: number[], opts: { maxAgeHours?: number;
   jobUpdate(job, { label: "Preise laden", done: 0, total: todo.length });
   try {
     let done = 0;
-    for (const id of todo) {
+    // Drei gleichzeitig (die Warteschlange hält das Discogs-Limit ein)
+    await pool(todo, 3, async (id) => {
       try {
         const s = await discogs<Stats>(`/marketplace/stats/${id}?curr_abbr=${cur}`, { background: opts.background ?? true });
         const stat: MarketStat = { releaseId: id, lowest: s.lowest_price?.value ?? null, currency: s.lowest_price?.currency ?? cur, numForSale: s.num_for_sale ?? 0, fetchedAt: Date.now() };
@@ -61,7 +63,7 @@ export async function refreshPrices(ids: number[], opts: { maxAgeHours?: number;
         console.warn("Preis", id, e);
       }
       jobUpdate(job, { done: ++done });
-    }
+    });
   } finally {
     jobUpdate(job, null);
   }
@@ -124,11 +126,11 @@ export async function scanSeller(seller: string, maxPages = 50): Promise<number>
   jobUpdate(job, { label: `Inventar ${seller}`, done: 0, total: 1 });
   let found = 0;
   try {
-    let page = 1;
+    let loaded = 0;
     let pages = 1;
     // Erst alle Seiten sammeln, dann in einem Rutsch ersetzen: bricht die Suche ab, bleiben die alten Angebote stehen
     const all: Listing[] = [];
-    do {
+    const loadPage = async (page: number) => {
       const d = await discogs<InvPage>(`/users/${encodeURIComponent(seller)}/inventory?per_page=100&page=${page}&status=For%20Sale`, { background: true });
       pages = Math.min(d.pagination.pages, maxPages);
       for (const l of d.listings)
@@ -144,9 +146,12 @@ export async function scanSeller(seller: string, maxPages = 50): Promise<number>
             sellerRating: l.seller.stats?.rating ? Number(l.seller.stats.rating) : null,
             title: l.release.description,
           });
-      jobUpdate(job, { done: page, total: pages });
-      page++;
-    } while (page <= pages);
+      jobUpdate(job, { done: ++loaded, total: pages });
+    };
+    await loadPage(1);
+    let failed: unknown = null;
+    await pool(Array.from({ length: Math.max(0, pages - 1) }, (_, i) => i + 2), 3, (p) => loadPage(p).catch((e) => void (failed ??= e)));
+    if (failed) throw failed;
     found = all.length;
     const now = Date.now();
     await db.transaction("rw", db.listings, async () => {

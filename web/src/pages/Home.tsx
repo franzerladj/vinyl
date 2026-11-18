@@ -9,8 +9,9 @@ import { cachedSocial } from "../lib/social";
 import { FriendsHome } from "../components/FriendsHome";
 import { friendMatches, type MyProfile } from "../lib/friends";
 import { autoPipeline, isPipelineRunning } from "../lib/sync";
+import { SyncStatus } from "../components/SyncStatus";
 import { toast, useStore } from "../lib/store";
-import { Avatar, Cover, Empty, haptic, markHero } from "../components/bits";
+import { Avatar, Cover, Empty, haptic, markHero, useRootClass } from "../components/bits";
 import { DjOverview } from "../components/DjOverview";
 import { computeStylus, hoursText } from "../lib/stylus";
 import { IconCamera, IconCart, IconList, IconPlay, IconSearch, IconTag, IconUser } from "../components/icons";
@@ -91,6 +92,8 @@ export default function Home() {
   const setToday = stats?.nextSet?.date === todayIso;
   const gigSoon = Boolean(stats?.nextSet?.date && (new Date(stats.nextSet.date).getTime() - new Date(todayIso).getTime()) / 864e5 <= 7);
   // Was gerade zählt: Set heute, neue Platten zum Beschriften, sonst der Überblick
+  // Beim ersten Laden steht die große Karte da, die kleine Anzeige unten wäre doppelt
+  useRootClass("home-loading", busy && !stats?.records);
   const statusLine = !stats
     ? ""
     : setToday
@@ -129,21 +132,8 @@ export default function Home() {
           <div className="card progress-card" style={{ marginBottom: 12, animation: "pop .5s var(--spring) both" }} aria-live="polite">
             <span className="spin" />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <b>{stats?.records ? "Crate bringt alles auf den neuesten Stand" : "Deine Sammlung wird geladen"}</b>
-              {Object.values(jobs).map((j) => (
-                <div key={j.id} style={{ marginTop: 8 }}>
-                  <div className="row sub" style={{ fontSize: 13 }}>
-                    <span>{j.label}</span>
-                    <span className="spacer" />
-                    <span style={{ fontVariantNumeric: "tabular-nums" }}>
-                      {j.done}/{j.total || "?"}
-                    </span>
-                  </div>
-                  <div className="progress" style={{ height: 4, marginTop: 4 }}>
-                    <div style={{ transform: `scaleX(${Math.min(1, Math.max(0, (j.total ? (100 * j.done) / j.total : 4) / 100))})` }} />
-                  </div>
-                </div>
-              ))}
+              <b>Deine Sammlung kommt von Discogs</b>
+              <SyncStatus why={false} />
               <div className="tiny" style={{ marginTop: 8 }}>Läuft im Hintergrund weiter, du kannst die App normal benutzen.</div>
             </div>
           </div>

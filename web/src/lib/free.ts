@@ -139,7 +139,7 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
   const lastfm = getState().me?.features.lastfm;
   const durationOf = (t: TrackMeta) => parseDuration(rels.get(t.releaseId)?.tracklist?.find((x) => x.position === t.position)?.duration);
   const job = "free-vibes";
-  jobUpdate(job, { label: opts.measureOnly ? "Tempo gegenprüfen" : opts.audio ? "Vibes, Energie & Tempo prüfen" : "Vibes & Energie", done: 0, total: todo.length });
+  jobUpdate(job, { label: opts.measureOnly ? "Tempo gegenprüfen" : opts.audio ? "Hörproben ausmessen" : "Stimmung und Energie einschätzen", done: 0, total: todo.length });
   let changed = 0;
   try {
     let done = 0;

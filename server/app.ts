@@ -15,6 +15,7 @@ import { pushOps } from "./devsync";
 import { buzzStore, syncStore } from "./env";
 import { cleanText, validPost } from "./buzz";
 import { cleanOwnPost, validRef } from "../shared/ownPost";
+import { ANNOUNCE } from "../shared/announce";
 
 type C = Context<{ Bindings: Env; Variables: { cfg: Config } }>;
 
@@ -387,7 +388,10 @@ app.post("/api/push/subscribe", async (c) => {
   if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
   const { subscription, prefs } = await c.req.json<{ subscription: PushSub; prefs?: Partial<UserRec["prefs"]> }>();
   if (!subscription?.endpoint || !isPushEndpoint(subscription.endpoint) || typeof subscription.keys?.p256dh !== "string" || typeof subscription.keys?.auth !== "string") return c.json({ message: "ungültiges Abo" }, 400);
-  const rec = (await loadUser(cfg.kv, s.username)) ?? emptyRec("");
+  const known = await loadUser(cfg.kv, s.username);
+  const rec = known ?? emptyRec("");
+  // Wer Mitteilungen gerade erst einschaltet, hat die aktuelle Version schon: keine alte Update-Mitteilung nachreichen
+  if (!known?.subs.length && ANNOUNCE) rec.announce = ANNOUNCE.id;
   rec.sess = await seal(cfg.sessionSecret, { token: s.token, secret: s.secret, username: s.username });
   rec.subs = [...rec.subs.filter((x) => x.endpoint !== subscription.endpoint), { endpoint: subscription.endpoint, keys: subscription.keys, addedAt: Date.now() }].slice(-5);
   if (prefs) rec.prefs = { ...rec.prefs, ...cleanPrefs(prefs) };
@@ -622,6 +626,15 @@ async function runUser(cfg: Config, u: string, budget: number) {
     budget -= rec.subs.length;
     await notifyUser(cfg.kv, cfg.push, u, rec, d.kind, d.msg);
     rec.sent[d.key] = Date.now();
+    changed = true;
+  }
+  // Update-Mitteilung: jeder bekommt sie genau einmal, unabhängig von den gewählten Arten
+  if (ANNOUNCE && rec.announce !== ANNOUNCE.id) {
+    budget -= rec.subs.length;
+    const keep: UserRec["subs"] = [];
+    for (const sub of rec.subs) if ((await sendPush(cfg.push, sub, { title: ANNOUNCE.title, body: ANNOUNCE.body, url: ANNOUNCE.url, tag: "update" })) !== "gone") keep.push(sub);
+    rec.subs = keep;
+    rec.announce = ANNOUNCE.id;
     changed = true;
   }
   const msgs: Message[] = [];

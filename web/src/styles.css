@@ -304,6 +304,21 @@ details[open] > summary::after { transform: rotate(270deg); }
 .jobs { position: fixed; left: 12px; right: 12px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 10px); max-width: 520px; margin: 0 auto; z-index: 15; display: flex; justify-content: center; pointer-events: none; }
 .job-pill { pointer-events: auto; display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 8px 14px 8px 10px; border-radius: 999px; background: var(--material); -webkit-backdrop-filter: saturate(180%) blur(22px); backdrop-filter: saturate(180%) blur(22px); border: 0.5px solid var(--hairline); box-shadow: var(--shadow); font-size: 14px; font-weight: 600; color: var(--text); text-decoration: none; animation: pop 0.5s var(--spring) both; }
 .job-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.job-pill { font-family: inherit; cursor: pointer; }
+.job-count { flex: none; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Abgleich in Klartext */
+.sync-list { display: flex; flex-direction: column; gap: 14px; }
+.sync-job b { display: block; font-size: 15px; font-weight: 600; line-height: 1.3; }
+.sync-meta { display: flex; justify-content: space-between; gap: 12px; margin: 2px 0 6px; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.sync-job .progress { height: 4px; }
+.sync-job .tiny { margin: 6px 0 0; }
+.sync-sheet .tiny, .sync-pause, .sync-lead { hyphens: manual; }
+.sync-pause { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+.sync-lead { margin: 0; font-size: 15px; line-height: 1.4; }
+.sync-done { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-weight: 600; }
+.sync-done svg { width: 20px; height: 20px; color: var(--ok); }
+.progress-card .sync-list { margin-top: 10px; }
+.home-loading .jobs { display: none; }
 .job { background: var(--material); -webkit-backdrop-filter: saturate(180%) blur(22px); backdrop-filter: saturate(180%) blur(22px); border: 0.5px solid var(--hairline); border-radius: 16px; padding: 10px 14px; font-size: 14px; font-weight: 500; box-shadow: var(--shadow); animation: pop 0.5s var(--spring) both; }
 .job .progress { height: 4px; margin-top: 8px; }
 @keyframes pop { from { opacity: 0; transform: translateY(12px) scale(0.96); } }

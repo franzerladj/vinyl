@@ -311,11 +311,16 @@ export default function Collection() {
         <div>
           <h1>Sammlung</h1>
           <div className="sub">{data ? `${data.length} Platten · ${totalTracks} Tracks` : " "}</div>
-          {total && total.median > 0 && (
+          {total && total.median > 0 ? (
             <button className="value-line press" onClick={() => setSheet("value")}>
               Wert ca. <b>{money(roughly(total.median), total.currency).replace(/,00(?=\s|$)/, "")}</b> ›
             </button>
-          )}
+          ) : data?.length ? (
+            // Platz frei halten, bis der Wert von Discogs da ist: sonst springt die Liste nach unten
+            <span className="value-line" style={{ visibility: "hidden" }} aria-hidden>
+              Wert
+            </span>
+          ) : null}
         </div>
         <div className="row" style={{ gap: 4 }}>
           <button className="icon-btn round" onClick={() => setView({ v: view.v === "list" ? "grid" : "list" })} aria-label={view.v === "list" ? "Cover-Ansicht" : "Listen-Ansicht"}>

@@ -58,6 +58,14 @@ const install = require("./mock.cjs");
   out.set = [await sel2()];
   await swipe(330, 90, box.y + 90); out.set.push(await sel2());
   await swipe(90, 330, box.y + 90); out.set.push(await sel2());
+  // Scannen: Barcode, Foto, Eingeben (auch auf dem Kamerabild)
+  await page.goto("http://localhost:8787/scan");
+  await page.waitForSelector(".seg");
+  await page.waitForTimeout(1200);
+  out.scan = [await sel()];
+  await swipe(330, 90, 430); out.scan.push(await sel());
+  await swipe(330, 90, 430); out.scan.push(await sel());
+  await swipe(90, 330, 430); out.scan.push(await sel());
   console.log(JSON.stringify(out), errors);
   await b.close();
 })();
