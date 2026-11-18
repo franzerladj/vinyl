@@ -25,7 +25,7 @@ module.exports = async function install(page) {
   if (!process.env.WELCOME) await page.addInitScript(() => { try { localStorage.setItem("crate:welcome:franzerladj", "1"); } catch {} });
   if (!process.env.COACH) await page.addInitScript(() => { try { localStorage.setItem("crate:coach:dig", "1"); } catch {} });
   // Ordner: kleiner Zustand pro Seite (Discogs-Ordner, Verschiebungen, Want-Notizen)
-  const st = { folders: [{ id: 0, name: "All", count: COLL.length }, { id: 1, name: "Uncategorized", count: COLL.length }], fid: {}, notes: {}, next: 100, calls: [] };
+  const st = { folders: [{ id: 0, name: "All", count: COLL.length }, { id: 1, name: "Uncategorized", count: COLL.length }], fid: {}, notes: {}, cnotes: {}, next: 100, calls: [] };
   if (process.env.FOLDERS) { st.folders.push({ id: 7, name: "Auflegen", count: 30 }, { id: 8, name: "Metal", count: 5 }); COLL.forEach((id) => (st.fid[id] = id <= 30 ? 7 : id <= 35 ? 8 : 1)); WANTS.slice(0, 3).forEach((id) => (st.notes[id] = "[Ordner: Metal]")); }
   page.__folders = st;
   await page.route("**/api/**", async (route) => {
@@ -73,7 +73,17 @@ module.exports = async function install(page) {
     if (p === "/api/profile/me") return json({ profile: globalThis.__prof ?? null });
     if (p === "/api/profile/kumpel") return json({ profile: { djName: "DJ Kumpel", bio: "Deep House und Disco aus Bayreuth. Freitags im Glashaus.", location: "Bayreuth", links: [{ url: "https://soundcloud.com/djkumpel", kind: "soundcloud" }, { url: "https://instagram.com/djkumpel", kind: "instagram" }, { url: "https://feuerpfeil.de", kind: "web" }], styles: ["Deep House", "Disco", "Chicago House"], spotlight: { id: 2, title: "Altered States", artist: "Ron Trent" }, plays: "vinyl", setup: { decks: "2× Technics SL-1210 MK2", carts: "Ortofon Concorde Nightclub", mixer: "E&S DJR400 Rotary", phones: "Sennheiser HD 25", sound: "Klipsch La Scala zu Hause", care: "Pro-Ject VC-S" } } });
     if (p.startsWith("/api/profile/")) return json({ profile: null });
-    if (/\/instances\/\d+\/fields\/\d+$/.test(p)) { globalThis.__fields = [...(globalThis.__fields || []), { p, body: route.request().postData() }]; return route.fulfill({ status: 204, body: "" }); }
+    if (/\/instances\/\d+\/fields\/\d+$/.test(p)) {
+      globalThis.__fields = [...(globalThis.__fields || []), { p, body: route.request().postData() }];
+      // Notiz (Feld 3) merken: dort stehen Kaufpreis und weitere Ordner einer Platte
+      const fm3 = p.match(/\/folders\/(\d+)\/releases\/(\d+)\/instances\/(\d+)\/fields\/3$/);
+      if (fm3 && page.__folders) {
+        const value = JSON.parse(route.request().postData() || "{}").value ?? "";
+        page.__folders.cnotes[+fm3[2]] = value;
+        page.__folders.calls.push(["cnote", +fm3[2], value, +fm3[1]]);
+      }
+      return route.fulfill({ status: 204, body: "" });
+    }
     const method = route.request().method();
     // Abgleich zwischen Geräten: ein Speicher für alle Seiten dieses Testlaufs (zwei Kontexte = zwei Geräte)
     if (p.startsWith("/api/sync/")) {
@@ -119,7 +129,7 @@ module.exports = async function install(page) {
       if (um[2].includes("/collection/")) { const ids = [...WANTS.slice(0, 6), ...COLL.slice(0, 20)]; return json({ pagination: { page: 1, pages: 1, per_page: 100, items: ids.length }, releases: ids.map((id, i) => ({ id, date_added: new Date(Date.now() - (i < 4 ? 1 : i * 2) * 86400000).toISOString(), basic_information: basic(R[id]) })) }); }
       if (um[2].includes("/wants")) { const ids = [...COLL.slice(30, 34), 70]; return json({ pagination: { page: 1, pages: 1, per_page: 100, items: ids.length }, wants: ids.map((id, i) => ({ id, date_added: new Date(Date.now() - (3 + i * 5) * 86400000).toISOString(), basic_information: basic(R[id]) })) }); }
     }
-    if (p.includes("/collection/folders/0/releases")) return json({ pagination: { page: 1, pages: 1, per_page: 100, items: COLL.length }, releases: COLL.map((id) => ({ id, instance_id: 1000 + id, folder_id: st.fid[id] ?? 1, notes: id % 3 === 0 ? [] : [{ field_id: 1, value: ["Mint (M)", "Near Mint (NM or M-)", "Very Good Plus (VG+)", "Very Good (VG)"][id % 4] }, { field_id: 2, value: ["Very Good Plus (VG+)", "Generic", "Near Mint (NM or M-)"][id % 3] }], date_added: new Date(Date.UTC(2026, 10, 3) - id * 86400000 * 3).toISOString(), rating: id % 6, basic_information: basic(R[id]) })) });
+    if (p.includes("/collection/folders/0/releases")) return json({ pagination: { page: 1, pages: 1, per_page: 100, items: COLL.length }, releases: COLL.map((id) => ({ id, instance_id: 1000 + id, folder_id: st.fid[id] ?? 1, notes: (id % 3 === 0 ? [] : [{ field_id: 1, value: ["Mint (M)", "Near Mint (NM or M-)", "Very Good Plus (VG+)", "Very Good (VG)"][id % 4] }, { field_id: 2, value: ["Very Good Plus (VG+)", "Generic", "Near Mint (NM or M-)"][id % 3] }]).concat(st.cnotes[id] ? [{ field_id: 3, value: st.cnotes[id] }] : []), date_added: new Date(Date.UTC(2026, 10, 3) - id * 86400000 * 3).toISOString(), rating: id % 6, basic_information: basic(R[id]) })) });
     if (p.endsWith("/wants")) return json({ pagination: { page: 1, pages: 1, per_page: 100, items: WANTS.length }, wants: WANTS.map((id) => ({ id, notes: st.notes[id], date_added: new Date(Date.UTC(2026, 10, 1) - id * 86400000).toISOString(), rating: id % 4, basic_information: basic(R[id]) })) });
     let m = p.match(/\/masters\/(\d+)\/versions$/); if (m) { const mid = +m[1]; return json({ pagination: { pages: 1 }, versions: [{ id: 9000 + mid, title: "Repress", format: 'Vinyl, 12", Reissue', label: "Repress Records", catno: `RP${mid}`, country: "Germany", released: "2026" }, { id: mid - 2000, title: "Original", format: 'Vinyl, 12"', released: "1996" }] }); }
     m = p.match(/\/releases\/(\d+)$/); if (m) return json(+m[1] >= 46 && +m[1] <= 70 ? { ...R[m[1]], master_id: 2000 + +m[1] } : R[m[1]]);

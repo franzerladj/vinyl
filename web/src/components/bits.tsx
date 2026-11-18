@@ -139,8 +139,16 @@ export function Jobs() {
   const toastMsg = useStore((s) => s.toast);
   const update = useStore((s) => s.updateReady);
   const list = Object.values(jobs);
-  const showJobs = list.length > 0 && loc.pathname !== "/scan";
+  // Erst nach einem Augenblick zeigen: kurze Schritte (ein, zwei Anfragen) blitzen sonst bei jedem Öffnen auf
+  const busy = list.length > 0;
+  const [lasting, setLasting] = useState(false);
+  useEffect(() => {
+    if (!busy) return setLasting(false);
+    const t = setTimeout(() => setLasting(true), 1200);
+    return () => clearTimeout(t);
+  }, [busy]);
   const [sheet, setSheet] = useState(false);
+  const showJobs = busy && (lasting || sheet) && loc.pathname !== "/scan";
   useRootClass("has-jobs", showJobs);
   // Restzeit und Pause zählen auch dann herunter, wenn gerade kein Schritt etwas meldet
   useTick(showJobs);

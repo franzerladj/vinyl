@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
@@ -11,7 +11,7 @@ import { DealDot, Empty, RecordRow, Sheet, SkeletonRows, useDebounced, DiscogsCr
 import { IconCart, IconCoin, IconFolder, IconMore, IconRows, IconSearch, IconSync } from "../components/icons";
 import { matchesQuery } from "../../../shared/textSearch";
 import { stripFolder } from "../../../shared/folders";
-import { PaneFixed, PaneHead } from "../components/Pager";
+import { PaneFixed, PaneHead, usePane } from "../components/Pager";
 import { FolderBar, FolderManager, inPick, useFolderRecords, useFolderTabs } from "../components/Folders";
 import { ActiveChips, AlphaIndex, ChipGroup, FilterGroup, FilterButton, letterOf, MenuSheet, SectionList, sectionsOf, SortButton, SortSheet, sortKey, usePersisted, type SortOption, type SortState } from "../components/ui";
 
@@ -77,7 +77,7 @@ export default function Wantlist() {
   const [folderSheet, setFolderSheet] = useState<{ start: string | null } | null>(null);
   const data = useMemo(() => {
     if (!all || !folder || !recs) return all;
-    const of = new Map(recs.map((r) => [r.id, r.folder]));
+    const of = new Map(recs.map((r) => [r.id, r.folders]));
     return all.filter((x) => inPick(of.get(x.r.id), folder));
   }, [all, recs, folder]);
 
@@ -188,6 +188,19 @@ export default function Wantlist() {
   const total = available.reduce((sum, d) => sum + (d.s?.lowest ?? 0), 0);
   const priced = data?.filter((d) => d.s).length ?? 0;
   const loading = Boolean(jobs.stats);
+
+  // Preise auffrischen, sobald man die Wantlist wirklich vor sich hat (nicht mehr bei jedem Start der App):
+  // nur was älter als sechs Stunden ist, in der Reihenfolge der Liste, leise im Hintergrund.
+  const pane = usePane();
+  const shown = pane ? pane.active : true;
+  const refreshed = useRef(false);
+  const hasList = list.length > 0;
+  useEffect(() => {
+    if (!shown || !hasList || refreshed.current || !navigator.onLine) return;
+    refreshed.current = true;
+    void import("../lib/prices").then((m) => m.refreshPrices(list.map((x) => x.r.id), { maxAgeHours: 6, background: true })).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shown, hasList]);
 
   const loadPrices = () =>
     fetchMarketStats(list.map((x) => x.r.id)).then(

@@ -69,9 +69,13 @@ export interface TrackMeta {
   analyzedAt?: number;
   /** Zugeordneter Deezer-Track (für Hörprobe und Analyse des richtigen Mixes) */
   deezerId?: number | null;
+  /** Zu diesem Track gab es keine Hörprobe (Zeitpunkt der Suche): nicht bei jedem Start wieder fragen */
+  noPreviewAt?: number;
   /** Fehlgeschlagene Analyse-Versuche (nach 3 wird aufgegeben) */
   analyzeTries?: number;
   lookedUpAt?: number;
+  /** Fehlgeschlagene Versuche der Tempo-Suche (nach 3 wird aufgegeben) */
+  lookupTries?: number;
   /** Tempo aus der Datenbank (Deezer, GetSongBPM), unverändert, und woher */
   dbBpm?: number | null;
   dbSource?: string;

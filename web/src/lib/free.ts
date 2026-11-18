@@ -132,11 +132,17 @@ export const KEY_SOURCE_GUESS = "Analyse (Schätzung)";
 
 const rank = (t: TrackMeta) => (t.tempoCheck === "unsicher" ? 0 : t.tempoCheck === "einfach" ? 1 : 2);
 
+/** So lange gilt „keine Hörprobe“, bevor ein Track nochmal gesucht wird */
+const NO_PREVIEW_RETRY_MS = 90 * 86_400_000;
+const noPreview = (t: TrackMeta) => t.noPreviewAt != null && Date.now() - t.noPreviewAt < NO_PREVIEW_RETRY_MS;
+
 export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptions) {
   const all = trackIds ? ((await db.tracks.bulkGet(trackIds)).filter(Boolean) as TrackMeta[]) : await db.tracks.toArray();
   const collIds = new Set((await db.collection.toArray()).map((c) => c.releaseId));
-  // Messen, wenn noch nie gemessen oder (ältere Einträge) nur ohne gespeichertes Mess-Tempo; eigene Tempi nicht
-  const wantsMeasure = (t: TrackMeta) => opts.audio && (t.analyzeTries ?? 0) < 3 && (!t.analyzedAt || (t.measuredBpm === undefined && !isManualTempo(t)));
+  // Messen, wenn noch nie gemessen oder (ältere Einträge) nur ohne gespeichertes Mess-Tempo; eigene Tempi nicht.
+  // Gibt es zu einem Track keine Hörprobe, ist das gemerkt (noPreviewAt): sonst wurde er bei jedem Öffnen der App
+  // erneut gesucht, und das trifft mehr als die Hälfte aller Tracks. Nach einem Vierteljahr darf er nochmal.
+  const wantsMeasure = (t: TrackMeta) => opts.audio && (t.analyzeTries ?? 0) < 3 && !noPreview(t) && (!t.analyzedAt || (t.measuredBpm === undefined && !isManualTempo(t)));
   const todo = all
     .filter((t) => (trackIds || collIds.has(t.releaseId)) && (opts.measureOnly ? wantsMeasure(t) : opts.refresh || t.energy == null || wantsMeasure(t)))
     // Unsichere zuerst, dann die mit nur einer Quelle
@@ -153,14 +159,6 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
     // Zwei Tracks gleichzeitig: Download und Analyse überlappen sich
     await pool(todo, 2, async (t) => {
       const patch: Partial<TrackMeta> = {};
-      let tags: TagsResp["tags"] = [];
-      if (lastfm && !opts.measureOnly) {
-        try {
-          tags = (await api<TagsResp>(`/api/lastfm/tags?artist=${encodeURIComponent(t.artist)}&track=${encodeURIComponent(t.title)}`)).tags;
-        } catch {
-          /* kein Treffer */
-        }
-      }
       let analysis: AudioAnalysis | null = null;
       if (wantsMeasure(t)) {
         let failed = false;
@@ -175,7 +173,10 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
           console.warn("Analyse", t.id, e);
         }
         if (!failed) patch.analyzedAt = Date.now();
-        else patch.analyzeTries = (t.analyzeTries ?? 0) + 1;
+        // Ohne Netz zählt der Versuch nicht: sonst gäbe die App nach drei Funklöchern für immer auf
+        else if (navigator.onLine !== false) patch.analyzeTries = (t.analyzeTries ?? 0) + 1;
+        // Keine Hörprobe zu diesem Track: merken, nicht bei jedem Start wieder fragen
+        if (!failed && !analysis) patch.noPreviewAt = Date.now();
         if (analysis) {
           patch.audioEnergy = analysis.energy;
           // Messung immer merken; welches Tempo gilt, entscheidet retempo() zusammen mit dem Datenbank-Wert
@@ -190,7 +191,17 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
         }
       }
       const manual = t.vibeSource === "manuell";
-      if (!manual && !opts.measureOnly) {
+      // Stimmung nur einschätzen, wenn sie fehlt oder die Messung etwas Neues gebracht hat (und nur dann Last.fm fragen)
+      const needVibe = !manual && !opts.measureOnly && (opts.refresh || t.energy == null || analysis != null);
+      let tags: TagsResp["tags"] = [];
+      if (needVibe && lastfm) {
+        try {
+          tags = (await api<TagsResp>(`/api/lastfm/tags?artist=${encodeURIComponent(t.artist)}&track=${encodeURIComponent(t.title)}`)).tags;
+        } catch {
+          /* kein Treffer */
+        }
+      }
+      if (needVibe) {
         const v = estimateVibe({
           styles: rels.get(t.releaseId)?.styles ?? [],
           bpm: patch.bpm ?? t.bpm,

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type DJSet } from "../lib/db";
-import { useFolders } from "../lib/folders";
+import { cachedFolders, folderIdsByRelease, useFolders } from "../lib/folders";
 import { NavBar } from "./ui";
 import { haptic, useRootClass } from "./bits";
 import { IconCheck } from "./icons";
@@ -76,7 +76,7 @@ export function SetWizard({ initial, onDone, onSkip }: { initial: DJSet; onDone:
   const lib = useLiveQuery(async () => {
     const coll = await db.collection.toArray();
     const rels = await db.releases.bulkGet([...new Set(coll.map((c) => c.releaseId))]);
-    const folderOf = coll.reduce((m, c) => m.set(c.releaseId, [...(m.get(c.releaseId) ?? []), c.folderId]), new Map<number, number[]>());
+    const folderOf = folderIdsByRelease(coll, await cachedFolders());
     return rels.filter(Boolean).map((r) => ({ id: r!.id, styles: r!.styles, folders: folderOf.get(r!.id) ?? [] }));
   }, []);
   const inFolder = useMemo(() => (lib ?? []).filter((r) => !folderId || r.folders.includes(folderId)), [lib, folderId]);

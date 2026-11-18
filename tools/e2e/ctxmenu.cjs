@@ -47,7 +47,7 @@ const install = require("./mock.cjs");
   // Ordner direkt aus dem Menü
   await press();
   await page.click(".ctx-menu button:has-text('Ordner')");
-  await page.waitForSelector(".sheet h3:has-text('In welchen Ordner?')");
+  await page.waitForSelector(".sheet h3:has-text('In welche Ordner?')");
   const ordnerBlatt = true;
   await page.keyboard.press("Escape");
   await page.waitForTimeout(400);

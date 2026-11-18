@@ -178,7 +178,7 @@ export default function Collection() {
   const [folderSheet, setFolderSheet] = useState<{ start: string | null } | null>(null);
   const data = useMemo(() => {
     if (!all || !folder || !recs) return all;
-    const of = new Map(recs.map((r) => [r.id, r.folder]));
+    const of = new Map(recs.map((r) => [r.id, r.folders]));
     return all.filter((x) => inPick(of.get(x.r.id), folder));
   }, [all, recs, folder]);
 

@@ -16,7 +16,10 @@ export interface RepressNews {
 export const repressNews = () => getKV<RepressNews[]>("repressNews", []);
 export const dismissRepress = async (wantId: number) => setKV("repressNews", (await repressNews()).filter((n) => n.wantId !== wantId));
 
-export async function checkRepresses(limit = 15): Promise<RepressNews[]> {
+export async function checkRepresses(limit = 40): Promise<RepressNews[]> {
+  // Höchstens zweimal am Tag eine Runde, nicht bei jedem Öffnen der App
+  if (Date.now() - (await getKV<number>("repressRunAt", 0)) < 12 * 3600_000) return [];
+  await setKV("repressRunAt", Date.now());
   const wants = await db.wants.toArray();
   const rels = (await db.releases.bulkGet(wants.map((w) => w.releaseId))).filter((r) => r?.masterId);
   const seen = await getKV<Seen>("repressSeen", {});

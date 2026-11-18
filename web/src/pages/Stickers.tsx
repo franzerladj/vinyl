@@ -14,6 +14,7 @@ import { Sticker } from "../components/print/Sticker";
 import { DEFAULT_ACCENT, InsertCard, ObiFold, ObiStrip, type CardTheme } from "../components/print/InsertCard";
 import { matchesQuery } from "../../../shared/textSearch";
 import { stripPaid } from "../../../shared/paid";
+import { stripFolder } from "../../../shared/folders";
 import { FONTS, onColor, type Layout, type PrintFont, type PrintItem, type PrintOpts } from "../components/print/types";
 
 type Kind = "card" | "obi" | "sticker";
@@ -138,7 +139,7 @@ export default function Stickers() {
         rating: coll.find((c) => c.releaseId === id)?.rating,
         media: gradeShort(coll.find((c) => c.releaseId === id)?.media),
         sleeve: gradeShort(coll.find((c) => c.releaseId === id)?.sleeve),
-        note: stripPaid(coll.find((c) => c.releaseId === id)?.note) || undefined,
+        note: stripFolder(stripPaid(coll.find((c) => c.releaseId === id)?.note)) || undefined,
         added: (() => {
           const d = coll.filter((c) => c.releaseId === id).at(-1)?.dateAdded;
           return d ? new Date(d).toLocaleDateString("de-DE", { month: "2-digit", year: "numeric" }) : undefined;

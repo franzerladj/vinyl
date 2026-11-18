@@ -27,7 +27,7 @@ import { parseDuration } from "../../../shared/match";
 import { Hint } from "../components/Welcome";
 import { CalendarSheet } from "../components/CalendarSheet";
 import type { GigEvent } from "../../../shared/ics";
-import { useFolders } from "../lib/folders";
+import { cachedFolders, folderIdsByRelease, useFolders } from "../lib/folders";
 import { fetchRelease } from "../lib/sync";
 import { SwipeArea } from "../components/Pager";
 import { SetWizard } from "../components/SetWizard";
@@ -131,7 +131,7 @@ export default function SetEditor() {
       rels: new Map([...rels, ...goneRels].filter(Boolean).map((r) => [r!.id, r!])),
       metas: new Map(metas.filter(Boolean).map((m) => [m!.releaseId, m!])),
       ratings: new Map(coll.map((c) => [c.releaseId, c.rating])),
-      folders: coll.reduce((m, c) => m.set(c.releaseId, [...(m.get(c.releaseId) ?? []), c.folderId]), new Map<number, number[]>()),
+      folders: folderIdsByRelease(coll, await cachedFolders()),
     };
   }, [set.trackIds.join()]);
 

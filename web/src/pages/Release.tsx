@@ -24,9 +24,9 @@ import { matchVideo, parseDuration, youtubeId } from "../../../shared/match";
 import { IconBack, IconCart, IconCheck, IconExternal, IconFolder, IconShare, IconHeart, IconPause, IconPlay, IconPlus, IconMic, IconPrint, IconWave } from "../components/icons";
 import { Listen } from "../components/Listen";
 import { estimateBpm } from "../../../shared/vibes";
-import { FolderChooser } from "../components/Folders";
-import { folderIdFor, moveToFolder, setWantFolder, useFolders, useWantFolderNames } from "../lib/folders";
-import { NO_FOLDER, wantFolderOf } from "../../../shared/folders";
+import { FolderChooser, folderLabel } from "../components/Folders";
+import { fileRecords, fileWants, recordFolders, unfileAll, useFolders } from "../lib/folders";
+import { noteFolders, stripFolder } from "../../../shared/folders";
 
 export default function ReleasePage() {
   const id = Number(useParams().id);
@@ -44,7 +44,6 @@ export default function ReleasePage() {
   const [lendSheet, setLendSheet] = useState(false);
   const [folderSheet, setFolderSheet] = useState<"coll" | "want" | null>(null);
   const folders = useFolders();
-  const wantFolderNames = useWantFolderNames();
   const wantNotes = useLiveQuery(async () => (await db.wants.get(id))?.notes ?? "", [id], "");
   const [listenSide, setListenSide] = useState(false);
   const [grading, setGrading] = useState<{ item: CollectionItem; which: "media" | "sleeve" } | null>(null);
@@ -173,8 +172,9 @@ export default function ReleasePage() {
     setEdit(null);
   };
 
-  // Aktueller Ordner: bei Platten aus der Sammlung der Discogs-Ordner, bei Wants die Marke in der Notiz
-  const curFolder = inColl > 0 ? (folders.find((f) => copies.some((c) => c.folderId === f.id))?.name ?? null) : isWant ? wantFolderOf(wantNotes) : null;
+  // Ordner der Platte (mehrere möglich): Sammlung = Discogs-Ordner plus Marken in der Notiz, Wants = Marken
+  const curFolders = inColl > 0 ? recordFolders(copies, folders) : isWant ? noteFolders(wantNotes) : [];
+  const curFolder = curFolders.length ? folderLabel(curFolders) : null;
 
   const toggleWant = () => {
     haptic();
@@ -446,10 +446,10 @@ export default function ReleasePage() {
                   </label>
                 );
               })}
-              {copies.some((c) => stripPaid(c.note)) && (
+              {copies.some((c) => stripFolder(stripPaid(c.note))) && (
                 <div className="group-row">
                   <span style={{ width: 92 }} className="sub">Notiz</span>
-                  <span style={{ whiteSpace: "pre-line" }}>{copies.map((c) => stripPaid(c.note)).filter(Boolean).join("\n")}</span>
+                  <span style={{ whiteSpace: "pre-line" }}>{copies.map((c) => stripFolder(stripPaid(c.note))).filter(Boolean).join("\n")}</span>
                 </div>
               )}
               <label className="group-row">
@@ -465,7 +465,7 @@ export default function ReleasePage() {
               </label>
               <button className="group-row" onClick={() => setFolderSheet("coll")}>
                 <span style={{ width: 92 }} className="sub">Ordner</span>
-                <span style={{ flex: 1 }}>{folders.find((f) => copies.some((c) => c.folderId === f.id))?.name ?? "Ohne Ordner"}</span>
+                <span style={{ flex: 1 }}>{curFolders.length ? curFolders.join(", ") : "Ohne Ordner"}</span>
                 <span className="chev">›</span>
               </button>
               <label className="group-row">
@@ -595,14 +595,11 @@ export default function ReleasePage() {
         open={folderSheet !== null}
         onClose={() => setFolderSheet(null)}
         kind={folderSheet ?? "coll"}
-        current={folderSheet === "want" ? wantFolderOf(wantNotes) : (folders.find((f) => copies.some((c) => c.folderId === f.id))?.name ?? null)}
-        onPick={(name) => {
-          const job = folderSheet === "want" ? setWantFolder([id], name) : (name ? folderIdFor(name) : Promise.resolve(NO_FOLDER)).then((fid) => moveToFolder([id], fid));
-          job.then(
-            () => toast(name ? `In „${name}“ einsortiert` : "Ohne Ordner"),
-            (e) => toast((e as Error).message),
-          );
+        current={curFolders}
+        onToggle={(name, on) => {
+          (folderSheet === "want" ? fileWants([id], name, on) : fileRecords([id], name, on)).catch((e) => toast((e as Error).message));
         }}
+        onClear={() => folderSheet && void unfileAll(folderSheet, id).catch((e) => toast((e as Error).message))}
       />
 
       <MenuSheet

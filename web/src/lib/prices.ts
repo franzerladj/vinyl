@@ -24,13 +24,13 @@ const GRADE_SHORT: Record<string, string> = {
 /** Ob Discogs dem Nutzer Preisempfehlungen gibt (verlangt ausgefüllte Verkäufer-Einstellungen) */
 export const suggestionsState = () => getKV<"ok" | "needs-seller-settings" | "unknown">("suggestionsState", "unknown");
 
-export async function refreshPrices(ids: number[], opts: { maxAgeHours?: number; background?: boolean } = {}) {
+export async function refreshPrices(ids: number[], opts: { maxAgeHours?: number; background?: boolean; onlyMissing?: boolean } = {}) {
   // Discogs-Bedingungen: höchstens 6 Stunden alt
   const maxAge = Math.min(opts.maxAgeHours ?? 6, 6) * 3600_000;
   const cur = await getKV("currency", "EUR");
   const [stats, sugg] = await Promise.all([db.marketStats.bulkGet(ids), db.priceSuggestions.bulkGet(ids)]);
   let suggState = await suggestionsState();
-  const todo = ids.filter((_, i) => !stats[i] || Date.now() - stats[i]!.fetchedAt > maxAge);
+  const todo = ids.filter((_, i) => !stats[i] || (!opts.onlyMissing && Date.now() - stats[i]!.fetchedAt > maxAge));
   if (!todo.length) return 0;
   const job = "stats";
   jobUpdate(job, { label: "Preise laden", done: 0, total: todo.length });

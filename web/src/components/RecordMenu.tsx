@@ -12,12 +12,12 @@ import { toast } from "../lib/store";
 import { haptic, keepParens, overlayOpen, Sheet, useBackClose, useSwipeDown } from "./bits";
 import { IconFolder, IconHeart, IconPlay, IconShare, IconRecord, IconSleeves, IconUser } from "./icons";
 import { RecommendSheet } from "./Buzz";
-import { FolderChooser } from "./Folders";
-import { cachedFolders, folderIdFor, moveToFolder, setWantFolder } from "../lib/folders";
-import { customFolders, NO_FOLDER, wantFolderOf } from "../../../shared/folders";
+import { FolderChooser, folderLabel } from "./Folders";
+import { cachedFolders, fileRecords, fileWants, recordFolders, unfileAll } from "../lib/folders";
+import { noteFolders } from "../../../shared/folders";
 import { useLiveQuery } from "dexie-react-hooks";
 
-type Ctx = { rel: Release; owned: boolean; wanted: boolean; folder: string | null; track?: { title: string; artist: string; deezerId?: number; id: string } };
+type Ctx = { rel: Release; owned: boolean; wanted: boolean; folders: string[]; track?: { title: string; artist: string; deezerId?: number; id: string } };
 
 const SKIP = ".dig, .sheet, [role=dialog], .ys, .pager-pane.peek";
 
@@ -38,12 +38,11 @@ export function RecordMenu() {
       haptic(14);
       suppress = performance.now();
       // Aktueller Ordner: bei Platten aus der Sammlung der Discogs-Ordner, bei Wants die Marke in der Notiz
-      let folder: string | null = null;
-      if (own > 0) {
-        const copies = await db.collection.where("releaseId").equals(id).toArray();
-        folder = customFolders(await cachedFolders()).find((f) => copies.some((c) => c.folderId === f.id))?.name ?? null;
-      } else if (want) folder = wantFolderOf(want.notes);
-      setCtx({ rel, owned: own > 0, wanted: Boolean(want), folder, track: t && { title: t.title, artist: t.artist, deezerId: t.deezerId ?? undefined, id: t.id } });
+      // Ordner der Platte: Sammlung = Discogs-Ordner plus Marken in der Notiz, Wants = Marken
+      let folders: string[] = [];
+      if (own > 0) folders = recordFolders(await db.collection.where("releaseId").equals(id).toArray(), await cachedFolders());
+      else if (want) folders = noteFolders(want.notes);
+      setCtx({ rel, owned: own > 0, wanted: Boolean(want), folders, track: t && { title: t.title, artist: t.artist, deezerId: t.deezerId ?? undefined, id: t.id } });
     };
     const target = (e: Event) => {
       const el = e.target as HTMLElement | null;
@@ -103,7 +102,7 @@ export function RecordMenu() {
     return () => window.removeEventListener("keydown", onKey);
   }, [ctx]);
   const [rec, setRec] = useState<Release | null>(null);
-  const [filing, setFiling] = useState<{ id: number; kind: "coll" | "want"; current: string | null } | null>(null);
+  const [filing, setFiling] = useState<{ id: number; kind: "coll" | "want"; current: string[] } | null>(null);
   const [crating, setCrating] = useState<Release | null>(null);
   const body = useRef<HTMLDivElement>(null);
   useSwipeDown(body, () => setCtx(null), Boolean(ctx));
@@ -116,16 +115,12 @@ export function RecordMenu() {
           open={Boolean(filing)}
           onClose={() => setFiling(null)}
           kind={filing?.kind ?? "coll"}
-          current={filing?.current ?? null}
-          onPick={(name) => {
+          current={filing?.current ?? []}
+          onToggle={(name, on) => {
             if (!filing) return;
-            const id = filing.id;
-            const job = filing.kind === "want" ? setWantFolder([id], name) : (name ? folderIdFor(name) : Promise.resolve(NO_FOLDER)).then((fid) => moveToFolder([id], fid));
-            job.then(
-              () => toast(name ? `In „${name}“ einsortiert` : "Ohne Ordner"),
-              (e) => toast((e as Error).message),
-            );
+            (filing.kind === "want" ? fileWants([filing.id], name, on) : fileRecords([filing.id], name, on)).catch((e) => toast((e as Error).message));
           }}
+          onClear={() => filing && void unfileAll(filing.kind, filing.id).catch((e) => toast((e as Error).message))}
         />
         <CrateSheet release={crating} onClose={() => setCrating(null)} />
       </>
@@ -161,7 +156,7 @@ export function RecordMenu() {
           },
         ]
       : []),
-    ...(owned || wanted ? [{ label: ctx.folder ? `Ordner: ${ctx.folder}` : "In einen Ordner legen", icon: <IconFolder />, run: () => setFiling({ id: rel.id, kind: owned ? ("coll" as const) : ("want" as const), current: ctx.folder }) }] : []),
+    ...(owned || wanted ? [{ label: ctx.folders.length ? `Ordner: ${folderLabel(ctx.folders)}` : "In einen Ordner legen", icon: <IconFolder />, run: () => setFiling({ id: rel.id, kind: owned ? ("coll" as const) : ("want" as const), current: ctx.folders }) }] : []),
     ...(owned ? [{ label: "In die Kiste für ein Set", icon: <IconSleeves />, run: () => setCrating(rel) }] : []),
     { label: "Einem Freund empfehlen", icon: <IconUser />, run: () => setRec(rel) },
     {

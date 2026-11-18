@@ -2,10 +2,10 @@
 import { useMemo, useState } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "../lib/db";
-import { createFolder, deleteFolder, folderIdFor, moveToFolder, renameFolder, runFolderJob, setWantFolder, useFolders, useWantFolderNames } from "../lib/folders";
+import { cachedFolders, createFolder, deleteFolder, fileRecords, fileWants, recordFolders, renameFolder, runFolderJob, useFolders, useWantFolderNames } from "../lib/folders";
 import { ask, toast } from "../lib/store";
 import { matchesQuery } from "../../../shared/textSearch";
-import { cleanFolderName, NO_FOLDER, sameFolder, wantFolderOf } from "../../../shared/folders";
+import { cleanFolderName, noteFolders, sameFolder } from "../../../shared/folders";
 import { Cover, haptic, Sheet } from "./bits";
 import { IconCheck, IconPlus } from "./icons";
 
@@ -19,25 +19,31 @@ interface Rec {
   artist: string;
   thumb: string;
   styles: string[];
-  folder: string | null;
+  /** Alle Ordner der Platte (Namen). Sammlung: der echte Discogs-Ordner zuerst, über alle Exemplare. */
+  folders: string[];
 }
 
-/** Platten einer Liste mit ihrem Ordner (Name). Sammlung: Ordner des ersten Exemplars. */
+/** Platten einer Liste mit ihren Ordnern */
 export function useFolderRecords(kind: FolderKind): Rec[] | undefined {
   const folders = useFolders();
   return useLiveQuery(async () => {
-    const byId = new Map(folders.map((f) => [f.id, f.name]));
-    const rows = kind === "coll" ? (await db.collection.toArray()).map((c) => ({ id: c.releaseId, folder: byId.get(c.folderId) ?? null })) : (await db.wants.toArray()).map((w) => ({ id: w.releaseId, folder: wantFolderOf(w.notes) }));
-    const seen = new Map<number, string | null>();
-    for (const r of rows) if (!seen.has(r.id) || (!seen.get(r.id) && r.folder)) seen.set(r.id, r.folder);
+    const seen = new Map<number, string[]>();
+    if (kind === "coll") {
+      const all = await cachedFolders();
+      const copies = new Map<number, { folderId: number; note?: string }[]>();
+      for (const c of await db.collection.toArray()) copies.set(c.releaseId, [...(copies.get(c.releaseId) ?? []), c]);
+      for (const [id, cs] of copies) seen.set(id, recordFolders(cs, all));
+    } else for (const w of await db.wants.toArray()) seen.set(w.releaseId, noteFolders(w.notes));
     const ids = [...seen.keys()];
     const rels = await db.releases.bulkGet(ids);
     return ids.flatMap((id, i) => {
       const r = rels[i];
-      return r ? [{ id, title: r.title, artist: r.artist, thumb: r.thumb, styles: r.styles, folder: seen.get(id) ?? null }] : [];
+      return r ? [{ id, title: r.title, artist: r.artist, thumb: r.thumb, styles: r.styles, folders: seen.get(id) ?? [] }] : [];
     });
   }, [kind, folders]);
 }
+
+const has = (list: string[] | undefined, name: string) => Boolean(list?.some((x) => sameFolder(x, name)));
 
 /** Ordnernamen samt Anzahl für eine Liste */
 export function useFolderTabs(kind: FolderKind, recs: Rec[] | undefined) {
@@ -45,12 +51,12 @@ export function useFolderTabs(kind: FolderKind, recs: Rec[] | undefined) {
   const want = useWantFolderNames();
   const names = kind === "coll" ? coll : want;
   return useMemo(() => {
-    const count = (n: string | null) => recs?.filter((r) => (n ? sameFolder(r.folder, n) : !r.folder)).length ?? 0;
+    const count = (n: string | null) => recs?.filter((r) => (n ? has(r.folders, n) : !r.folders.length)).length ?? 0;
     return { names, tabs: names.map((n) => ({ name: n, count: count(n) })), none: count(null), all: recs?.length ?? 0 };
   }, [names, recs]);
 }
 
-export const inPick = (folder: string | null | undefined, pick: FolderPick) => (!pick ? true : pick === "-" ? !folder : sameFolder(folder, pick));
+export const inPick = (folders: string[] | undefined, pick: FolderPick) => (!pick ? true : pick === "-" ? !folders?.length : has(folders, pick));
 
 /** Waagrechte Ordner-Leiste über der Liste. Ohne eigene Ordner nur ein dezenter Knopf. */
 export function FolderBar({ kind, recs, value, onChange, onManage }: { kind: FolderKind; recs: Rec[] | undefined; value: FolderPick; onChange: (v: FolderPick) => void; onManage: () => void }) {
@@ -112,7 +118,7 @@ export function FolderManager({ kind, open, onClose, recs, startWith, onShow }: 
             </button>
           </div>
           <p className="sub" style={{ margin: 0 }}>
-            Trenn zum Beispiel Platten zum Auflegen von denen zum Hören. Die Ordner gelten für Sammlung und Wantlist und stehen auch bei Discogs. Kaufst du ein Want, landet die Platte im selben Ordner.
+            Trenn zum Beispiel Platten zum Auflegen von denen zum Hören. Eine Platte kann in mehreren Ordnern liegen. Die Ordner gelten für Sammlung und Wantlist und stehen auch bei Discogs. Kaufst du ein Want, landet die Platte in denselben Ordnern.
           </p>
           {tabs.length > 0 && (
             <div className="option-list">
@@ -169,7 +175,7 @@ function FolderSorter({ kind, name, recs, folderId, onBack, onSaved, onRenamed, 
   const [q, setQ] = useState("");
   const [style, setStyle] = useState("");
   const [onlyFree, setOnlyFree] = useState(false);
-  const initial = useMemo(() => new Set(recs.filter((r) => sameFolder(r.folder, name)).map((r) => r.id)), [recs, name]);
+  const initial = useMemo(() => new Set(recs.filter((r) => has(r.folders, name)).map((r) => r.id)), [recs, name]);
   const [sel, setSel] = useState<Set<number>>(initial);
   const styles = useMemo(() => {
     const c = new Map<string, number>();
@@ -179,7 +185,7 @@ function FolderSorter({ kind, name, recs, folderId, onBack, onSaved, onRenamed, 
   const list = useMemo(
     () =>
       recs
-        .filter((r) => (!style || r.styles.includes(style)) && (!onlyFree || !r.folder || sameFolder(r.folder, name)) && (!q.trim() || matchesQuery(`${r.artist} ${r.title} ${r.styles.join(" ")}`, q)))
+        .filter((r) => (!style || r.styles.includes(style)) && (!onlyFree || !r.folders.length || has(r.folders, name)) && (!q.trim() || matchesQuery(`${r.artist} ${r.title} ${r.styles.join(" ")}`, q)))
         .sort((a, b) => Number(sel.has(b.id)) - Number(sel.has(a.id)) || a.artist.localeCompare(b.artist, "de")),
     // Reihenfolge nur beim Filtern neu, nicht bei jedem Haken (sonst springt die Liste)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -207,11 +213,9 @@ function FolderSorter({ kind, name, recs, folderId, onBack, onSaved, onRenamed, 
     if (!changes) return onBack();
     const target = name;
     runFolderJob(`${changes} ${changes === 1 ? "Platte wird" : "Platten werden"} einsortiert`, async () => {
-      if (kind === "coll") {
-        const id = folderId ?? (await folderIdFor(target));
-        return (await moveToFolder(added, id)) + (await moveToFolder(removed, NO_FOLDER));
-      }
-      return (await setWantFolder(added, target)) + (await setWantFolder(removed, null));
+      // Dazulegen und Rausnehmen gilt nur für diesen Ordner: andere Ordner der Platte bleiben
+      if (kind === "coll") return (await fileRecords(added, target, true)) + (await fileRecords(removed, target, false));
+      return (await fileWants(added, target, true)) + (await fileWants(removed, target, false));
     });
     onSaved(target);
   };
@@ -220,7 +224,11 @@ function FolderSorter({ kind, name, recs, folderId, onBack, onSaved, onRenamed, 
     if (!n || n === name) return setTitle(name);
     try {
       if (folderId) await renameFolder(folderId, n);
-      else await setWantFolder([...initial], n);
+      else {
+        // Ordner, den es nur auf der Wantlist gibt: Marke austauschen
+        await fileWants([...initial], n, true);
+        await fileWants([...initial], name, false);
+      }
       onRenamed(n);
     } catch (e) {
       toast((e as Error).message);
@@ -228,10 +236,10 @@ function FolderSorter({ kind, name, recs, folderId, onBack, onSaved, onRenamed, 
     }
   };
   const remove = async () => {
-    if (!(await ask({ title: `Ordner „${name}“ löschen?`, body: "Die Platten bleiben in Sammlung und Wantlist, nur ohne Ordner.", ok: "Löschen", danger: true }))) return;
+    if (!(await ask({ title: `Ordner „${name}“ löschen?`, body: "Die Platten bleiben in Sammlung und Wantlist, nur ohne diesen Ordner.", ok: "Löschen", danger: true }))) return;
     runFolderJob("Ordner wird gelöscht", async () => {
       if (folderId) await deleteFolder(folderId);
-      else await setWantFolder([...initial], null);
+      else await fileWants([...initial], name, false);
       toast(`Ordner „${name}“ gelöscht`);
       return 0;
     });
@@ -278,13 +286,14 @@ function FolderSorter({ kind, name, recs, folderId, onBack, onSaved, onRenamed, 
       <div className="list">
         {list.slice(0, 200).map((r) => {
           const on = sel.has(r.id);
-          const elsewhere = !on && r.folder && !sameFolder(r.folder, name) ? r.folder : null;
+          const others = r.folders.filter((f) => !sameFolder(f, name));
+          const elsewhere = others.length ? (others.length > 2 ? `${others.slice(0, 2).join(", ")} +${others.length - 2}` : others.join(", ")) : null;
           return (
             <button key={r.id} className={`pick-rec press${on ? " on" : ""}`} onClick={() => (haptic(6), toggle(r.id))} aria-pressed={on}>
               <Cover src={r.thumb} />
               <span className="pick-rec-main">
                 <b>{r.title}</b>
-                <span>{[r.artist, elsewhere ? `in „${elsewhere}“` : r.styles[0]].filter(Boolean).join(" · ")}</span>
+                <span>{[r.artist, elsewhere ? `${on ? "auch in" : "in"} ${elsewhere}` : r.styles[0]].filter(Boolean).join(" · ")}</span>
               </span>
               <span className={`pick-check${on ? " on" : ""}`}>{on ? <IconCheck /> : <IconPlus />}</span>
             </button>
@@ -300,35 +309,65 @@ function FolderSorter({ kind, name, recs, folderId, onBack, onSaved, onRenamed, 
   );
 }
 
-/** Ordner für eine einzelne Platte wählen (Platten-Seite) */
-export function FolderChooser({ open, onClose, current, kind, onPick }: { open: boolean; onClose: () => void; current: string | null; kind: FolderKind; onPick: (name: string | null) => void }) {
+/**
+ * Ordner einer einzelnen Platte: antippen legt sie hinein oder nimmt sie heraus, mehrere sind möglich.
+ * Das Blatt bleibt offen, bis man „Fertig“ tippt.
+ */
+export function FolderChooser({ open, onClose, current, kind, onToggle, onClear }: { open: boolean; onClose: () => void; current: string[]; kind: FolderKind; onToggle: (name: string, on: boolean) => void; onClear: () => void }) {
   const coll = useFolders().map((f) => f.name);
   const want = useWantFolderNames();
   const names = kind === "coll" ? coll : [...new Set([...coll, ...want])];
+  // Frisch angelegte stehen sofort in der Liste, auch wenn Discogs noch nicht geantwortet hat
+  const [added, setAdded] = useState<string[]>([]);
+  const list = [...names, ...added.filter((a) => !names.some((n) => sameFolder(n, a)))];
   const [fresh, setFresh] = useState("");
-  const pick = (n: string | null) => {
+  // Sofort umschalten, die Bestätigung von unten folgt
+  const [local, setLocal] = useState<string[] | null>(null);
+  const cur = local ?? current;
+  const toggle = (n: string) => {
     haptic(5);
+    const on = !has(cur, n);
+    setLocal(on ? [...cur, n] : cur.filter((x) => !sameFolder(x, n)));
+    onToggle(n, on);
+  };
+  const close = () => {
+    setLocal(null);
+    setAdded([]);
     onClose();
-    if (!sameFolder(n, current) && (n || current)) onPick(n);
   };
   return (
-    <Sheet open={open} onClose={onClose}>
+    <Sheet open={open} onClose={close}>
       <div className="sheet-title">
-        <h3>In welchen Ordner?</h3>
-      </div>
-      <div className="option-list">
-        {names.map((n) => (
-          <button key={n} className="option" onClick={() => pick(n)}>
-            <span style={{ flex: 1 }}>{n}</span>
-            {sameFolder(n, current) && <span className="opt-check"><IconCheck /></span>}
-          </button>
-        ))}
-        <button className="option" onClick={() => pick(null)}>
-          <span style={{ flex: 1 }} className="sub">
-            Ohne Ordner
-          </span>
-          {!current && <span className="opt-check"><IconCheck /></span>}
+        <h3>In welche Ordner?</h3>
+        <button className="text-btn" onClick={close}>
+          Fertig
         </button>
+      </div>
+      {list.length > 0 && <p className="sub" style={{ margin: "0 0 10px" }}>Eine Platte kann in mehreren Ordnern liegen.</p>}
+      <div className="option-list">
+        {list.map((n) => {
+          const on = has(cur, n);
+          return (
+            <button key={n} className="option" onClick={() => toggle(n)} aria-pressed={on}>
+              <span style={{ flex: 1 }}>{n}</span>
+              <span className={`pick-check${on ? " on" : ""}`}>{on ? <IconCheck /> : <IconPlus />}</span>
+            </button>
+          );
+        })}
+        {cur.length > 0 && (
+          <button
+            className="option"
+            onClick={() => {
+              haptic(5);
+              setLocal([]);
+              onClear();
+            }}
+          >
+            <span style={{ flex: 1 }} className="sub">
+              Aus allen Ordnern nehmen
+            </span>
+          </button>
+        )}
       </div>
       <form
         className="row"
@@ -336,7 +375,10 @@ export function FolderChooser({ open, onClose, current, kind, onPick }: { open: 
         onSubmit={(e) => {
           e.preventDefault();
           const n = cleanFolderName(fresh);
-          if (n) pick(n);
+          if (n && !has(cur, n)) {
+            setAdded((a) => [...a, n]);
+            toggle(n);
+          }
           setFresh("");
         }}
       >
@@ -348,3 +390,6 @@ export function FolderChooser({ open, onClose, current, kind, onPick }: { open: 
     </Sheet>
   );
 }
+
+/** Kurzform für Knöpfe: „Auflegen“, „Auflegen, Sommer“, „Auflegen +2“ */
+export const folderLabel = (names: string[]) => (names.length > 2 ? `${names[0]} +${names.length - 1}` : names.join(", "));

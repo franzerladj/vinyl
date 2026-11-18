@@ -1,5 +1,5 @@
 // Abgleich mit Discogs + Anreicherung (Tracklists, BPM/Key, Vibes, Preise)
-import { api, discogs } from "./api";
+import { api, ApiError, discogs } from "./api";
 import { autoUpdateTrack, db, realTracks, setKV, getKV, trackId, type Release, type TrackMeta } from "./db";
 import { checkKey } from "../../../shared/bpmCheck";
 import { MANUAL_SOURCES } from "../../../shared/devsync";
@@ -192,6 +192,8 @@ export async function fetchMissingDetails(scope: "collection" | "wants" = "colle
         await fetchRelease(id, true);
       } catch (e) {
         console.warn("Release", id, e);
+        // Bei Discogs gelöscht: als erledigt merken, sonst wird die Platte bei jedem Start wieder angefragt
+        if (e instanceof ApiError && e.status === 404) await db.releases.update(id, { detailFetchedAt: Date.now() });
       }
       jobUpdate(job, { done: ++done });
     });
@@ -210,7 +212,8 @@ interface AudioInfo { bpm: number | null; key: string | null; source: string[]; 
 export async function lookupAudioFor(trackIds?: string[]) {
   const all = trackIds ? ((await db.tracks.bulkGet(trackIds)).filter(Boolean) as TrackMeta[]) : await db.tracks.toArray();
   const collIds = new Set((await db.collection.toArray()).map((c) => c.releaseId));
-  const todo = all.filter((t) => (trackIds || collIds.has(t.releaseId)) && !t.lookedUpAt && (!t.bpm || !t.key));
+  // Schlägt die Suche für einen Track dreimal fehl, ist Schluss (sonst liefe sie bei jedem Öffnen der App wieder an)
+  const todo = all.filter((t) => (trackIds || collIds.has(t.releaseId)) && !t.lookedUpAt && (t.lookupTries ?? 0) < 3 && (!t.bpm || !t.key));
   if (!todo.length) return 0;
   const rels = new Map((await db.releases.bulkGet([...new Set(todo.map((t) => t.releaseId))])).filter(Boolean).map((r) => [r!.id, r!]));
   const durations = new Map<string, string | undefined>();
@@ -276,8 +279,9 @@ export async function lookupAudioFor(trackIds?: string[]) {
           if ((patch.dbBpm && !t.bpm) || patch.key) found++;
           await autoUpdateTrack(t.id, patch);
         } catch (e) {
-          // Netzfehler: nicht als erledigt markieren, beim nächsten Durchlauf erneut versuchen
+          // Netzfehler: nicht als erledigt markieren, beim nächsten Durchlauf erneut versuchen (ohne Netz zählt es nicht)
           console.warn("audio", t.id, e);
+          if (navigator.onLine !== false) await db.tracks.update(t.id, { lookupTries: (t.lookupTries ?? 0) + 1 });
         }
         jobUpdate(job, { done: ++done });
       }
@@ -351,10 +355,14 @@ export async function removeWant(id: number) {
 
 export async function addToCollection(id: number, folder?: number) {
   // Gekauftes Want landet im Ordner, dem es auf der Wantlist zugeordnet war
-  const folderId: number = folder ?? (await (await import("./folders")).folderForNewRecord(id));
+  const folders = await import("./folders");
+  const folderId: number = folder ?? (await folders.folderForNewRecord(id));
+  // Lag das Want in mehreren Ordnern, kommen die weiteren gleich mit
+  const more = folder == null ? await folders.extraFoldersForNewRecord(id) : [];
   const res = await discogs<{ instance_id: number }>(`/users/${u()}/collection/folders/${folderId}/releases/${id}`, { method: "POST" });
   // Sofort lokal eintragen: scheitert danach das Nachladen, tippt man sonst nochmal und hat die Platte doppelt bei Discogs
   await db.collection.put({ instanceId: res.instance_id, releaseId: id, folderId, dateAdded: new Date().toISOString(), rating: 0 });
+  for (const name of more) await folders.fileRecords([id], name, true).catch(() => 0);
   // Neue Platte braucht einen Sticker
   const meta = await db.recordMeta.get(id);
   await db.recordMeta.put({ ...meta, releaseId: id, stickerPrintedAt: null });
@@ -454,7 +462,10 @@ export async function autoPipeline(opts: { force?: boolean; resume?: boolean } =
       const { refreshPrices, scanFavorites } = await import("./prices");
       const wantIds = await db.wants.toCollection().primaryKeys();
       // Tracklists und Preise wechseln sich in der Warteschlange ab, so kommt beides zügig
-      await Promise.all([step("Tracklists", () => fetchMissingDetails("collection")), step("Preise", () => refreshPrices(wantIds, { maxAgeHours: 24 }))]);
+      // Preise beim Start nur für Wants, die noch gar keinen haben. Alle sechs Stunden die ganze Wantlist neu zu laden
+      // (eine Anfrage je Want) hielt die App bei jedem Öffnen minutenlang beschäftigt. Aufgefrischt wird, wenn man
+      // Wantlist oder Shop öffnet, und beim ganzen Abgleich von Hand.
+      await Promise.all([step("Tracklists", () => fetchMissingDetails("collection")), step("Preise", () => refreshPrices(wantIds, opts.force ? { maxAgeHours: 6 } : { onlyMissing: true }))]);
       discogsDone = true;
       await step("Details der Wants", () => fetchMissingDetails("wants"));
       await step("Lieblingshändler", async () => {
@@ -562,6 +573,21 @@ export async function migrateLookupV3() {
     }
   });
   await setKV("migration-lookup-v3", true);
+}
+
+/**
+ * Einmalig: Tracks, zu denen schon einmal keine Hörprobe gefunden wurde, als solche merken.
+ * Bisher wurden sie bei jedem Öffnen der App erneut gesucht (samt Stimmungs-Abfrage).
+ * Erkennbar daran, dass die Analyse lief, aber weder Mess-Tempo noch Energie hinterlassen hat.
+ */
+export async function migrateNoPreview() {
+  if (await getKV("migration-nopreview-v1", false)) return;
+  await db.tracks
+    .filter((t) => Boolean(t.analyzedAt) && t.measuredBpm === undefined && t.audioEnergy == null && !t.noPreviewAt)
+    .modify((t) => {
+      t.noPreviewAt = t.analyzedAt;
+    });
+  await setKV("migration-nopreview-v1", true);
 }
 
 /** Einmalig nach Einführung der Album-Zuordnung: Tracks ohne BPM nochmal suchen lassen */
