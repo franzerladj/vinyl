@@ -173,9 +173,30 @@ export default function Shop() {
                 </div>
                 <div className="stat">
                   <b>{money(result.total)}</b>
-                  <span>inkl. Versand</span>
+                  <span>{result.baskets.some((b) => b.importCost > 0) ? "inkl. Versand, Einfuhr" : "inkl. Versand"}</span>
                 </div>
               </div>
+              {/* Stufen: was bringt jeder weitere Händler? Antippen setzt die Händler-Grenze. */}
+              {result.variants.length > 1 && (
+                <div className="variants">
+                  <span className="sub">Mit weniger Händlern auskommen?</span>
+                  <div className="variant-row" data-no-pager>
+                    {result.variants.map((v, i) => {
+                      const last = i === result.variants.length - 1;
+                      const on = last ? !settings.maxSellers : settings.maxSellers === String(v.sellers);
+                      return (
+                        <button key={v.sellers} className={`variant press${on ? " on" : ""}`} onClick={() => upd({ maxSellers: last ? "" : String(v.sellers) })} aria-pressed={on}>
+                          <b>{v.sellers === 1 ? "1 Händler" : `${v.sellers} Händler`}</b>
+                          <span>
+                            {v.items} {v.items === 1 ? "Platte" : "Platten"}
+                          </span>
+                          <span className="mono">{money(v.total)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               {result.naiveTotal > result.total && (
                 <div className="card" style={{ borderColor: "var(--ok)" }}>
                   Gespart gegenüber Einzelkauf beim jeweils billigsten Angebot: <b style={{ color: "var(--ok)" }}>{money(result.naiveTotal - result.total)}</b>
@@ -188,12 +209,13 @@ export default function Shop() {
                       <b>{b.seller}</b>
                       <div className="sub">
                         {b.items.length} Platten · {money(b.itemsTotal)} + ca. {money(b.shipping)} Versand
+                        {b.importCost > 0 ? ` + ca. ${money(b.importCost)} Einfuhr` : ""}
                         {b.items[0]?.sellerRating ? ` · ${b.items[0].sellerRating}%` : ""}
                         {b.items[0]?.shipsFrom ? ` · aus ${b.items[0].shipsFrom}` : ""}
                       </div>
                     </div>
                     <span className="spacer" />
-                    <b>{money(b.total)}</b>
+                    <b className="nobr" style={{ flex: "none" }}>{money(b.total)}</b>
                   </div>
                   <div className="list" style={{ marginTop: 6 }}>
                     {b.items.map((l) => {

@@ -8,10 +8,33 @@ export interface ShipRates {
   /** Aufschlag je weiterer Platte beim selben Händler */
   extra: number;
 }
+export interface ImportTax {
+  /** Einfuhrumsatzsteuer in Prozent auf Warenwert plus Versand */
+  rate: number;
+  /** Pauschale des Paketdienstes fürs Auslegen der Abgaben, je Sendung */
+  fee: number;
+}
 export interface ShipConfig {
   /** Eigenes Land, wie Discogs es schreibt (z. B. "Germany") */
   home: string;
   rates: Record<ShipRegion, ShipRates>;
+  /** Einfuhrkosten bei Händlern außerhalb der EU. Fehlt = Standard, null = nicht einrechnen. */
+  importTax?: ImportTax | null;
+}
+
+/**
+ * Richtwert für Deutschland: 19 % Einfuhrumsatzsteuer auf Ware plus Versand (seit Juli 2021 ab dem
+ * ersten Euro), dazu rund 6 € Auslagenpauschale des Paketdienstes. Zoll kommt erst über 150 € Warenwert
+ * dazu und ist hier nicht eingerechnet. In anderen EU-Ländern weicht der Steuersatz ab (einstellbar).
+ */
+export const DEFAULT_IMPORT: ImportTax = { rate: 19, fee: 6 };
+
+/** Einfuhrkosten für eine Sendung: nur, wenn man in der EU wohnt und der Händler sicher außerhalb sitzt */
+export function importCosts(cfg: ShipConfig | undefined, shipsFrom: string | undefined | null, goods: number, shipping: number): number {
+  if (!cfg || cfg.importTax === null || goods <= 0) return 0;
+  if (!EU.has(cfg.home) || regionOf(shipsFrom, cfg.home) !== "world") return 0;
+  const t = cfg.importTax ?? DEFAULT_IMPORT;
+  return Math.round(((goods + shipping) * t.rate) / 100 * 100) / 100 + t.fee;
 }
 
 const EU = new Set([

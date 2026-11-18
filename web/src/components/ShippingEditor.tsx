@@ -1,6 +1,7 @@
 // Versand-Schätzung, verständlich: woher kommt die Platte, was kostet die erste, was jede weitere.
 import { money } from "../lib/format";
-import { countryName, DEFAULT_SHIP, HOME_COUNTRIES, type ShipConfig, type ShipRegion } from "../../../shared/shipping";
+import { countryName, DEFAULT_IMPORT, DEFAULT_SHIP, HOME_COUNTRIES, type ShipConfig, type ShipRegion } from "../../../shared/shipping";
+import { Switch } from "./ui";
 
 const num = (v: string) => Math.max(0, Number(v.replace(",", ".")) || 0);
 
@@ -14,6 +15,8 @@ export function ShippingEditor({ value, onChange }: { value: ShipConfig; onChang
   const set = (r: ShipRegion, k: "first" | "extra", v: string) => onChange({ ...value, rates: { ...value.rates, [r]: { ...value.rates[r], [k]: num(v) } } });
   const ex = (r: ShipRegion) => value.rates[r].first + 2 * value.rates[r].extra;
   const isDefault = JSON.stringify(value.rates) === JSON.stringify(DEFAULT_SHIP.rates);
+  const inEU = value.home !== "Switzerland" && value.home !== "UK";
+  const tax = value.importTax === null ? null : (value.importTax ?? DEFAULT_IMPORT);
 
   return (
     <div className="ship">
@@ -50,6 +53,34 @@ export function ShippingEditor({ value, onChange }: { value: ShipConfig; onChang
           </label>
         </div>
       ))}
+      {inEU && (
+        <div className="ship-import">
+          <label className="row" style={{ gap: 12 }}>
+            <span style={{ flex: 1, minWidth: 0 }}>
+              <b>Einfuhrkosten einrechnen</b>
+              <small>Bei Händlern außerhalb der EU (UK, USA, Japan): Einfuhrumsatzsteuer auf Ware und Versand plus Pauschale des Paketdienstes.</small>
+            </span>
+            <Switch checked={tax !== null} label="Einfuhrkosten einrechnen" onChange={(on) => onChange({ ...value, importTax: on ? DEFAULT_IMPORT : null })} />
+          </label>
+          {tax && (
+            <div className="grid2">
+              <label className="ship-field">
+                <small>Steuer in %</small>
+                <span>
+                  <input className="input" inputMode="decimal" value={String(tax.rate).replace(".", ",")} onChange={(e) => onChange({ ...value, importTax: { ...tax, rate: num(e.target.value) } })} aria-label="Einfuhrumsatzsteuer in Prozent" />
+                </span>
+              </label>
+              <label className="ship-field">
+                <small>Pauschale je Paket</small>
+                <span>
+                  <input className="input" inputMode="decimal" value={String(tax.fee).replace(".", ",")} onChange={(e) => onChange({ ...value, importTax: { ...tax, fee: num(e.target.value) } })} aria-label="Pauschale je Paket" />
+                </span>
+              </label>
+            </div>
+          )}
+          {tax && <small>Richtwert für Deutschland: 19 % und rund 6 €. Zoll kommt erst über 150 € Warenwert dazu und ist nicht eingerechnet.</small>}
+        </div>
+      )}
       <div className="ship-example">
         <b>Beispiel:</b> 3 Platten von einem Händler kosten etwa {money(ex("home"))} Versand aus {home}, {money(ex("eu"))} aus der EU und {money(ex("world"))} aus dem Rest der Welt.
       </div>
