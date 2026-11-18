@@ -1,6 +1,6 @@
 import { Pager } from "../components/Pager";
 import { useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type Release, type TrackMeta } from "../lib/db";
 import {
@@ -20,7 +20,9 @@ import {
 } from "../../../shared/music";
 
 export default function Sets() {
-  const [tab, setTab] = useState<"sets" | "live">("sets");
+  // Kommt man per Wisch von den Freunden, liegt „Nächster Track“ vorn (der Streifen läuft von rechts)
+  const startPane = (useLocation().state as { pane?: number } | null)?.pane;
+  const [tab, setTab] = useState<"sets" | "live">(startPane === 1 ? "live" : "sets");
   const nav = useNavigate();
   const sets = useLiveQuery(
     () => db.sets.orderBy("createdAt").reverse().toArray(),

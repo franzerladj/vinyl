@@ -6,6 +6,7 @@ import { haptic, Jobs, Sheet, overlayOpen } from "./components/bits";
 import { Welcome } from "./components/Welcome";
 import { RecordMenu } from "./components/RecordMenu";
 import { PullRefresh } from "./components/PullRefresh";
+import { TabSwipe } from "./components/TabSwipe";
 import { MiniPlayer } from "./components/MiniPlayer";
 import { claimDevice } from "./lib/account";
 import { IconCart, IconGear, IconHeart, IconHome, IconList, IconPlay, IconRecord, IconSearch, IconUser } from "./components/icons";
@@ -580,6 +581,7 @@ export default function App() {
       </main>
       <MiniPlayer />
       <PullRefresh />
+      <TabSwipe />
       <RecordMenu />
       <Jobs />
       {me?.username && <Welcome username={me.username} />}

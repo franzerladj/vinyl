@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { haptic, inHorizontalScroller, overlayOpen, Seg } from "./bits";
+import { neighborTab } from "../lib/tabSwipe";
 
 /**
  * Zwei Seiten nebeneinander, wie ein nativer Pager: der Umschalter bleibt stehen, sein Schieber folgt
@@ -303,6 +304,12 @@ export function Pager({
         x0 += Math.sign(mx) * 10;
         const target = idxRef.current + (mx < 0 ? 1 : -1);
         busy.current = true;
+        // Am Rand des Pagers: gibt es daneben einen Hauptbereich, übernimmt das Wischen zwischen den Bereichen
+        if ((target < 0 || target >= box.children.length) && neighborTab(location.pathname, mx < 0 ? 1 : -1)) {
+          busy.current = false;
+          state = "idle";
+          return;
+        }
         if (target < 0 || target >= box.children.length) {
           state = "band";
           W = box.clientWidth || window.innerWidth;
