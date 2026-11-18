@@ -3,7 +3,9 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import { getKV, setKV } from "./db";
 import { fetchWithTimeout } from "./api";
-import { username } from "./store";
+import { ask, username } from "./store";
+import { db } from "./db";
+import type { OwnPost, OwnPostKind, SetPostData, SpotPostData } from "../../../shared/ownPost";
 
 export interface Reaction {
   owner: string;
@@ -33,10 +35,12 @@ export interface InboxItem {
 export interface Buzz {
   reactions: Reaction[];
   comments: BuzzComment[];
+  /** Eigene Beiträge von Freunden und dir: Set gespielt, Platte des Moments */
+  posts: OwnPost[];
   inbox: InboxItem[];
   unread: number;
 }
-const EMPTY: Buzz = { reactions: [], comments: [], inbox: [], unread: 0 };
+const EMPTY: Buzz = { reactions: [], comments: [], posts: [], inbox: [], unread: 0 };
 const KEY = "buzz";
 
 /** Beitrag im Feed heißt „freund|art|tag“, der Server kennt Besitzer und „art|tag“ getrennt */
@@ -52,7 +56,7 @@ async function call<T>(path: string, body?: unknown, method?: string): Promise<T
   return j;
 }
 
-export const cachedBuzz = () => getKV<Buzz>(KEY, EMPTY);
+export const cachedBuzz = async (): Promise<Buzz> => ({ ...EMPTY, ...(await getKV<Partial<Buzz>>(KEY, EMPTY)) });
 /** Für Komponenten: aktueller Stand, aktualisiert sich von selbst */
 export const useBuzz = () => useLiveQuery(() => cachedBuzz(), [], EMPTY);
 
@@ -118,4 +122,77 @@ export function forPost(b: Buzz, feedId: string) {
   const { owner, post } = postRef(feedId);
   const reactions = b.reactions.filter((r) => r.owner === owner && r.post === post);
   return { reactions, mine: reactions.some((r) => r.from === me()), comments: b.comments.filter((c) => c.owner === owner && c.post === post) };
+}
+
+// ---------------------------------------------------------------------------
+// Eigene Beiträge: „hat ein Set gespielt“ und „Platte des Moments“
+// ---------------------------------------------------------------------------
+
+export async function publish(kind: OwnPostKind, ref: string, data: SetPostData | SpotPostData) {
+  await call("/api/buzz/post", { kind, ref, data });
+  const b = await cachedBuzz();
+  const me_ = me();
+  await setKV(KEY, { ...b, posts: [{ owner: me_, kind, ref, data, ts: Date.now() }, ...b.posts.filter((p) => !(p.owner === me_ && p.kind === kind && p.ref === ref))] });
+}
+
+export async function unpublish(kind: OwnPostKind, ref: string) {
+  await call("/api/buzz/post", { kind, ref, remove: true });
+  const b = await cachedBuzz();
+  await setKV(KEY, { ...b, posts: b.posts.filter((p) => !(p.owner === me() && p.kind === kind && p.ref === ref)) });
+}
+
+/** Sollen gespielte Sets im Feed der Freunde erscheinen? Noch nicht gefragt = undefined */
+export const shareSetsChoice = () => getKV<boolean | undefined>("feedShareSets", undefined);
+export const setShareSets = (on: boolean) => setKV("feedShareSets", on);
+
+let checking = false;
+/**
+ * Gespielte Sets der letzten 30 Tage in den Feed der Freunde stellen. Beim ersten Mal wird gefragt,
+ * die Antwort gilt für alle weiteren (änderbar auf der Freunde-Seite). Ohne Freunde passiert nichts.
+ */
+export async function publishPlayedSets() {
+  if (checking || !username() || !navigator.onLine) return;
+  checking = true;
+  try {
+    if ((await db.friends.count()) === 0) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const since = new Date(Date.now() - 30 * 864e5).toISOString().slice(0, 10);
+    const done = new Set(await getKV<string[]>("feedPosted", []));
+    const sets = (await db.sets.toArray()).filter((s) => s.date && s.date >= since && s.trackIds.length > 0 && (s.date < today || (s.date === today && (s.played?.length ?? 0) > 0)) && !done.has(String(s.createdAt)));
+    if (!sets.length) return;
+    let ok = await shareSetsChoice();
+    if (ok === undefined) {
+      const first = sets[0];
+      ok = await ask({ title: "Set im Feed zeigen?", body: `Deine Freunde sehen dann, dass du „${first.name || "ein Set"}“ gespielt hast: Name, Ort, Anzahl der Tracks und ein paar Cover. Das gilt auch für künftige Sets und lässt sich unter „Freunde“ wieder abschalten.`, ok: "Zeigen", cancel: "Nicht zeigen" });
+      await setShareSets(ok);
+    }
+    for (const s of sets) {
+      if (ok) {
+        const ids = s.played?.length ? s.played : s.trackIds;
+        const tracks = (await db.tracks.bulkGet(ids)).filter(Boolean) as { releaseId: number; artist: string; title: string }[];
+        const rids = [...new Set(tracks.map((t) => t.releaseId))];
+        const rels = (await db.releases.bulkGet(rids.slice(0, 8))).filter(Boolean) as { thumb?: string; cover?: string }[];
+        const data: SetPostData = { name: s.name || "Set", venue: s.venue, date: s.date, tracks: ids.length, records: rids.length, covers: rels.map((r) => r.cover || r.thumb || "").filter(Boolean).slice(0, 4), picks: tracks.slice(0, 3).map((t) => ({ artist: t.artist, title: t.title })) };
+        try {
+          await publish("set", String(s.createdAt), data);
+        } catch {
+          continue; // beim nächsten Mal
+        }
+      }
+      done.add(String(s.createdAt));
+    }
+    await setKV("feedPosted", [...done].slice(-200));
+  } finally {
+    checking = false;
+  }
+}
+
+/** Platte des Moments im Profil geändert: als Beitrag zeigen (das Profil ist ohnehin für Freunde sichtbar) */
+export async function publishSpotlight(sp: { id: number; title: string; artist: string; cover?: string } | undefined, before?: number) {
+  if (!sp || sp.id === before || !username()) return;
+  try {
+    await publish("spot", String(sp.id), { id: sp.id, title: sp.title, artist: sp.artist, cover: sp.cover });
+  } catch {
+    /* nicht schlimm */
+  }
 }

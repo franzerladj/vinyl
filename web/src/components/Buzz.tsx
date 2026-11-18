@@ -4,10 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type Release } from "../lib/db";
-import { comment, deleteComment, forPost, markInboxRead, react, recommend, useBuzz, type InboxItem } from "../lib/buzz";
+import { comment, deleteComment, forPost, markInboxRead, publishPlayedSets, react, recommend, setShareSets, shareSetsChoice, unpublish, useBuzz, type InboxItem } from "../lib/buzz";
+import type { OwnPost, SetPostData, SpotPostData } from "../../../shared/ownPost";
 import { toast, username } from "../lib/store";
 import { agoText } from "../../../shared/friendFeed";
-import { Avatar, Sheet, haptic, keepParens } from "./bits";
+import { Avatar, Cover, Sheet, haptic, keepParens } from "./bits";
+import { Switch } from "./ui";
 import { IconChat, IconSend, IconThumb, IconX } from "./icons";
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -241,5 +243,94 @@ export function RecommendSheet({ release, onClose }: { release: Release | null; 
         </div>
       )}
     </Sheet>
+  );
+}
+
+/** Eigener Beitrag im Feed: „hat ein Set gespielt“ oder „Platte des Moments“ */
+export function OwnPostCard({ post, fresh }: { post: OwnPost; fresh?: boolean }) {
+  const friends = useLiveQuery(() => db.friends.toArray(), []);
+  const mine = same(post.owner, username() ?? "");
+  const f = friends?.find((x) => same(x.username, post.owner));
+  const who = mine ? "Du" : f?.name || f?.username || post.owner;
+  const feedId = `${post.owner}|${post.kind}|${post.ref}`;
+  const head = (text: string) => (
+    <div className="fpost-head">
+      <Avatar src={f?.avatar} name={mine ? (username() ?? "?") : post.owner} size={36} />
+      <span className="fpost-who">
+        <b>{who}</b> {text}
+        <span className="fpost-when">
+          {agoText(post.ts)}
+          {fresh && <i className="fpost-new">neu</i>}
+        </span>
+      </span>
+      {mine && (
+        <button className="thread-x" onClick={() => void unpublish(post.kind, post.ref).then(() => toast("Beitrag entfernt"), (e: Error) => toast(e.message))} aria-label="Beitrag entfernen">
+          <IconX />
+        </button>
+      )}
+    </div>
+  );
+  if (post.kind === "set") {
+    const d = post.data as SetPostData;
+    const when = d.date ? new Date(d.date).toLocaleDateString("de-DE", { weekday: "long", day: "numeric", month: "long" }) : null;
+    return (
+      <article className="fpost">
+        {mine ? head("hast ein Set gespielt") : <Link to={`/friends/${encodeURIComponent(f?.username ?? post.owner)}`} viewTransition className="press" style={{ color: "inherit" }}>{head("hat ein Set gespielt")}</Link>}
+        <div className="fpost-set">
+          <span className={`set-wall n${Math.min(d.covers.length, 4)}`}>
+            {d.covers.slice(0, 4).map((src, i) => (
+              <img key={i} src={src} alt="" loading="lazy" decoding="async" />
+            ))}
+            {d.covers.length === 0 && <span className="set-count">{d.tracks}</span>}
+          </span>
+          <span className="fpost-text">
+            <b>{d.name}</b>
+            <span>{[d.venue, when].filter(Boolean).join(" · ")}</span>
+            <small>
+              {d.tracks} Tracks{d.records ? ` · ${d.records} Platten` : ""}
+            </small>
+            {d.picks.length > 0 && <small className="fpost-picks">Mit {d.picks.map((p) => p.title).join(", ")}</small>}
+          </span>
+        </div>
+        <PostBar feedId={feedId} title={`Set „${d.name}“`} />
+      </article>
+    );
+  }
+  const d = post.data as SpotPostData;
+  return (
+    <article className="fpost">
+      {mine ? head("hast eine Platte des Moments") : <Link to={`/friends/${encodeURIComponent(f?.username ?? post.owner)}`} viewTransition className="press" style={{ color: "inherit" }}>{head("hat eine neue Platte des Moments")}</Link>}
+      <div className="fpost-one">
+        <Link to={`/release/${d.id}`} viewTransition className="fpost-rec press">
+          <Cover src={d.cover} />
+          <span className="fpost-text">
+            <b>{keepParens(d.title)}</b>
+            <span>{d.artist}</span>
+          </span>
+        </Link>
+      </div>
+      <PostBar feedId={feedId} title={`${d.artist} – ${d.title}`} releaseId={d.id} />
+    </article>
+  );
+}
+
+/** Schalter auf der Freunde-Seite: gespielte Sets im Feed zeigen */
+export function ShareSetsSwitch() {
+  const on = useLiveQuery(() => shareSetsChoice(), []);
+  return (
+    <div className="card row share-sets" style={{ gap: 12 }}>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <b>Gespielte Sets im Feed zeigen</b>
+        <span className="sub" style={{ display: "block" }}>Deine Freunde sehen Name, Ort, Anzahl der Tracks und ein paar Cover.</span>
+      </span>
+      <Switch
+        checked={on === true}
+        label="Gespielte Sets im Feed zeigen"
+        onChange={(v) => {
+          haptic(6);
+          void setShareSets(v).then(() => (v ? publishPlayedSets() : undefined));
+        }}
+      />
+    </div>
   );
 }

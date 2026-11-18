@@ -285,7 +285,7 @@ async function startupSync() {
     // Freundschaftsanfragen und Zusagen abholen
     void import("./lib/social").then((m) => m.refreshSocial()).catch(() => undefined);
     // Reaktionen, Kommentare und Empfehlungen von Freunden
-    void import("./lib/buzz").then((m) => m.refreshBuzz()).catch(() => undefined);
+    void import("./lib/buzz").then((m) => m.refreshBuzz().then(() => m.publishPlayedSets())).catch(() => undefined);
     // Offene Ordner-Änderungen (z. B. App beim Einsortieren geschlossen) weiter zu Discogs schicken
     void import("./lib/folders").then((f) => f.resumeFolderQueue()).catch(() => undefined);
     const last = await getKV<number>("lastCollectionSync", 0);

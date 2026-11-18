@@ -42,14 +42,15 @@ module.exports = async function install(page) {
     // Soziales im Feed: Reaktionen, Kommentare, Aktivität (mit BUZZ=1 liegt schon etwas von „kumpel“ vor)
     if (p.startsWith("/api/buzz")) {
       const bz = (globalThis.__buzz ??= process.env.BUZZ
-        ? { reactions: [], comments: [], inbox: [{ id: 1, from: "kumpel", kind: "react", post: "coll|2026-11-10", releaseId: 3, title: "Larry Heard – Bar A Thym", ts: Date.now() - 3600e3, read: false }, { id: 2, from: "kumpel", kind: "recommend", releaseId: 80, title: "Moodymann – Black Mahogani", text: "Die musst du hören", ts: Date.now() - 7200e3, read: false }] }
-        : { reactions: [], comments: [], inbox: [] });
+        ? { reactions: [], comments: [], posts: [{ owner: "kumpel", kind: "set", ref: "1731859200000", ts: Date.now() - 5 * 3600e3, data: { name: "Freitag im Klubraum", venue: "Klubraum Bayreuth", date: new Date(Date.now() - 86400e3).toISOString().slice(0, 10), tracks: 24, records: 21, covers: [], picks: [{ artist: "Theo Parrish", title: "Falling Up" }, { artist: "Moodymann", title: "Shades Of Jae" }] } }], inbox: [{ id: 1, from: "kumpel", kind: "react", post: "coll|2026-11-10", releaseId: 3, title: "Larry Heard – Bar A Thym", ts: Date.now() - 3600e3, read: false }, { id: 2, from: "kumpel", kind: "recommend", releaseId: 80, title: "Moodymann – Black Mahogani", text: "Die musst du hören", ts: Date.now() - 7200e3, read: false }] }
+        : { reactions: [], comments: [], posts: [], inbox: [] });
       const b = route.request().method() === "POST" ? JSON.parse(route.request().postData() || "{}") : {};
       (globalThis.__buzzCalls ??= []).push(p + " " + JSON.stringify(b));
       if (p === "/api/buzz") return json({ ...bz, unread: bz.inbox.filter((i) => !i.read).length });
       if (p === "/api/buzz/react") { bz.reactions = bz.reactions.filter((r) => !(r.owner === b.owner && r.post === b.post && r.from === "franzerladj")); if (b.on !== false) bz.reactions.push({ owner: b.owner, post: b.post, from: "franzerladj", ts: Date.now() }); return json({ ok: true }); }
       if (p === "/api/buzz/comment") { const c = { id: Date.now(), owner: b.owner, post: b.post, from: "franzerladj", text: b.text, ts: Date.now() }; bz.comments.push(c); return json(c); }
       if (p.startsWith("/api/buzz/comment/")) { bz.comments = bz.comments.filter((c) => String(c.id) !== p.split("/").pop()); return json({ ok: true }); }
+      if (p === "/api/buzz/post") { bz.posts = bz.posts.filter((x) => !(x.owner === "franzerladj" && x.kind === b.kind && x.ref === b.ref)); if (!b.remove) bz.posts.unshift({ owner: "franzerladj", kind: b.kind, ref: b.ref, data: b.data, ts: Date.now() }); return json({ ok: true }); }
       if (p === "/api/buzz/read") { bz.inbox.forEach((i) => (i.read = true)); return json({ ok: true }); }
       return json({ ok: true });
     }

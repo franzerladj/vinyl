@@ -1670,3 +1670,11 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .recommend-people { display: flex; gap: 12px; overflow-x: auto; padding: 4px 0 6px; scrollbar-width: none; }
 .recommend-people .fhome-person { border: 0; background: transparent; color: inherit; flex: none; opacity: 0.55; transition: opacity 0.2s var(--ease); }
 .recommend-people .fhome-person.on { opacity: 1; }
+.fpost-set { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 14px; align-items: center; }
+.fpost-set .set-wall { width: 96px; border-radius: 10px; overflow: hidden; }
+.fpost-set .fpost-text { display: grid; gap: 2px; min-width: 0; }
+.fpost-set .fpost-text b { font-size: 17px; line-height: 1.2; }
+.fpost-set .fpost-text span { font-size: 14px; color: var(--text-2); }
+.fpost-set .fpost-text small { font-size: 13px; color: var(--text-3); }
+.fpost-picks { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.fpost-head .thread-x { margin-left: auto; flex: none; }

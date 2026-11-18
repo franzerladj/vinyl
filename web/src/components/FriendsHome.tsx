@@ -5,9 +5,11 @@ import { Link } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type Friend, type Release } from "../lib/db";
 import { addWant } from "../lib/sync";
-import { toast } from "../lib/store";
+import { toast, username } from "../lib/store";
 import { Avatar, Cover, haptic, keepParens, markHero } from "./bits";
-import { PostBar } from "./Buzz";
+import { OwnPostCard, PostBar } from "./Buzz";
+import { useBuzz } from "../lib/buzz";
+import type { OwnPost } from "../../../shared/ownPost";
 import { IconHeart, IconPlus } from "./icons";
 import { agoText, feedPosts, type FeedPost } from "../../../shared/friendFeed";
 import type { FriendMatch } from "../lib/friends";
@@ -64,15 +66,21 @@ export function FriendsHome({
     (p) =>
       byName.has(p.username) && p.releaseIds.some((id) => data!.rels.has(id)),
   );
-  const posts = allPosts.slice(0, limit);
-  const more = allPosts.length > limit;
+  // Eigene Beiträge (Set gespielt, Platte des Moments) von Freunden und dir, zeitlich einsortiert
+  const buzz = useBuzz();
+  const meName = (username() ?? "").toLowerCase();
+  const own = buzz.posts.filter((p) => p.owner === meName || friends.some((x) => x.f.username.toLowerCase() === p.owner));
+  const merged = [...allPosts.map((p) => ({ at: p.at, d: p, o: null as OwnPost | null })), ...own.map((o) => ({ at: o.ts, d: null as FeedPost | null, o }))].sort((a, b) => b.at - a.at);
+  const shown = merged.slice(0, limit);
+  const posts = shown.filter((x) => x.d).map((x) => x.d!);
+  const more = merged.length > limit;
   const fresh = new Set(
     posts.filter((p) => p.at > seen).map((p) => p.username),
   );
 
   // Gesehen merken, sobald der Feed wirklich auf dem Bildschirm war
   const feed = useRef<HTMLDivElement>(null);
-  const newest = posts[0]?.at ?? 0;
+  const newest = shown[0]?.at ?? 0;
   useEffect(() => {
     const el = feed.current;
     if (!el || !newest || newest <= seen) return;
@@ -199,10 +207,12 @@ export function FriendsHome({
         </>
       )}
 
-      {posts.length > 0 && (
+      {shown.length > 0 && (
         <div className="fhome-feed" ref={feed}>
           <h3>Neu bei Freunden</h3>
-          {posts.map((p) => {
+          {shown.map((x) => {
+            if (x.o) return <OwnPostCard key={`${x.o.owner}|${x.o.kind}|${x.o.ref}`} post={x.o} fresh={x.o.ts > seen && x.o.owner !== meName} />;
+            const p = x.d!;
             const f = byName.get(p.username)!;
             const rels = p.releaseIds
               .map((id) => data!.rels.get(id))
@@ -317,7 +327,7 @@ export function FriendsHome({
           Mehr von deinen Freunden
         </Link>
       )}
-      {!feedOnly && friends.length > 0 && data && posts.length === 0 && (
+      {!feedOnly && friends.length > 0 && data && shown.length === 0 && (
         <p className="sub fhome-note">
           Noch nichts Neues. Der Feed füllt sich, sobald deine Freunde Platten
           eintragen.

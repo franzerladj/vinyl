@@ -26,6 +26,9 @@ const OUT = process.env.OUT || __dirname;
   await page.waitForSelector(".activity");
   out.activity = await page.locator(".activity-row").count();
   await page.waitForSelector(".fpost-bar");
+  // Eigener Beitrag eines Freundes: Set gespielt
+  out.setPost = await page.locator(".fpost-set .fpost-text b").first().innerText().catch(() => "-");
+  out.setHead = await page.locator(".fpost:has(.fpost-set) .fpost-who b").first().innerText().catch(() => "-");
   await page.locator(".fpost").first().scrollIntoViewIfNeeded();
   await page.locator(".fpost-act").first().click();
   await page.waitForTimeout(400);
@@ -44,6 +47,13 @@ const OUT = process.env.OUT || __dirname;
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForTimeout(2500);
   await page.screenshot({ path: `${OUT}/buzz-friends.png` });
+  // Schalter: gespielte Sets im Feed zeigen
+  await page.locator(".share-sets").scrollIntoViewIfNeeded();
+  await page.locator(".share-sets .switch, .share-sets [role=switch]").first().click();
+  await page.waitForTimeout(600);
+  out.schalter = await page.evaluate(() => new Promise((res) => { const q = indexedDB.open("crate"); q.onsuccess = () => { const g = q.result.transaction("kv").objectStore("kv").get("feedShareSets"); g.onsuccess = () => res(g.result?.value ?? g.result); }; }));
+  await page.locator(".fpost:has(.fpost-set)").first().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: `${OUT}/buzz-set.png` });
   out.gelesen = await page.evaluate(() => globalThis.fetch("/api/buzz").then((r) => r.json()).then((j) => j.unread));
   console.log(JSON.stringify(out), errors);
   await b.close();

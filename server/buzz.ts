@@ -2,6 +2,7 @@
 // Ein Beitrag ist „Freund + Art + Tag“ (wie im Feed gebündelt), z. B. owner „kumpel“, post „coll|2026-11-17“.
 // Auf Cloudflare: D1 (Binding SYNC, Schema unten und in migrations/0002_buzz.sql). Lokal: Arbeitsspeicher.
 import type { D1Like } from "./devsync";
+import type { OwnPost } from "../shared/ownPost";
 
 export interface Reaction {
   owner: string;
@@ -40,7 +41,10 @@ export interface BuzzStore {
   getComment(id: number): Promise<Comment | null>;
   deleteComment(id: number): Promise<void>;
   commentsSince(from: string, since: number): Promise<number>;
-  forOwners(owners: string[], since: number): Promise<{ reactions: Reaction[]; comments: Comment[] }>;
+  forOwners(owners: string[], since: number): Promise<{ reactions: Reaction[]; comments: Comment[]; posts: OwnPost[] }>;
+  /** Eigener Beitrag (Set gespielt, Platte des Moments): je Besitzer, Art und Bezug einer */
+  post(p: OwnPost): Promise<void>;
+  removePost(owner: string, kind: string, ref: string): Promise<void>;
   notify(i: Omit<InboxItem, "id" | "read">): Promise<void>;
   inbox(user: string, limit: number): Promise<InboxItem[]>;
   markRead(user: string): Promise<void>;
@@ -54,6 +58,7 @@ export const BUZZ_SCHEMA = [
   "CREATE INDEX IF NOT EXISTS buzz_comments_owner ON buzz_comments (owner, ts)",
   "CREATE TABLE IF NOT EXISTS buzz_inbox (id INTEGER PRIMARY KEY AUTOINCREMENT, recipient TEXT NOT NULL, sender TEXT NOT NULL, kind TEXT NOT NULL, post TEXT, release_id INTEGER, title TEXT, text TEXT, ts INTEGER NOT NULL, seen INTEGER NOT NULL DEFAULT 0)",
   "CREATE INDEX IF NOT EXISTS buzz_inbox_recipient ON buzz_inbox (recipient, ts)",
+  "CREATE TABLE IF NOT EXISTS buzz_posts (owner TEXT NOT NULL, kind TEXT NOT NULL, ref TEXT NOT NULL, data TEXT NOT NULL, ts INTEGER NOT NULL, PRIMARY KEY (owner, kind, ref))",
 ];
 
 export function d1Buzz(db: D1Like): BuzzStore {
@@ -84,6 +89,7 @@ export function d1Buzz(db: D1Like): BuzzStore {
     async forOwners(owners, since) {
       const reactions: Reaction[] = [];
       const comments: Comment[] = [];
+      const posts: OwnPost[] = [];
       // D1 erlaubt höchstens 100 Platzhalter
       for (let i = 0; i < owners.length; i += 80) {
         const part = owners.slice(i, i + 80);
@@ -92,8 +98,16 @@ export function d1Buzz(db: D1Like): BuzzStore {
         reactions.push(...r.results.map((x) => ({ owner: x.owner, post: x.post, from: x.sender, ts: x.ts })));
         const c = await db.prepare(`SELECT id, owner, post, sender, text, ts FROM buzz_comments WHERE owner IN (${q}) AND ts > ? ORDER BY ts`).bind(...part, since).all<RawC>();
         comments.push(...c.results.map(toC));
+        const p = await db.prepare(`SELECT owner, kind, ref, data, ts FROM buzz_posts WHERE owner IN (${q}) AND ts > ? ORDER BY ts DESC`).bind(...part, since).all<{ owner: string; kind: OwnPost["kind"]; ref: string; data: string; ts: number }>();
+        posts.push(...p.results.map((x) => ({ owner: x.owner, kind: x.kind, ref: x.ref, data: JSON.parse(x.data), ts: x.ts })));
       }
-      return { reactions, comments };
+      return { reactions, comments, posts };
+    },
+    async post(p) {
+      await db.prepare("INSERT INTO buzz_posts (owner, kind, ref, data, ts) VALUES (?, ?, ?, ?, ?) ON CONFLICT(owner, kind, ref) DO UPDATE SET data = excluded.data").bind(p.owner, p.kind, p.ref, JSON.stringify(p.data), p.ts).run();
+    },
+    async removePost(owner, kind, ref) {
+      await db.prepare("DELETE FROM buzz_posts WHERE owner = ? AND kind = ? AND ref = ?").bind(owner, kind, ref).run();
     },
     async notify(i) {
       await db.prepare("INSERT INTO buzz_inbox (recipient, sender, kind, post, release_id, title, text, ts) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").bind(i.to, i.from, i.kind, i.post ?? null, i.releaseId ?? null, i.title ?? null, i.text ?? null, i.ts).run();
@@ -113,6 +127,7 @@ export function d1Buzz(db: D1Like): BuzzStore {
         db.prepare("DELETE FROM buzz_reactions WHERE owner = ? OR sender = ?").bind(user, user),
         db.prepare("DELETE FROM buzz_comments WHERE owner = ? OR sender = ?").bind(user, user),
         db.prepare("DELETE FROM buzz_inbox WHERE recipient = ? OR sender = ?").bind(user, user),
+        db.prepare("DELETE FROM buzz_posts WHERE owner = ?").bind(user),
       ]);
     },
   };
@@ -122,6 +137,7 @@ export function memoryBuzz(): BuzzStore {
   let reactions: Reaction[] = [];
   let comments: Comment[] = [];
   let inbox: InboxItem[] = [];
+  let posts: OwnPost[] = [];
   let seq = 0;
   return {
     async react(r, on) {
@@ -145,7 +161,18 @@ export function memoryBuzz(): BuzzStore {
       return comments.filter((c) => c.from === from && c.ts > since).length;
     },
     async forOwners(owners, since) {
-      return { reactions: reactions.filter((r) => owners.includes(r.owner) && r.ts > since), comments: comments.filter((c) => owners.includes(c.owner) && c.ts > since).sort((a, b) => a.ts - b.ts) };
+      return {
+        reactions: reactions.filter((r) => owners.includes(r.owner) && r.ts > since),
+        comments: comments.filter((c) => owners.includes(c.owner) && c.ts > since).sort((a, b) => a.ts - b.ts),
+        posts: posts.filter((p) => owners.includes(p.owner) && p.ts > since).sort((a, b) => b.ts - a.ts),
+      };
+    },
+    async post(p) {
+      const old = posts.find((x) => x.owner === p.owner && x.kind === p.kind && x.ref === p.ref);
+      posts = [...posts.filter((x) => x !== old), old ? { ...old, data: p.data } : p];
+    },
+    async removePost(owner, kind, ref) {
+      posts = posts.filter((x) => !(x.owner === owner && x.kind === kind && x.ref === ref));
     },
     async notify(i) {
       inbox.push({ ...i, id: ++seq, read: false });
@@ -160,12 +187,13 @@ export function memoryBuzz(): BuzzStore {
       reactions = reactions.filter((r) => r.owner !== user && r.from !== user);
       comments = comments.filter((c) => c.owner !== user && c.from !== user);
       inbox = inbox.filter((i) => i.to !== user && i.from !== user);
+      posts = posts.filter((p) => p.owner !== user);
     },
   };
 }
 
-/** „coll|2026-11-17“ oder „want|2026-11-17“ */
-export const validPost = (p: unknown): p is string => typeof p === "string" && /^(coll|want)\|\d{4}-\d{2}-\d{2}$/.test(p);
+/** „coll|2026-11-17“, „want|2026-11-17“ oder ein eigener Beitrag: „set|1731859200000“, „spot|12345“ */
+export const validPost = (p: unknown): p is string => typeof p === "string" && (/^(coll|want)\|\d{4}-\d{2}-\d{2}$/.test(p) || /^(set|spot)\|[A-Za-z0-9_-]{1,40}$/.test(p));
 
 /** Freitext säubern: Steuerzeichen raus, Leerraum zusammenziehen, kürzen */
 export function cleanText(v: unknown, max: number): string {

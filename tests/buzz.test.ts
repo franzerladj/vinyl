@@ -48,6 +48,14 @@ async function exercise(store: BuzzStore) {
   expect((await store.getComment(id))?.from).toBe("franz");
   await store.deleteComment(id);
   expect(await store.getComment(id)).toBeNull();
+  await store.post({ owner: "franz", kind: "set", ref: "170", data: { name: "Freitag", tracks: 20, records: 18, covers: [], picks: [] }, ts: 50 });
+  await store.post({ owner: "franz", kind: "set", ref: "170", data: { name: "Freitag Klubraum", tracks: 22, records: 18, covers: [], picks: [] }, ts: 60 });
+  const own = (await store.forOwners(["franz"], 0)).posts;
+  expect(own).toHaveLength(1);
+  expect([(own[0].data as { name: string }).name, own[0].ts]).toEqual(["Freitag Klubraum", 50]); // gleicher Beitrag, Zeitpunkt bleibt
+  await store.removePost("franz", "set", "170");
+  expect((await store.forOwners(["franz"], 0)).posts).toEqual([]);
+  await store.post({ owner: "franz", kind: "spot", ref: "9", data: { id: 9, title: "X", artist: "Y" }, ts: 70 });
   await store.clear("franz");
   expect((await store.forOwners(["anna", "bob"], 0)).comments).toEqual([]);
   expect(await store.inbox("anna", 10)).toEqual([]);
@@ -104,6 +112,20 @@ describe("Soziales: Routen", () => {
     expect(await del("bob")).toBe(404);
     expect(await del("anna")).toBe(200);
     expect((await get("franz")).comments).toEqual([]);
+  });
+  it("eigene Beiträge: gesäubert, für Freunde sichtbar, mit Reaktion", async () => {
+    kv.set("soc:franz", JSON.stringify({ friends: ["Anna"], in: [], out: [] }));
+    kv.set("soc:anna", JSON.stringify({ friends: ["franz"], in: [], out: [] }));
+    const bad = await post("franz", "/api/buzz/post", { kind: "set", ref: "170", data: { name: "", tracks: 3 } });
+    expect(bad.status).toBe(400);
+    const ok = await post("franz", "/api/buzz/post", { kind: "set", ref: "170", data: { name: "Freitag\u0000 Klubraum", venue: "Klubraum", date: "2026-11-13", tracks: 24, records: 20, covers: ["https://i.discogs.com/a.jpg", "https://evil.example/x.jpg"], picks: [{ artist: "Theo Parrish", title: "Falling Up" }] } });
+    expect(ok.status).toBe(200);
+    const anna = (await get("anna")) as unknown as { posts: { owner: string; kind: string; data: { name: string; covers: string[] } }[] };
+    expect(anna.posts.map((p) => [p.owner, p.kind, p.data.name, p.data.covers.length])).toEqual([["franz", "set", "Freitag Klubraum", 1]]);
+    expect((await post("anna", "/api/buzz/react", { owner: "franz", post: "set|170", title: "Freitag Klubraum" })).status).toBe(200);
+    expect((await get("franz")).inbox.some((i) => i.kind === "react" && i.from === "anna")).toBe(true);
+    expect((await post("franz", "/api/buzz/post", { kind: "set", ref: "170", remove: true })).status).toBe(200);
+    expect(((await get("anna")) as unknown as { posts: unknown[] }).posts).toEqual([]);
   });
   it("ohne Anmeldung nichts", async () => {
     expect((await app.request(`${ORIGIN}/api/buzz`, {}, env)).status).toBe(401);

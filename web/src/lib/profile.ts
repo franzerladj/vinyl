@@ -19,8 +19,11 @@ export async function loadMyProfile(): Promise<CrateProfile | null> {
 }
 
 export async function saveMyProfile(p: CrateProfile): Promise<CrateProfile | null> {
+  const before = (await getKV<CrateProfile | null>("crateProfile:me", null))?.spotlight?.id;
   const { profile } = await req<{ profile: CrateProfile | null }>("/api/profile/me", p);
   await setKV("crateProfile:me", profile);
+  // Neue Platte des Moments erscheint im Feed der Freunde
+  void import("./buzz").then((b) => b.publishSpotlight(profile?.spotlight, before));
   return profile;
 }
 

@@ -14,6 +14,7 @@ import { buildIcs } from "../shared/ics";
 import { pushOps } from "./devsync";
 import { buzzStore, syncStore } from "./env";
 import { cleanText, validPost } from "./buzz";
+import { cleanOwnPost, validRef } from "../shared/ownPost";
 
 type C = Context<{ Bindings: Env; Variables: { cfg: Config } }>;
 
@@ -846,6 +847,22 @@ app.post("/api/buzz/recommend", async (c) => {
   const text = cleanText(j.text, 280) || null;
   await b.store.notify({ to, from: b.me, kind: "recommend", releaseId, title, text, ts: Date.now() });
   await tellFriend(c.var.cfg, to, { title: `${b.name} empfiehlt dir eine Platte`, body: text ? `${title}: ${text}` : title, url: `/release/${releaseId}`, tag: `rec-${b.me}-${releaseId}` });
+  return c.json({ ok: true });
+});
+
+// Eigener Beitrag im Feed der Freunde: Set gespielt, Platte des Moments
+app.post("/api/buzz/post", async (c) => {
+  const b = await buzzContext(c);
+  if (!b) return c.json({ message: "nicht angemeldet" }, 401);
+  const j = ((await c.req.json().catch(() => null)) ?? {}) as { kind?: unknown; ref?: unknown; data?: unknown; remove?: unknown };
+  if ((j.kind !== "set" && j.kind !== "spot") || !validRef(j.ref)) return c.json({ message: "ungültig" }, 400);
+  if (j.remove === true) {
+    await b.store.removePost(b.me, j.kind, j.ref);
+    return c.json({ ok: true });
+  }
+  const data = cleanOwnPost(j.kind, j.data);
+  if (!data) return c.json({ message: "ungültig" }, 400);
+  await b.store.post({ owner: b.me, kind: j.kind, ref: j.ref, data, ts: Date.now() });
   return c.json({ ok: true });
 });
 

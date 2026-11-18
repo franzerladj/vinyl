@@ -1,5 +1,5 @@
 import { SwipeArea } from "../components/Pager";
-import { Activity } from "../components/Buzz";
+import { Activity, ShareSetsSwitch } from "../components/Buzz";
 import { refreshBuzz } from "../lib/buzz";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -301,6 +301,7 @@ function FriendList() {
         )}
 
         {friends && friends.length > 0 && <FriendsHome friends={friends} limit={20} feedOnly />}
+        {friends && friends.length > 0 && <ShareSetsSwitch />}
 
         <div className="card stack" style={{ gap: 6 }}>
           <b>Damit Freunde deine Platten sehen</b>
