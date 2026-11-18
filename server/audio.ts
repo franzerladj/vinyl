@@ -13,7 +13,7 @@ export interface AudioInfo {
 
 const clean = (s: string) => s.replace(/\(.*?\)|\[.*?\]/g, "").replace(/\s+/g, " ").trim();
 
-export async function deezer(artist: string, title: string, duration?: number | null): Promise<(Partial<AudioInfo> & { matchedTitle?: string; score?: number }) | null> {
+export async function deezer(artist: string, title: string, duration?: number | null, opts: { light?: boolean } = {}): Promise<(Partial<AudioInfo> & { id?: number; matchedTitle?: string; score?: number }) | null> {
   type Hit = { id: number; title: string; title_version?: string; duration?: number; preview?: string; artist?: { name: string } };
   const search = async (q: string) => {
     const res = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=10`);
@@ -25,12 +25,11 @@ export async function deezer(artist: string, title: string, duration?: number | 
   const titles = searchTitles(title);
   const queries = [`artist:"${clean(artist)}" track:"${clean(title)}"`, `${artist} ${title}`, `${clean(artist)} ${titles.at(-1) ?? title}`];
   const tried = new Set<string>();
+  // Alle Suchen einer Runde gleichzeitig (vorher nacheinander: das kostete je Hörprobe über eine Sekunde)
   const run = async (qs: string[]) => {
-    for (const q of qs) {
-      if (tried.has(q) || q.trim().length < 3) continue;
-      tried.add(q);
-      for (const h of await search(q)) seen.set(h.id, h);
-    }
+    const fresh = [...new Set(qs)].filter((q) => !tried.has(q) && q.trim().length >= 3);
+    fresh.forEach((q) => tried.add(q));
+    for (const hits of await Promise.all(fresh.map((q) => search(q).catch(() => [] as Hit[])))) for (const h of hits) seen.set(h.id, h);
   };
   const pick = () => {
     let b: { h: Hit; s: number } | null = null;
@@ -53,8 +52,10 @@ export async function deezer(artist: string, title: string, duration?: number | 
   }
   if (!best || best.s < 0.55) return null;
   const hit = best.h;
-  const track = (await (await fetch(`https://api.deezer.com/track/${hit.id}`)).json()) as { bpm?: number; preview?: string };
+  // Nur für die Hörprobe (light) reicht der Suchtreffer: das Tempo steht erst in den Track-Details
+  const track = opts.light && hit.preview ? ({ preview: hit.preview } as { bpm?: number; preview?: string }) : ((await (await fetch(`https://api.deezer.com/track/${hit.id}`)).json()) as { bpm?: number; preview?: string });
   return {
+    id: hit.id,
     bpm: track.bpm && track.bpm > 0 ? Math.round(track.bpm) : null,
     previewUrl: track.preview || hit.preview || null,
     matchedTitle: `${hit.artist?.name ?? ""} – ${hit.title}${hit.title_version ? ` ${hit.title_version}` : ""}`,
@@ -67,14 +68,67 @@ export async function lookupAudio(_config: Config, artist: string, title: string
   return { bpm: ds?.bpm ?? null, key: null, source: ds?.bpm ? ["Deezer"] : [], previewUrl: ds?.previewUrl ?? null, matched: ds?.matchedTitle ?? null };
 }
 
-/** Hörprobe von Deezer durchreichen (für die Analyse im Browser, dort fehlen CORS-Header) */
-export async function fetchPreview(artist: string, title: string, duration?: number | null): Promise<Response> {
-  const d = await deezer(artist, title, duration);
-  const url = d?.previewUrl;
+/**
+ * Gedächtnis für die Suche: Artist und Titel → Deezer-Track (0 = keiner). Je Worker im Speicher und,
+ * wo es ihn gibt, im Cache von Cloudflare (gilt dann für alle Worker des Standorts). So kostet die
+ * zweite Anfrage nach derselben Hörprobe keine Suche mehr, und das Vorbereiten der nächsten Karte
+ * beim Diggen (warm) zahlt sich aus. Gemerkt wird nur die Nummer: die Adresse der Hörprobe läuft ab.
+ */
+const memo = new Map<string, { id: number; until: number }>();
+const MEMO_HIT_MS = 24 * 3600_000;
+const MEMO_MISS_MS = 3600_000;
+const edgeCache = (): Cache | null => {
+  const c = (globalThis as { caches?: { default?: Cache } }).caches?.default;
+  return c ?? null;
+};
+const memoUrl = (key: string) => `https://memo.crate.invalid/dz/${encodeURIComponent(key)}`;
+async function memoGet(key: string): Promise<number | undefined> {
+  const m = memo.get(key);
+  if (m && m.until > Date.now()) return m.id;
+  try {
+    const r = await edgeCache()?.match(memoUrl(key));
+    if (r) {
+      const id = Number(await r.text()) || 0;
+      memo.set(key, { id, until: Date.now() + MEMO_MISS_MS });
+      return id;
+    }
+  } catch {
+    /* ohne Cache geht es auch */
+  }
+  return undefined;
+}
+async function memoSet(key: string, id: number) {
+  const ttl = id ? MEMO_HIT_MS : MEMO_MISS_MS;
+  memo.set(key, { id, until: Date.now() + ttl });
+  if (memo.size > 3000) memo.delete(memo.keys().next().value as string);
+  try {
+    await edgeCache()?.put(memoUrl(key), new Response(String(id), { headers: { "Cache-Control": `public, max-age=${Math.round(ttl / 1000)}` } }));
+  } catch {
+    /* egal */
+  }
+}
+
+async function streamPreview(url: string | null | undefined): Promise<Response> {
   if (!url || !/^https:\/\/[a-z0-9-]+\.dzcdn\.net\//.test(url)) return new Response("Keine Hörprobe", { status: 404 });
   const r = await fetch(url);
   if (!r.ok || !r.body) return new Response("Hörprobe nicht ladbar", { status: 502 });
   return new Response(r.body, { headers: { "Content-Type": r.headers.get("Content-Type") ?? "audio/mpeg", "Cache-Control": "private, max-age=3600" } });
+}
+
+/**
+ * Hörprobe von Deezer durchreichen (für die Analyse im Browser, dort fehlen CORS-Header).
+ * warm: nur suchen und merken, nichts ausliefern (bereitet die nächste Karte beim Diggen vor).
+ */
+export async function fetchPreview(artist: string, title: string, duration?: number | null, warm = false): Promise<Response> {
+  const key = `${artist}|${title}|${duration ? Math.round(duration / 5) : ""}`.toLowerCase();
+  const known = await memoGet(key);
+  if (known === 0) return new Response("Keine Hörprobe", { status: 404 });
+  if (known) return warm ? new Response(null, { status: 204 }) : fetchPreviewById(known);
+  const d = await deezer(artist, title, duration, { light: true });
+  const ok = Boolean(d?.id && d.previewUrl);
+  await memoSet(key, ok ? d!.id! : 0);
+  if (!ok) return new Response("Keine Hörprobe", { status: 404 });
+  return warm ? new Response(null, { status: 204 }) : streamPreview(d!.previewUrl);
 }
 
 // ---------------------------------------------------------------------------

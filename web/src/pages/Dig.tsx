@@ -186,9 +186,11 @@ export default function Dig() {
       else setAudioState("paused");
     });
     // Nächste Karten vorladen. Mit Preisgrenze weiter voraus, damit zu teure vorher rausfallen.
-    cards.slice(active + 1, active + (filter.maxPrice ? 6 : 3)).forEach((c) =>
-      void digDetail(c.id).then((d) => {
+    cards.slice(active + 1, active + (filter.maxPrice ? 6 : 3)).forEach((c, k) =>
+      void digDetail(c.id, { soon: true }).then((d) => {
         if (filter.maxPrice && d.lowest !== undefined && !passesPrice(d.lowest, filter.maxPrice)) setCards((cs) => cs.filter((x) => x.id !== c.id || cs.indexOf(x) <= active));
+        // Die Hörprobe der nächsten Karte schon suchen lassen (ohne sie zu laden): beim Wischen startet sie dann sofort
+        if (k === 0 && !cancelled && d.tracks.length) void fetch(`${previewUrl(c.artist, d.tracks[0].title, parseDuration(d.tracks[0].duration))}&warm=1`).catch(() => undefined);
       }),
     );
     if (cards.length - active < 5 && !loadingMore.current) {

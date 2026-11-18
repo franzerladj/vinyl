@@ -1,6 +1,6 @@
 // Quellen für den Digging-Feed: Discogs-Suche nach Labels, Artists und Styles aus der
 // eigenen Sammlung, Neuerscheinungen, gesuchte Raritäten, Zufallsfunde und Freunde.
-import { discogs } from "./api";
+import { discogs, hurryDiscogs } from "./api";
 import { db, getKV, setKV } from "./db";
 import type { SearchResult } from "./types";
 import { currency } from "./sync";
@@ -261,12 +261,12 @@ export interface DigDetail {
 const details = new Map<number, Promise<DigDetail>>();
 
 /** Tracklist und Video für Hörprobe und Detailansicht, im Speicher zwischengespeichert */
-export function digDetail(id: number): Promise<DigDetail> {
+export function digDetail(id: number, opts: { soon?: boolean } = {}): Promise<DigDetail> {
   let p = details.get(id);
   if (!p) {
     p = currency()
       .then((cur) =>
-        discogs<{ tracklist?: { position: string; title: string; duration?: string; type_?: string }[]; videos?: { uri: string }[]; lowest_price?: number | null; num_for_sale?: number }>(`/releases/${id}?curr_abbr=${cur}`).then((r) => ({ r, cur })),
+        discogs<{ tracklist?: { position: string; title: string; duration?: string; type_?: string }[]; videos?: { uri: string }[]; lowest_price?: number | null; num_for_sale?: number }>(`/releases/${id}?curr_abbr=${cur}`, { soon: opts.soon }).then((r) => ({ r, cur })),
       )
       .then(({ r, cur }) => ({
         lowest: r.lowest_price ?? null,
@@ -275,8 +275,12 @@ export function digDetail(id: number): Promise<DigDetail> {
         tracks: (r.tracklist ?? []).filter((t) => !t.type_ || t.type_ === "track"),
         video: r.videos?.map((v) => v.uri.match(/[?&]v=([\w-]{11})/)?.[1]).find(Boolean),
       }))
-      .catch(() => ({ tracks: [] }));
+      .catch(() => {
+        // Fehlschlag nicht merken: beim nächsten Blick auf die Karte wird neu geladen
+        details.delete(id);
+        return { tracks: [] } as DigDetail;
+      });
     details.set(id, p);
-  }
+  } else if (!opts.soon) hurryDiscogs(`/releases/${id}?`);
   return p;
 }

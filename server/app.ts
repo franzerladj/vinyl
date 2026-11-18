@@ -363,7 +363,7 @@ app.post("/api/audio/release", async (c) => {
 
 app.get("/api/audio/preview/:id", (c) => fetchPreviewById(Number(c.req.param("id"))));
 
-app.get("/api/audio/preview", (c) => fetchPreview(c.req.query("artist") ?? "", c.req.query("title") ?? "", Number(c.req.query("duration")) || null));
+app.get("/api/audio/preview", (c) => fetchPreview(c.req.query("artist") ?? "", c.req.query("title") ?? "", Number(c.req.query("duration")) || null, c.req.query("warm") === "1"));
 
 app.get("/api/lastfm/tags", async (c) => {
   if (!c.var.cfg.lastfmKey) return c.json({ message: "LASTFM_API_KEY fehlt" }, 501);

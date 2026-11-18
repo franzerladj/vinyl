@@ -26,7 +26,9 @@ export interface JobText {
 }
 
 /** So viele Anfragen schafft der Hintergrund pro Minute bei Discogs (Grenze von Discogs: 60) */
-export const DISCOGS_PER_MIN = 50;
+export const DISCOGS_PER_MIN = 44;
+/** Vorrat für den schnellen Start: so viele gehen sofort */
+const DISCOGS_BURST = 14;
 
 interface Kind {
   short: string;
@@ -88,8 +90,8 @@ export function etaSeconds(j: JobLike, all: JobLike[], now: number, pauseMs = 0)
   const perSec = DISCOGS_PER_MIN / 60;
   // Gerade Pause (die Minute ist voll): erst warten, dann geht der Rest im Takt von Discogs
   if (pauseMs > 1500) return pauseMs / 1000 + Math.max(3, pending / perSec - 60 + 10);
-  // Was in die laufende Minute passt, geht sofort; der Rest wartet auf Discogs
-  const limited = pending <= DISCOGS_PER_MIN ? 0 : ((pending - DISCOGS_PER_MIN) / DISCOGS_PER_MIN) * 60;
+  // Ein kleiner Vorrat geht sofort, der Rest im gleichmäßigen Takt
+  const limited = pending <= DISCOGS_BURST ? 0 : ((pending - DISCOGS_BURST) / DISCOGS_PER_MIN) * 60;
   if (observed == null) return limited > 0 ? limited : null;
   return Math.max(observed, limited);
 }

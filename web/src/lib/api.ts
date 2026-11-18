@@ -10,22 +10,35 @@ export class ApiError extends Error {
   }
 }
 
-type Job = { run: () => Promise<void>; fail: (e: Error) => void; priority: number };
+type Job = { run: () => Promise<void>; fail: (e: Error) => void; priority: number; path?: string };
 const queue: Job[] = [];
 /** Zeitstempel der letzten Anfragen (gleitendes 60-Sekunden-Fenster) */
 const recent: number[] = [];
 const LIMIT_PER_MIN = 58;
 /** So viele davon darf der Hintergrund nehmen (der Rest bleibt frei für das, was du antippst) */
-const BACKGROUND_PER_MIN = 50;
-// Mehrere Anfragen gleichzeitig: Discogs zählt pro Minute, nicht pro Sekunde. Ein kleiner Abgleich
-// (ein paar Dutzend Anfragen) ist so in Sekunden durch statt in einer Minute. Der Hintergrund nimmt
-// höchstens drei Plätze, damit für das, was du antippst, immer einer frei ist.
+const BACKGROUND_PER_MIN = 44;
+/** … und so viele, solange du selbst etwas lädst */
+const BACKGROUND_PER_MIN_BUSY = 14;
+// Mehrere Anfragen gleichzeitig: ein kleiner Abgleich ist so in Sekunden durch statt in einer Minute.
+// Der Hintergrund nimmt höchstens drei Plätze, damit für das, was du antippst, immer einer frei ist.
 const MAX_PARALLEL = 4;
 const MAX_BACKGROUND = 3;
+// Der Hintergrund bekommt einen Vorrat für den schnellen Start und danach einen gleichmäßigen Takt.
+// Vorher durfte er das ganze Minuten-Kontingent in den ersten Sekunden verbrauchen: dann stand alles,
+// was man antippte (Diggen, Platten-Seite), bis zu 48 Sekunden. So wird ständig wieder etwas frei.
+// Ist man gerade selbst unterwegs (Anfrage in den letzten 20 s), tritt der Hintergrund deutlich kürzer.
+const BG_BURST = 14;
+const BG_EVERY_MS = 1300;
+const BG_EVERY_BUSY_MS = 4000;
+const USER_ACTIVE_MS = 20_000;
+let bgTokens = BG_BURST;
+let bgRefillAt = 0;
+let lastUserAt = -Infinity;
 let active = 0;
 let activeBackground = 0;
 let lastCall = -Infinity;
 let wake: ReturnType<typeof setTimeout> | null = null;
+let wakeAt = 0;
 let pausedUntil = 0;
 /** Wie lange die Schlange noch wartet, weil Discogs für diese Minute genug hat (ms, 0 = läuft) */
 export const discogsPauseMs = () => (queue.length ? Math.max(0, pausedUntil - clock()) : 0);
@@ -44,26 +57,54 @@ function pump() {
     while (recent.length && now - recent[0] > 60_000) recent.shift();
     // Volles Fenster: warten, bis die älteste Anfrage herausfällt.
     // Hintergrund-Jobs lassen Anfragen frei: was du antippst, kommt auch bei laufendem Sync sofort dran
-    const cap = bg ? BACKGROUND_PER_MIN : LIMIT_PER_MIN;
+    // Bist du gerade selbst unterwegs (z. B. beim Diggen), bekommt der Hintergrund nur einen kleinen Teil der
+    // Minute: jede Karte braucht eine Anfrage, und die soll nicht hinter dem Abgleich warten.
+    // Vorgeladenes (nächste Karte) lässt die letzten Plätze frei für das, was du gerade ansiehst.
+    const userActive = now - lastUserAt < USER_ACTIVE_MS;
+    const cap = bg ? (userActive ? BACKGROUND_PER_MIN_BUSY : BACKGROUND_PER_MIN) : job.priority < 10 ? LIMIT_PER_MIN - 6 : LIMIT_PER_MIN;
     let wait = recent.length >= cap ? recent[recent.length - cap] + 60_000 - now : 0;
-    pausedUntil = wait > 0 ? now + wait : 0;
+    // Als Pause von Discogs gilt nur das volle Fenster, nicht das Zurückstehen hinter dir
+    pausedUntil = wait > 0 && !(bg && userActive) ? now + wait : 0;
+    if (bg) {
+      // Vorrat auffüllen: im Takt, langsamer solange du selbst etwas lädst
+      const every = userActive ? BG_EVERY_BUSY_MS : BG_EVERY_MS;
+      if (!bgRefillAt) bgRefillAt = now;
+      const add = Math.floor((now - bgRefillAt) / every);
+      if (add > 0) {
+        bgTokens = Math.min(BG_BURST, bgTokens + add);
+        bgRefillAt = bgTokens >= BG_BURST ? now : bgRefillAt + add * every;
+      }
+      if (bgTokens < 1) wait = Math.max(wait, bgRefillAt + every - now);
+    }
     // Kurzer Abstand, damit nicht alles im selben Augenblick losgeht
     wait = Math.max(wait, lastCall + (bg ? 220 : 60) - now);
     if (wait > 0) {
-      if (!wake)
+      // Läuft schon ein Wecker für später (z. B. der lange eines Hintergrund-Jobs), wird er vorgezogen.
+      // Sonst wartet etwas Angetipptes, das nur den kurzen Abstand braucht, bis zu 50 s auf den alten Wecker.
+      if (wake && wakeAt > now + wait + 5) {
+        clearTimeout(wake);
+        wake = null;
+      }
+      if (!wake) {
+        wakeAt = now + wait;
         wake = setTimeout(() => {
           wake = null;
           // Der Abstand ist abgewartet, egal was die Uhr sagt
           lastCall = -Infinity;
           pump();
         }, wait);
+      }
       return;
     }
     queue.shift();
     lastCall = now;
     recent.push(now);
     active++;
-    if (bg) activeBackground++;
+    if (bg) {
+      activeBackground++;
+      if (bgTokens >= BG_BURST) bgRefillAt = now;
+      bgTokens--;
+    } else if (job.priority >= 10) lastUserAt = now;
     // Wächter: hängt eine Anfrage, wird ihr Platz nach spätestens einer Minute frei.
     // Der Aufrufer bekommt dann einen Fehler statt ewig zu warten (sonst hängt z. B. das Einsortieren)
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -107,11 +148,22 @@ export async function fetchWithTimeout(url: string, init: RequestInit = {}, ms =
 }
 const isAbort = (e: unknown) => (e as { name?: string })?.name === "AbortError";
 
-function enqueue<T>(fn: () => Promise<T>, priority: number): Promise<T> {
+function enqueue<T>(fn: () => Promise<T>, priority: number, path?: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    queue.push({ priority, run: () => fn().then(resolve, reject), fail: reject });
+    queue.push({ priority, path, run: () => fn().then(resolve, reject), fail: reject });
     pump();
   });
+}
+
+/** Etwas Vorgeladenes wird jetzt gebraucht (die Karte ist dran): in der Schlange nach vorn */
+export function hurryDiscogs(pathStart: string) {
+  let any = false;
+  for (const j of queue)
+    if (j.priority < 10 && j.path?.startsWith(pathStart)) {
+      j.priority = 10;
+      any = true;
+    }
+  if (any) pump();
 }
 
 export interface DiscogsOptions {
@@ -119,6 +171,8 @@ export interface DiscogsOptions {
   body?: unknown;
   /** Hintergrund-Jobs (Sync) haben niedrige Priorität, Nutzeraktionen hohe */
   background?: boolean;
+  /** Vorladen (z. B. die nächste Karte beim Diggen): nach dem Angetippten, aber vor dem Abgleich */
+  soon?: boolean;
   /** Schreibende Anfrage, die man gefahrlos wiederholen kann (z. B. in einen Ordner verschieben) */
   retry?: boolean;
 }
@@ -201,7 +255,7 @@ export function discogs<T>(path: string, opts: DiscogsOptions = {}): Promise<T> 
       return (text ? JSON.parse(text) : undefined) as T;
     }
     throw new ApiError(429, "Discogs ist gerade ausgelastet, bitte kurz warten");
-  }, opts.background ? 0 : 10);
+  }, opts.background ? 0 : opts.soon ? 5 : 10, path);
 }
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
