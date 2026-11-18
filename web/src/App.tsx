@@ -268,11 +268,12 @@ const pipelineBusy = () => busyCheck();
  * ist dann noch nichts da, was sie verwerfen könnten (sonst träfen sie die gerade abgeholten Werte der anderen Geräte).
  */
 async function runMigrations() {
-  const { migrateAudioMatching, migrateAlbumMatching, migrateTempoV2, migrateKeyV2 } = await import("./lib/sync");
+  const { migrateAudioMatching, migrateAlbumMatching, migrateTempoV2, migrateKeyV2, migrateLookupV3 } = await import("./lib/sync");
   await migrateAudioMatching();
   await migrateAlbumMatching();
   await migrateTempoV2();
   await migrateKeyV2();
+  await migrateLookupV3();
 }
 
 async function startupSync() {
@@ -289,6 +290,8 @@ async function startupSync() {
     void import("./lib/social").then((m) => m.refreshSocial()).catch(() => undefined);
     // Reaktionen, Kommentare und Empfehlungen von Freunden
     void import("./lib/buzz").then((m) => m.refreshBuzz().then(() => m.publishPlayedSets())).catch(() => undefined);
+    // Cover der anstehenden Sets für ohne Netz sichern
+    void import("./lib/offline").then((m) => m.cacheUpcomingSets()).catch(() => undefined);
     // Offene Ordner-Änderungen (z. B. App beim Einsortieren geschlossen) weiter zu Discogs schicken
     void import("./lib/folders").then((f) => f.resumeFolderQueue()).catch(() => undefined);
     const last = await getKV<number>("lastCollectionSync", 0);

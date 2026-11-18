@@ -549,6 +549,21 @@ export async function migrateKeyV2() {
   await setKV("migration-key-v2", true);
 }
 
+/**
+ * Die Hörproben-Suche findet mehr (Platten mit mehreren Artists, Gäste im Titel, Radio Edit statt Original):
+ * Tracks ohne Treffer einmal neu suchen lassen.
+ */
+export async function migrateLookupV3() {
+  if (await getKV("migration-lookup-v3", false)) return;
+  await db.tracks.toCollection().modify((t) => {
+    if (!t.deezerId && t.lookedUpAt) {
+      t.lookedUpAt = undefined;
+      if (!t.analyzedAt) t.analyzeTries = undefined;
+    }
+  });
+  await setKV("migration-lookup-v3", true);
+}
+
 /** Einmalig nach Einführung der Album-Zuordnung: Tracks ohne BPM nochmal suchen lassen */
 export async function migrateAlbumMatching() {
   if (await getKV("migration-album-v1", false)) return;

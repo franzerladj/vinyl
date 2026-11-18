@@ -1,5 +1,8 @@
 // Set kuratieren: Kiste packen, Reihenfolge selbst bauen, „Was passt danach?“ mit Begründung,
 // Mix-Notizen, Reinhören, Live-Modus. Die Automatik ist nur noch eine Hilfe, kein Ersatz.
+import { cacheSetCovers } from "../lib/offline";
+import { SetSheet } from "../components/print/SetSheet";
+import type { PrintOpts } from "../components/print/types";
 import { MenuSheet, NavBar } from "../components/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -13,7 +16,7 @@ import { playedHistory, playedText, type PlayedAt } from "../lib/setHistory";
 import { ask, toast, username } from "../lib/store";
 import { deleteTemplate, saveTemplate, stillOwned, useTemplates } from "../lib/crateTemplates";
 import { Cover, haptic, Seg, Sheet, keepParens, useRootClass, useBackClose } from "../components/bits";
-import { IconCheck, IconPlay, IconPlus, IconX } from "../components/icons";
+import { IconCheck, IconPlay, IconPlus, IconX, IconPrint } from "../components/icons";
 import { TrackLine } from "./Sets";
 import { previewUrl } from "../lib/free";
 import { buildSetlist, setStats, suggestNext, targetEnergy, type Curve, type SetTrack, type Suggestion } from "../../../shared/setlist";
@@ -285,6 +288,18 @@ export default function SetEditor() {
     };
   }, []);
 
+  // Cover der Platten für ohne Netz sichern (im Club gibt es oft keins), kurz nach jeder Änderung
+  const [offline, setOffline] = useState<{ ready: number; total: number } | null>(null);
+  const offlineKey = `${set.trackIds.join(",")}|${(set.crateIds ?? []).join(",")}`;
+  useEffect(() => {
+    if (!set.trackIds.length && !(set.crateIds ?? []).length) return setOffline(null);
+    const t = setTimeout(() => void cacheSetCovers(set).then(setOffline, () => undefined), 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offlineKey]);
+  // Einstellungen vom Beschriften gelten auch für die gedruckte Setliste (Schrift, Schwarz-Weiß, eigene Zeile)
+  const printOpts = useLiveQuery(() => getKV<Partial<PrintOpts>>("printOpts", {}), []) ?? {};
+
   // Reinhören: ein Audio-Element für alles (iOS spielt nur nach Tippen)
   const nowOf = (t: TrackMeta) => {
     const r = data?.rels.get(t.releaseId);
@@ -458,10 +473,16 @@ export default function SetEditor() {
               <button className="btn small" onClick={() => setShareMenu(true)}>
                 Teilen
               </button>
+              <button className="btn small" onClick={() => (haptic(5), window.print())}>
+                <IconPrint /> Drucken
+              </button>
               <button className="btn small ghost" onClick={() => setAuto(true)}>
                 Automatik
               </button>
             </div>
+            {offline && offline.total > 0 && (
+              <p className="set-offline mono">{offline.ready >= offline.total ? `Ohne Netz bereit · ${offline.total} Cover gesichert` : navigator.onLine ? `Cover für ohne Netz: ${offline.ready} von ${offline.total}` : `Ohne Netz: ${offline.ready} von ${offline.total} Covern gesichert`}</p>
+            )}
           </div>
         )}
 
@@ -661,6 +682,11 @@ export default function SetEditor() {
           })
         }
       />
+
+      <style>{`@media print { @page { size: A4; margin: 0; } }`}</style>
+      <div className="print-area print-only">
+        <SetSheet set={set} tracks={tracks} rels={data?.rels} o={{ showBpm: true, showKey: true, showCamelot: true, showEnergy: true, showStyles: false, showShelf: false, showQr: false, showDuration: false, showCover: false, ...printOpts }} />
+      </div>
 
       {live && (
         <LiveMode

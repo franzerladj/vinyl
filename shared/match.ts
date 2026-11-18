@@ -6,14 +6,25 @@ const STOP = new Set(["the", "a", "an", "and", "feat", "ft", "featuring", "offic
 export const normTokens = (s: string) =>
   s
     .toLowerCase()
+    // Abkürzungen mit Punkten zusammenziehen: „L.A.O.S“ → „laos“ (sonst blieben nur einzelne Buchstaben, die wegfallen)
+    .replace(/\b(?:[a-z0-9]\.){2,}[a-z0-9]?/g, (m) => m.replace(/\./g, ""))
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/['’`]/g, "")
     .split(/[^a-z0-9]+/)
     .filter((w) => w.length > 1 && !STOP.has(w));
 
-/** Teile in Klammern (Mix-Name), z.B. "Red Hand Gang Mix" */
-export const mixPart = (s: string) => (s.match(/[([]([^)\]]+)[)\]]/g) ?? []).map((m) => m.slice(1, -1)).join(" ");
+/** Klammern, die keinen Mix benennen: „(feat. X)“, „(with X)“ */
+const GUEST = /^\s*(feat\.?|ft\.?|featuring|with)\b/i;
+/**
+ * Dieselbe Aufnahme in anderer Länge: Original, Extended, Radio Edit, Albumversion. Tempo und Tonart sind gleich,
+ * als Hörprobe taugt jede davon. Ein Remix oder Dub ist dagegen ein anderes Stück.
+ */
+const SAME_RECORDING = /^\s*(original( mix| version)?|extended( mix| version)?|radio (edit|mix|version)|album (version|mix)|(long|short|full|full length|single) (version|edit|mix)|12"? ?(inch )?(version|mix)|edit)\s*$/i;
+const brackets = (s: string) => (s.match(/[([]([^)\]]+)[)\]]/g) ?? []).map((m) => m.slice(1, -1)).filter((m) => !GUEST.test(m));
+
+/** Teile in Klammern (Mix-Name), z.B. "Red Hand Gang Mix"; ohne Gäste und ohne bloße Längen-Varianten */
+export const mixPart = (s: string) => brackets(s).filter((m) => !SAME_RECORDING.test(m)).join(" ");
 
 /** "6:02" → 362 */
 export function parseDuration(d?: string | null): number | null {
@@ -54,9 +65,29 @@ export function searchTitles(t: string): string[] {
   return [...new Set([noBrackets, latin, noFormat].map((x) => x.replace(/\s+/g, " ").trim()).filter((x) => x.length > 1))];
 }
 
-export function matchScore(track: MatchTrack, candTitle: string, candDuration?: number | null, candArtist?: string): number {
+/** Wörter, die jeder Mix-Name trägt und die deshalb nichts unterscheiden */
+const GENERIC_MIX = new Set(["mix", "remix", "rmx", "version", "edit", "re"]);
+const rawWords = (t: string) => t.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f'’`]/g, "").split(/[^a-z0-9]+/).filter((w) => w.length > 1);
+/** Unterscheidende Wörter eines Mix-Namens: „Laboratoire Mix“ → laboratoire, „Video Mix“ → video */
+const mixWords = (t: string) => rawWords(mixPart(t)).filter((w) => !GENERIC_MIX.has(w));
+
+/**
+ * strictMix (für Hörproben und Tempo): der Mix muss wirklich derselbe sein. Ein Remix ist ein anderes Stück,
+ * also zählt weder das Original als Treffer für einen Remix noch ein anderer Mix, nur weil beide „Mix“ heißen.
+ */
+export function matchScore(track: MatchTrack, candTitle: string, candDuration?: number | null, candArtist?: string, opts: { strictMix?: boolean } = {}): number {
+  if (opts.strictMix) {
+    const want = mixWords(track.title);
+    if (want.length) {
+      const have = new Set(rawWords(candTitle));
+      const hit = want.filter((w) => have.has(w)).length / want.length;
+      // Kandidat nennt einen anderen Mix oder gar keinen (dann ist es das Original)
+      if (hit < 0.5) return 0;
+    }
+  }
   const cand = new Set(normTokens(candTitle));
-  const base = normTokens(track.title.replace(/[([][^)\]]*[)\]]/g, " "));
+  // Gäste gehören nicht zum Titel: „Moss feat. Daniel Agust“ steht anderswo als „Moss“ mit dem Gast beim Artist
+  const base = normTokens(track.title.replace(/[([][^)\]]*[)\]]/g, " ").replace(/\b(feat\.?|ft\.?|featuring)\s.+$/i, " "));
   const mix = normTokens(mixPart(track.title));
   const candMix = normTokens(mixPart(candTitle));
   if (!base.length) return 0;
@@ -69,7 +100,8 @@ export function matchScore(track: MatchTrack, candTitle: string, candDuration?: 
     if (candMix.length && mixHit < 0.5) score -= 0.25;
   } else {
     // Track ohne Mix-Angabe: Kandidat mit fremdem Remix abwerten
-    score += candMix.some((w) => /remix|rmx|dub|edit|mix|version/.test(w)) ? 0 : 0.2;
+    // (Radio Edit, Extended und Original zählen als dieselbe Aufnahme und stehen nicht in candMix)
+    score += candMix.length ? 0 : 0.2;
     if (candMix.some((w) => /remix|rmx/.test(w))) score -= 0.15;
   }
   if (candArtist != null && track.artist && !isVarious(track.artist)) {

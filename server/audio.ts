@@ -24,12 +24,32 @@ export async function deezer(artist: string, title: string, duration?: number | 
   const seen = new Map<number, Hit>();
   const titles = searchTitles(title);
   const queries = [`artist:"${clean(artist)}" track:"${clean(title)}"`, `${artist} ${title}`, `${clean(artist)} ${titles.at(-1) ?? title}`];
-  for (const q of [...new Set(queries)]) for (const h of await search(q)) seen.set(h.id, h);
-  let best: { h: Hit; s: number } | null = null;
-  for (const h of seen.values()) {
-    const candTitle = `${h.title} ${h.title_version ?? ""}`;
-    const s = matchScore({ title, artist, duration }, candTitle, h.duration, h.artist?.name ?? "");
-    if (!best || s > best.s) best = { h, s };
+  const tried = new Set<string>();
+  const run = async (qs: string[]) => {
+    for (const q of qs) {
+      if (tried.has(q) || q.trim().length < 3) continue;
+      tried.add(q);
+      for (const h of await search(q)) seen.set(h.id, h);
+    }
+  };
+  const pick = () => {
+    let b: { h: Hit; s: number } | null = null;
+    for (const h of seen.values()) {
+      const candTitle = `${h.title} ${h.title_version ?? ""}`;
+      const s = matchScore({ title, artist, duration }, candTitle, h.duration, h.artist?.name ?? "", { strictMix: true });
+      if (!b || s > b.s) b = { h, s };
+    }
+    return b;
+  };
+  await run(queries);
+  let best = pick();
+  if (!best || best.s < 0.55) {
+    // Nichts Passendes: bei mehreren Artists („A & B“, „A feat. B“) führt Deezer oft nur einen. Dann je Artist
+    // mit dem bloßen Titel suchen (ohne Klammern und ohne „feat. …“). Nur in diesem Fall, das spart Anfragen.
+    const bare = (titles.at(-1) ?? title).replace(/\b(feat\.?|ft\.?|featuring)\s.+$/i, "").trim();
+    const names = clean(artist).split(/\s*(?:,|&|\+|\bfeat\.?|\bft\.?|\bfeaturing\b|\bvs\.?|\bx\b|\band\b|\bpres\.?|\bpresents\b)\s*/i).map((n) => n.trim()).filter((n) => n.length > 1);
+    await run([...names.slice(0, 2).map((n) => `${n} ${bare}`), `${clean(artist)} ${bare}`]);
+    best = pick();
   }
   if (!best || best.s < 0.55) return null;
   const hit = best.h;
@@ -104,7 +124,7 @@ export async function matchRelease(artist: string, title: string, tracks: Releas
     const found: typeof pairs = [];
     for (const tr of tracks) {
       for (const d of list) {
-        const sc = matchScore({ title: tr.title, artist: tr.artist || artist, duration: tr.duration }, `${d.title} ${d.title_version ?? ""}`, d.duration, d.artist?.name ?? "");
+        const sc = matchScore({ title: tr.title, artist: tr.artist || artist, duration: tr.duration }, `${d.title} ${d.title_version ?? ""}`, d.duration, d.artist?.name ?? "", { strictMix: true });
         if (sc >= 0.5) found.push({ key: tr.key, t: d, s: sc });
       }
     }

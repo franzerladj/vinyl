@@ -44,3 +44,31 @@ describe("Artist-Prüfung und Suchtitel", () => {
     expect(searchTitles("Black Moon EP").at(-1)).toBe("Black Moon");
   });
 });
+
+describe("Zuordnung für Hörproben (strictMix)", () => {
+  const strict = { strictMix: true };
+  it("nimmt das Original nicht als Treffer für einen Remix", () => {
+    expect(matchScore({ title: "In The Beginning (DJ Astrid Remix)", artist: "2 Souls & Astrid" }, "In the Beginning", null, "2 Souls", strict)).toBeLessThan(0.55);
+    expect(matchScore({ title: "Turn Me Out (Dylan Rhymes Remix)", artist: "Meat Katie & Christian J" }, "Turn Me Out (Dylan Rhymes Remix)", null, "Meat Katie", strict)).toBeGreaterThan(0.8);
+  });
+
+  it("lässt sich vom Wort „Mix“ nicht täuschen", () => {
+    expect(matchScore({ title: "Flashback (Video Mix)", artist: "Laurent Garnier" }, "Flashback (Laboratoire Mix)", null, "Laurent Garnier", strict)).toBeLessThan(0.55);
+    expect(matchScore({ title: "Indigo (Alectric Mix)", artist: "Neurotron & Alectric" }, "Indigo (Alectric Remix)", null, "Neurotron", strict)).toBeGreaterThan(0.7);
+  });
+
+  it("behandelt Original, Extended und Radio Edit als dieselbe Aufnahme", () => {
+    expect(matchScore({ title: "Moss feat. Daniel Agust (Original Mix)", artist: "GusGus" }, "Moss (Radio Edit)", null, "Gusgus ft. Daniel Agust", strict)).toBeGreaterThan(0.7);
+    expect(matchScore({ title: "Slow Back (Original Mix)", artist: "Kinder Atom" }, "Slow Back", null, "Kinder Atom", strict)).toBeGreaterThan(0.8);
+  });
+
+  it("erkennt Gäste in Klammern und Abkürzungen mit Punkten", () => {
+    expect(matchScore({ title: "Mary's Wisdom (Original Mix)", artist: "The Timewriter & Mary Joe" }, "Mary's Wisdom (with Mary Joe)", null, "The Timewriter", strict)).toBeGreaterThan(0.7);
+    expect(matchScore({ title: "Hush Now (501 Remix)", artist: "L.A.O.S & 501" }, "Hush Now (501 Remix)", null, "L.A.O.S", strict)).toBeGreaterThan(0.8);
+    expect(artistSimilarity("L.A.O.S", "LAOS")).toBe(1);
+  });
+
+  it("lehnt einen fremden Artist mit gleichem Titel weiter ab", () => {
+    expect(matchScore({ title: "Believe (Original Mix)", artist: "Popstitute" }, "Believe", null, "Cher", strict)).toBeLessThan(0.55);
+  });
+});
