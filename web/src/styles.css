@@ -1690,3 +1690,4 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .ship-import { display: grid; gap: 10px; padding-top: 12px; border-top: 0.5px solid var(--hairline); }
 .ship-import small { display: block; color: var(--text-2); font-size: 13px; line-height: 1.35; }
 .ship-import b { display: block; }
+.daily .tonearm.down { rotate: 27deg; } /* Nadel sitzt beim Abspielen in den Rillen, nicht daneben */
