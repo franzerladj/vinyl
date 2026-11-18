@@ -145,6 +145,12 @@ export default function ReleasePage() {
   const hintsFor = (t?: TrackMeta | null) => ({ expectedBpm: estimateBpm(rel.styles ?? [], tracks.filter((x) => x.id !== t?.id && x.bpm).map((x) => x.bpm!)) });
   const setMeta = (patch: Record<string, unknown>) => db.recordMeta.put({ ...meta, releaseId: id, ...patch });
   const saveTrack = (t: TrackMeta, patch: Partial<TrackMeta>) => db.tracks.update(t.id, patch);
+  // Für den Player: alle Tracks der Platte, damit Vor/Zurück und Weiterlaufen gehen
+  const nowOf = (m: TrackMeta, dur?: number | null) => ({ src: m.deezerId ? `/api/audio/preview/${m.deezerId}` : previewUrl(m.artist, m.title, dur), title: m.title, artist: m.artist, cover: rel.cover || rel.thumb, releaseId: id, trackId: m.id });
+  const playQueue = () => tl.flatMap((t, i) => {
+    const m = tm.get(trackId(id, t.position, i));
+    return m ? [nowOf(m, parseDuration(t.duration))] : [];
+  });
   /** Track antippen: passendes YouTube-Video starten, sonst die Deezer-Hörprobe (direkt in der Tipp-Geste, damit Browser das Abspielen erlauben) */
   const openTrack = (m: TrackMeta, t: { title: string; duration?: string }) => {
     haptic(5);
@@ -155,7 +161,7 @@ export default function ReleasePage() {
       setMedia({ type: "yt", id: youtubeId(video.uri)!, title: video.title });
       setYtPlaying(true);
     } else {
-      void playPlayer({ src: m.deezerId ? `/api/audio/preview/${m.deezerId}` : previewUrl(m.artist, m.title, dur), title: m.title, artist: m.artist, cover: rel.cover || rel.thumb, releaseId: id, trackId: m.id });
+      void playPlayer(nowOf(m, dur), playQueue());
       setMedia({ type: "deezer" });
     }
     setEdit(m);
@@ -644,7 +650,7 @@ export default function ReleasePage() {
             }}
             onToggleAudio={() => {
               if (player.now?.trackId === edit.id) togglePlayer();
-              else void playPlayer({ src: edit.deezerId ? `/api/audio/preview/${edit.deezerId}` : previewUrl(edit.artist, edit.title), title: edit.title, artist: edit.artist, cover: rel.cover || rel.thumb, releaseId: id, trackId: edit.id });
+              else void playPlayer(nowOf(edit), playQueue());
             }}
             onSave={(p) => saveTrack(edit, p).then(() => (closeTrack(), toast("Gespeichert")))}
           />

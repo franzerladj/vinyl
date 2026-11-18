@@ -247,7 +247,7 @@ export function useBackClose(open: boolean, onClose: () => void) {
 }
 
 /** Liegt gerade etwas über der Seite (Blatt, Dialog, Schnellmenü, Story, Live-Modus)? Dann ruhen die Gesten der Seite darunter. */
-export const overlayOpen = () => Boolean(document.querySelector(".sheet, .dig-sheet-bg, .ctx, .ys, .ask-backdrop, .live"));
+export const overlayOpen = () => Boolean(document.querySelector(".sheet, .dig-sheet-bg, .ctx, .ys, .ask-backdrop, .live, .np"));
 
 /** Steckt das Element in etwas, das sich waagerecht scrollen lässt (Chips, Karussell, Kennzahlen-Leiste)? Dann gehört der Wisch dorthin. */
 export function inHorizontalScroller(el: HTMLElement | null, stop?: HTMLElement | null): boolean {
@@ -532,10 +532,12 @@ export function useDebounced<T>(value: T, ms = 300) {
 export function Seg<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
   // Alle Felder sind gleich breit: der Schieber wird nur verschoben, nichts wird vermessen.
   // (Messen zwang den Browser, die ganze neue Seite mitten im Seitenwechsel durchzurechnen.)
-  const i = Math.max(0, options.findIndex(([v]) => v === value));
+  // Gehört der aktuelle Wert zu keinem Feld (z. B. eine Kachel darüber ist gewählt), ist kein Feld markiert
+  const found = options.findIndex(([v]) => v === value);
+  const i = Math.max(0, found);
   return (
     <div className="seg" role="tablist" style={{ "--seg-n": options.length } as React.CSSProperties}>
-      <span className="seg-thumb" style={{ transform: `translateX(${i * 100}%)` }} />
+      <span className="seg-thumb" style={{ transform: `translateX(${i * 100}%)`, opacity: found < 0 ? 0 : undefined }} />
       {options.map(([v, l]) => (
         <button
           key={v}

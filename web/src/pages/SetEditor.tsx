@@ -286,10 +286,13 @@ export default function SetEditor() {
   }, []);
 
   // Reinhören: ein Audio-Element für alles (iOS spielt nur nach Tippen)
+  const nowOf = (t: TrackMeta) => {
+    const r = data?.rels.get(t.releaseId);
+    return { src: t.deezerId ? `/api/audio/preview/${t.deezerId}` : previewUrl(t.artist, t.title, durOf(t)), title: t.title, artist: t.artist, cover: r?.cover || r?.thumb, releaseId: t.releaseId, trackId: t.id };
+  };
   const togglePreview = (t: TrackMeta) => {
     if (player.now?.trackId === t.id) return togglePlayer();
-    const r = data?.rels.get(t.releaseId);
-    void playPlayer({ src: t.deezerId ? `/api/audio/preview/${t.deezerId}` : previewUrl(t.artist, t.title, durOf(t)), title: t.title, artist: t.artist, cover: r?.cover || r?.thumb, releaseId: t.releaseId, trackId: t.id }).then((ok) => !ok && toast("Keine Hörprobe gefunden"));
+    void playPlayer(nowOf(t), tracks.map(nowOf)).then((ok) => !ok && toast("Keine Hörprobe gefunden"));
   };
 
   const share = async () => {

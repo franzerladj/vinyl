@@ -472,16 +472,21 @@ export function SwipeArea({
   count,
   onIndex,
   className,
+  thumbShift = 0,
   children,
 }: {
   index: number;
   count: number;
   onIndex: (i: number) => void;
   className?: string;
+  /** So viele Seiten liegen vor dem ersten Feld des Umschalters (z. B. zwei Kennzahl-Kacheln darüber) */
+  thumbShift?: number;
   children: React.ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const idx = useRef(index);
+  const shift = useRef(thumbShift);
+  shift.current = thumbShift;
   const prev = useRef(index);
   const cb = useRef(onIndex);
   cb.current = onIndex;
@@ -511,10 +516,13 @@ export function SwipeArea({
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
+    // Der Schieber läuft nur mit, solange die Seite zu einem Feld des Umschalters gehört
     const thumb = () =>
-      el.parentElement?.querySelector<HTMLElement>(
-        ":scope > .seg > .seg-thumb",
-      ) ?? null;
+      idx.current < shift.current
+        ? null
+        : (el.parentElement?.querySelector<HTMLElement>(
+            ":scope > .seg > .seg-thumb",
+          ) ?? null);
     let state: "idle" | "maybe" | "drag" = "idle";
     let x0 = 0,
       y0 = 0,
@@ -578,7 +586,7 @@ export function SwipeArea({
       el.style.opacity = String(1 - Math.min(0.6, Math.abs(dx) / W));
       const th = thumb();
       if (th)
-        th.style.transform = `translateX(${Math.max(0, Math.min(count - 1, idx.current - dx / W)) * 100}%)`;
+        th.style.transform = `translateX(${Math.max(0, Math.min(count - 1 - shift.current, idx.current - shift.current - dx / W)) * 100}%)`;
     };
     const end = () => {
       if (state !== "drag") {
@@ -612,7 +620,7 @@ export function SwipeArea({
         el.style.transition = `transform 380ms ${EASE}, opacity 240ms ${EASE}`;
         el.style.transform = "";
         el.style.opacity = "";
-        if (th) th.style.transform = `translateX(${idx.current * 100}%)`;
+        if (th) th.style.transform = `translateX(${(idx.current - shift.current) * 100}%)`;
         setTimeout(() => (el.style.transition = ""), 400);
       }
     };

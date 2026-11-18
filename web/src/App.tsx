@@ -8,6 +8,7 @@ import { RecordMenu } from "./components/RecordMenu";
 import { PullRefresh } from "./components/PullRefresh";
 import { TabSwipe } from "./components/TabSwipe";
 import { MiniPlayer } from "./components/MiniPlayer";
+import { NowPlaying } from "./components/NowPlaying";
 import { claimDevice } from "./lib/account";
 import { IconCart, IconGear, IconHeart, IconHome, IconList, IconPlay, IconRecord, IconSearch, IconUser } from "./components/icons";
 import { LogoMark, Wordmark } from "./components/Logo";
@@ -587,6 +588,7 @@ export default function App() {
         </Suspense>
       </main>
       <MiniPlayer />
+      <NowPlaying />
       <PullRefresh />
       <TabSwipe />
       <RecordMenu />

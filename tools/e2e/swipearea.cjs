@@ -26,10 +26,17 @@ const install = require("./mock.cjs");
   await page.goto("http://localhost:8787/friends/kumpel");
   await page.waitForSelector(".seg");
   await page.waitForTimeout(2500);
+  // Der Umschalter liegt unter der Profilkarte: erst hinscrollen, dann darunter wischen
+  await page.evaluate(() => window.scrollTo(0, document.querySelector(".seg").getBoundingClientRect().top + scrollY - 200));
+  await page.waitForTimeout(400);
   let box = await page.locator(".seg").boundingBox();
-  const y = Math.min(520, box.y + 160);
-  await page.locator(".seg button").first().click(); // Sammlung des Freunds
-  await page.waitForTimeout(500);
+  const y = Math.min(560, box.y + 160);
+  // Startzustand: Kachel „hat deine Wants“ gewählt, kein Feld des Umschalters markiert. Von dort führt der
+  // Wisch über die zweite Kachel in den Umschalter (ein Streifen: 2 Kacheln, dann Sammlung, Wants, Gemeinsam)
+  const stat = () => page.evaluate(() => document.querySelector(".stat.on")?.textContent?.replace(/^\d+/, "") ?? "-");
+  out.friendStart = [await stat(), await sel(), await page.evaluate(() => getComputedStyle(document.querySelector(".seg-thumb")).opacity)];
+  await swipe(330, 90, y); out.friendStart.push(await stat());
+  await swipe(330, 90, y); out.friendStart.push(await sel());
   out.friend = [await sel()];
   await swipe(330, 90, y); out.friend.push(await sel());
   await swipe(330, 90, y); out.friend.push(await sel());

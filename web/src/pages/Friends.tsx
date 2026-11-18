@@ -23,7 +23,8 @@ import { IconMore, IconPlus, IconSearch, IconShare, IconSync, IconTrash, IconUse
 import { matchesQuery } from "../../../shared/textSearch";
 import { MenuSheet, NavBar } from "../components/ui";
 
-const FRIEND_TABS = ["coll", "want", "shared"] as const;
+// Ein Streifen zum Wischen: erst die beiden Kennzahlen, dann die drei Felder des Umschalters
+const FRIEND_TABS = ["hasYourWants", "wantsYours", "coll", "want", "shared"] as const;
 
 export default function Friends() {
   const { username } = useParams();
@@ -463,7 +464,7 @@ function FriendDetail({ u }: { u: string }) {
           ]}
           onChange={setTab}
         />
-        <SwipeArea index={FRIEND_TABS.indexOf(tab as (typeof FRIEND_TABS)[number])} count={3} onIndex={(i) => setTab(FRIEND_TABS[i])} className="stack">
+        <SwipeArea index={FRIEND_TABS.indexOf(tab)} count={FRIEND_TABS.length} thumbShift={2} onIndex={(i) => setTab(FRIEND_TABS[i])} className="stack">
         {((tab === "coll" && !f.collectionPrivate) || (tab === "want" && !f.wantsPrivate)) && (
           <div className="search-bar">
             <IconSearch />
