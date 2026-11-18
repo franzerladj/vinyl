@@ -635,11 +635,6 @@ video.scan { display: block; width: 100%; border-radius: var(--r-lg); background
 .dig-meta { font-size: 13px; color: rgba(255,255,255,.7); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dig-tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .dig-tags span { font-size: 12px; font-weight: 600; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.16); }
-.dig-sound { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
-.dig-sound button, .dig-sound span { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; padding: 8px 14px; border-radius: 999px; background: rgba(255,255,255,.18); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.dig-sound svg { width: 16px; height: 16px; }
-.dig-sound small { font-weight: 500; opacity: .8; overflow: hidden; text-overflow: ellipsis; }
-.dig-sound .dig-link { background: none; padding: 8px 0; text-decoration: underline; text-underline-offset: 3px; backdrop-filter: none; flex: none; }
 .dig-rail { position: absolute; right: 10px; bottom: calc(env(safe-area-inset-bottom) + 22px); display: flex; flex-direction: column; gap: 14px; align-items: center; }
 .dig-rail > * { all: unset; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 3px; color: #fff; -webkit-tap-highlight-color: transparent; }
 .dig-rail svg { width: 26px; height: 26px; padding: 12px; box-sizing: content-box; border-radius: 50%; background: rgba(0,0,0,.3); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); transition: transform .3s var(--spring), background .2s; }
@@ -1394,7 +1389,6 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .opt-check svg { width: 18px; height: 18px; }
 .dig-want { display: inline-flex; align-items: center; gap: 4px; }
 .dig-want svg { width: 13px; height: 13px; }
-.dig-sound button svg { width: 15px; height: 15px; vertical-align: -2px; margin-right: 4px; }
 .gig-cal svg { width: 16px; height: 16px; }
 
 /* Quellenangabe Discogs (Pflicht laut API-Bedingungen) */
@@ -1768,3 +1762,21 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 }
 @keyframes np-pop { from { opacity: 0; transform: scale(0.94); } }
 @media (prefers-reduced-motion: reduce) { .np, .np.playing .np-disc { animation: none; } }
+
+/* Beschriften: eigene Farbe wählen (ohne Regenbogen-Verlauf) */
+.color-own { position: relative; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--text-2); font-size: 20px; font-weight: 500; line-height: 1; cursor: pointer; overflow: hidden; }
+.color-own input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.group-row small { display: block; font-size: 13px; color: var(--text-2); font-weight: 400; }
+
+/* Diggen: Zeile mit der Hörprobe. Runder Knopf, daneben was läuft, alles einzeilig */
+.dig-sound { display: flex; align-items: center; gap: 12px; margin-top: 8px; min-width: 0; }
+.dig-playbtn { flex: none; width: 46px; height: 46px; border: 0; border-radius: 50%; background: var(--brand); color: var(--brand-ink); display: grid; place-items: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.dig-playbtn svg { width: 20px; height: 20px; fill: currentColor; }
+.dig-playbtn:active { transform: scale(0.92); }
+.dig-playbtn:disabled { background: #262626; color: rgba(255, 255, 255, 0.4); }
+.dig-playbtn.loading { opacity: 0.6; }
+.dig-now { all: unset; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.dig-now b { display: block; font-size: 15px; font-weight: 700; line-height: 1.25; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dig-now span { display: block; font-size: 11.5px; line-height: 1.3; color: rgba(255, 255, 255, 0.65); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dig-chipbtn { flex: none; border: 0; border-radius: 999px; padding: 9px 14px; background: #262626; color: #fff; font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.dig-chipbtn:active, .dig-now:active { opacity: 0.7; }

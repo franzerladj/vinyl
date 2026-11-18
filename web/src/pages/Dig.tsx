@@ -488,35 +488,38 @@ export default function Dig() {
                         ))}
                         {c.want ? <span className="dig-want"><IconHeart /> {c.want} wollen sie</span> : null}
                       </div>
-                      {i === active && (
-                        <div className="dig-sound">
-                          {audioState === "none" ? (
-                            d?.video ? (
-                              <button onClick={() => (setVideo(d.video!), void recordSignal(c, "video"))}>
-                                <IconPlay /> Video ansehen
+                      {i === active &&
+                        (() => {
+                          // Eine Zeile: runder Knopf, daneben was läuft (einzeilig, lange Titel werden gekürzt)
+                          const first = d?.tracks[0];
+                          const none = audioState === "none";
+                          const count = d?.tracks.length ?? 0;
+                          const openTracks = () => (setSheet(c.id), void recordSignal(c, "detail"));
+                          const openVideo = () => d?.video && (setVideo(d.video), void recordSignal(c, "video"));
+                          const state = none ? (d?.video ? "Video ansehen" : "Keine Hörprobe") : audioState === "playing" ? "Pause" : audioState === "loading" ? "Lädt …" : unlocked ? "Abspielen" : "Tippen zum Hören";
+                          return (
+                            <div className="dig-sound">
+                              <button className={`dig-playbtn${audioState === "loading" ? " loading" : ""}`} onClick={none ? openVideo : toggleSound} disabled={none && !d?.video} aria-label={state}>
+                                {audioState === "playing" ? <IconPause /> : <IconPlay />}
                               </button>
-                            ) : (
-                              <span>Keine Hörprobe</span>
-                            )
-                          ) : (
-                            <button onClick={toggleSound}>
-                              {audioState === "playing" ? <IconPause /> : audioState === "loading" ? null : <IconPlay />}
-                              {audioState === "playing" ? "Pause" : audioState === "loading" ? "Lädt …" : unlocked ? "Abspielen" : "Tippen zum Hören"}
-                              {d?.tracks[0] && <small> · {d.tracks[0].position} {d.tracks[0].title}</small>}
-                            </button>
-                          )}
-                          {d && d.tracks.length > 0 && (
-                            <button className="dig-link" onClick={() => (setSheet(c.id), void recordSignal(c, "detail"))}>
-                              {d.tracks.length} Tracks
-                            </button>
-                          )}
-                          {d?.video && audioState !== "none" && !video && (
-                            <button className="dig-link" onClick={() => (setVideo(d.video!), void recordSignal(c, "video"))}>
-                              Video
-                            </button>
-                          )}
-                        </div>
-                      )}
+                              <button className="dig-now" onClick={count ? openTracks : undefined} disabled={!count} aria-label={count ? `${count} Tracks ansehen` : undefined}>
+                                <b>{none ? state : first ? first.title : audioState === "loading" ? "Lädt …" : "Hörprobe"}</b>
+                                <span className="mono">
+                                  {(() => {
+                                    // Ein Hinweis statt der Track-Zahl, solange noch nichts läuft (sonst wird die Zeile zu lang)
+                                    const hint = audioState === "loading" ? "lädt" : !none && !unlocked && audioState !== "playing" ? "Tippen zum Hören" : null;
+                                    return [!none && first ? first.position : null, hint ?? (count ? `${count} ${count === 1 ? "Track" : "Tracks"}` : null)].filter(Boolean).join(" · ");
+                                  })()}
+                                </span>
+                              </button>
+                              {d?.video && !none && !video && (
+                                <button className="dig-chipbtn" onClick={openVideo}>
+                                  Video
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
                       <DiscogsCredit href={`https://www.discogs.com/release/${c.id}`} />
                     </div>
                   </div>

@@ -1,105 +1,105 @@
-import { InlineVersion } from "./InsertCard";
-import { camelotString, parseKey } from "../../../../shared/music";
-import { sideOf } from "../../lib/format";
-import { FONTS, stars, type PrintItem, type PrintOpts } from "./types";
+// Sticker für die Außenhülle. Alles in mm, damit Vorschau und Druck identisch sind.
+// Bewusst Schwarz auf Weiß: Etikettendrucker können nichts anderes, und auf dem Bogen spart es Tinte.
+// Farbe gibt es nur für die Tonart-Etiketten (abschaltbar über „Schwarz-Weiß-Drucker“).
+import { FONTS, headStyle, MONO, stars, type PrintItem, type PrintOpts } from "./types";
+import { bpmText, capsLine, catnoOf, cleanLabel, groupSides, InlineVersion, KeyTag, mm, palette, SideTag } from "./kit";
 
-type StickerData = PrintItem;
-type StickerOpts = PrintOpts;
-
-/** Ein Sticker. Alles in mm, damit Vorschau und Druck identisch sind. */
-export function Sticker({ s, w, h, o }: { s: StickerData; w: number; h: number; o: StickerOpts }) {
+export function Sticker({ s, w, h, o, thermal }: { s: PrintItem; w: number; h: number; o: PrintOpts; thermal?: boolean }) {
+  // Thermodrucker: nie Farbe, auch wenn sie eingeschaltet ist
+  const opt = thermal ? { ...o, mono: true } : o;
+  const pal = palette("light", opt);
+  const F = FONTS[o.font ?? "schmal"] ?? FONTS.schmal;
   const { r } = s;
-  const sides = new Map<string, StickerData["tracks"]>();
-  for (const t of s.tracks) {
-    const side = sideOf(t.position) || "·";
-    sides.set(side, [...(sides.get(side) ?? []), t]);
-  }
-  const lines = s.tracks.length + sides.size;
-  const headerH = 11;
-  const avail = h - headerH - 3;
-  // Schriftgröße so wählen, dass alle Tracks passen (in mm, 1pt ≈ 0.353mm)
-  const twoCols = lines * 2.6 > avail && sides.size > 1;
-  const perCol = twoCols ? Math.ceil(lines / 2) : lines;
-  const lineH = Math.max(1.75, Math.min(3.2, avail / Math.max(1, perCol)));
-  const fs = lineH * 0.78;
-  const qrSize = o.showQr ? Math.min(11, headerH) : 0;
   const label = r.labels[0];
+  const sides = groupSides(s.tracks);
+  const padX = 2.6, padY = 2.2;
+  const inner = w - padX * 2;
+  const qrSize = o.showQr && s.qr ? Math.min(10.5, h * 0.28) : 0;
+  const headW = inner - (qrSize ? qrSize + 2 : 0);
+  const big = o.headline === "title" ? r.title : r.artist;
+  const small = o.headline === "title" ? r.artist : r.title;
+  // Überschrift einzeilig: so groß, wie der Name erlaubt
+  const headSize = Math.max(2.9, Math.min(F.upper && F.cw < 0.5 ? 5.4 : 3.9, headW / (Math.max(6, big.length) * F.cw)));
+  const headerH = Math.max(qrSize, headSize * 0.98 + 3.3 + 2.9) + 1.2;
+  const avail = h - padY * 2 - headerH - 1.4;
 
-  const meta = (t: StickerData["tracks"][0]) => {
-    const parts: string[] = [];
-    if (o.showBpm && t.meta?.bpm) parts.push(`${t.meta.tempoCheck === "unsicher" ? "~" : ""}${Math.round(t.meta.bpm)}`);
-    const c = parseKey(t.meta?.key);
-    if (o.showCamelot && c) parts.push(camelotString(c));
-    else if (o.showKey && t.meta?.key) parts.push(t.meta.key);
-    if (o.showKey && o.showCamelot && c && t.meta?.key && !/^\d/.test(t.meta.key)) parts.push(t.meta.key);
-    if (o.showEnergy && t.meta?.energy) parts.push(`E${t.meta.energy}`);
-    if (o.showDuration && t.duration) parts.push(t.duration);
-    return parts.join(" · ");
+  const hasBpm = o.showBpm && s.tracks.some((t) => t.meta?.bpm);
+  const hasKey = (o.showCamelot || o.showKey) && s.tracks.some((t) => t.meta?.key);
+  let hasEnergy = o.showEnergy && s.tracks.some((t) => t.meta?.energy != null);
+  let hasDur = o.showDuration && s.tracks.some((t) => t.duration);
+  const multi = sides.length > 1;
+
+  // Schriftgröße so wählen, dass alle Tracks passen; viele Tracks kommen in zwei Spalten
+  const gapPerSide = 0.5;
+  const fits = (lh: number, cols: number) => {
+    const per = Math.ceil(sides.length / cols);
+    let tallest = 0;
+    for (let c = 0; c < cols; c++) tallest = Math.max(tallest, sides.slice(c * per, (c + 1) * per).reduce((a, [, ts]) => a + ts.length * lh + gapPerSide, 0));
+    return tallest <= avail;
   };
-
-  const sideBlocks = [...sides.entries()];
-  const colA: typeof sideBlocks = [];
-  const colB: typeof sideBlocks = [];
-  if (twoCols) {
-    let count = 0;
-    for (const b of sideBlocks) {
-      (count < perCol ? colA : colB).push(b);
-      count += b[1].length + 1;
-    }
-  } else colA.push(...sideBlocks);
-
-  const renderCol = (blocks: typeof sideBlocks) => (
-    <div style={{ flex: 1, minWidth: 0 }}>
-      {blocks.map(([side, ts]) => (
-        <div key={side}>
-          {sides.size > 1 && (
-            <div style={{ fontSize: `${fs * 0.9}mm`, lineHeight: `${lineH}mm`, fontWeight: 800, letterSpacing: "0.08em" }}>
-              SIDE {side}
-            </div>
-          )}
-          {ts.map((t) => (
-            <div key={t.position} style={{ display: "flex", gap: "1mm", fontSize: `${fs}mm`, lineHeight: `${lineH}mm`, whiteSpace: "nowrap" }}>
-              <span style={{ width: `${Math.max(2.2, Math.max(...s.tracks.map((x) => x.position.length)) * 0.72 + 0.3) * fs}mm`, flex: "none", fontWeight: 700 }}>{t.position}</span>
-              <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1 }}>
-                {t.meta?.artist && t.meta.artist !== r.artist ? `${t.meta.artist} – ` : ""}
-                <InlineVersion title={t.title} />
-              </span>
-              <span style={{ flex: "none", fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{meta(t)}</span>
-            </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  );
+  let cols = 1;
+  let lineH = 3.5;
+  while (lineH > 2.35 && !fits(lineH, 1)) lineH -= 0.05;
+  if (!fits(lineH, 1) && multi && w >= 60) {
+    cols = 2;
+    lineH = 3.2;
+    while (lineH > 1.8 && !fits(lineH, 2)) lineH -= 0.05;
+  } else if (!fits(lineH, 1)) {
+    while (lineH > 1.8 && !fits(lineH, 1)) lineH -= 0.05;
+  }
+  const fs = lineH * 0.8;
+  // Schmale Etiketten in zwei Spalten: lieber lesbare Titel als Energie und Länge
+  if (cols === 2 && (inner - 3) / 2 < 40) {
+    hasEnergy = false;
+    hasDur = false;
+  }
+  const per = Math.ceil(sides.length / cols);
+  const columns = Array.from({ length: cols }, (_, c) => sides.slice(c * per, (c + 1) * per));
+  const posLen = Math.max(1, ...s.tracks.map((x) => x.position.length));
+  const bpmLen = Math.max(3, ...s.tracks.map((t) => bpmText(t).length));
+  const tag = lineH * 0.92;
 
   return (
-    <div
-      style={{
-        width: `${w}mm`,
-        height: `${h}mm`,
-        padding: "2mm 2.5mm",
-        boxSizing: "border-box",
-        color: "#000",
-        background: "#fff",
-        fontFamily: o.font && o.font !== "modern" ? FONTS[o.font].body : "'Helvetica Neue', Arial, sans-serif",
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      <div style={{ display: "flex", gap: "2mm", height: `${headerH}mm`, borderBottom: `0.3mm solid ${o.accent ?? "#000"}`, marginBottom: "1mm", flex: "none" }}>
+    <div style={{ width: mm(w), height: mm(h), padding: `${mm(padY)} ${mm(padX)}`, boxSizing: "border-box", color: pal.fg, background: pal.bg, fontFamily: F.body, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", gap: mm(2), height: mm(headerH), flex: "none", boxSizing: "border-box", borderBottom: `0.5mm solid ${pal.fg}`, marginBottom: mm(1.4) }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: "3.3mm", lineHeight: "3.8mm", fontWeight: 800, textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.artist}</div>
-          <div style={{ fontSize: "2.8mm", lineHeight: "3.3mm", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.title}</div>
-          <div style={{ fontSize: "2.1mm", lineHeight: "2.8mm", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "#333" }}>
-            {[label && `${label.name.replace(/\s\(\d+\)$/, "")} ${label.catno}`, r.year || null, o.showStyles ? r.styles.slice(0, 2).join(", ") : null, o.showShelf ? s.shelf : null, o.showRating ? stars(s.rating) : null, o.footer || null].filter(Boolean).join(" · ")}
+          <div style={{ ...headStyle(o.font), fontSize: mm(headSize), lineHeight: 0.98, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{big}</div>
+          <div style={{ fontSize: mm(2.75), lineHeight: mm(3.3), fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{small}</div>
+          <div style={{ ...capsLine(1.95, pal.muted), lineHeight: mm(2.9), whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {[[cleanLabel(label?.name), catnoOf(label)].filter(Boolean).join(" "), r.year || null, o.showStyles ? r.styles.slice(0, 2).join(" / ") : null, o.showCondition && s.media ? s.media : null, o.showShelf ? s.shelf : null, o.showRating ? stars(s.rating) : null, o.footer || null]
+              .filter(Boolean)
+              .join(" · ")}
           </div>
         </div>
-        {o.showQr && s.qr && <img src={s.qr} style={{ width: `${qrSize - 1}mm`, height: `${qrSize - 1}mm` }} alt="" />}
+        {qrSize > 0 && <img src={s.qr} style={{ width: mm(qrSize), height: mm(qrSize), flex: "none" }} alt="" />}
       </div>
-      <div style={{ display: "flex", gap: "2mm", flex: 1, minHeight: 0 }}>
-        {renderCol(colA)}
-        {twoCols && renderCol(colB)}
+      <div style={{ display: "flex", gap: mm(3), flex: 1, minHeight: 0 }}>
+        {columns.map((blocks, ci) => (
+          <div key={ci} style={{ flex: 1, minWidth: 0 }}>
+            {blocks.map(([side, ts]) => (
+              <div key={side} style={{ marginBottom: mm(gapPerSide) }}>
+                {ts.map((t, i) => (
+                  <div key={t.position} style={{ display: "flex", alignItems: "center", gap: mm(1), height: mm(lineH), fontSize: mm(fs), whiteSpace: "nowrap" }}>
+                    {multi && <span style={{ width: mm(tag), flex: "none", display: "flex" }}>{i === 0 ? <SideTag side={side} size={tag} pal={pal} /> : null}</span>}
+                    <span style={{ width: mm(posLen * fs * 0.6 + 0.4), flex: "none", fontFamily: MONO, fontWeight: 700, fontSize: mm(fs * 0.92), color: pal.muted }}>{t.position}</span>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>
+                      {t.meta?.artist && t.meta.artist !== r.artist ? `${t.meta.artist} – ` : ""}
+                      <InlineVersion title={t.title} />
+                    </span>
+                    {hasDur && <span style={{ flex: "none", fontFamily: MONO, fontSize: mm(fs * 0.86), color: pal.muted }}>{t.duration}</span>}
+                    {hasBpm && <span style={{ flex: "none", width: mm(bpmLen * fs * 0.6), textAlign: "right", fontFamily: MONO, fontWeight: 800 }}>{bpmText(t)}</span>}
+                    {hasKey && (
+                      <span style={{ flex: "none", width: mm(fs * 2.25), textAlign: "right", lineHeight: 1 }}>
+                        <KeyTag k={t.meta?.key} size={fs} pal={pal} o={opt} />
+                      </span>
+                    )}
+                    {hasEnergy && <span style={{ flex: "none", width: mm(fs * 1.5), textAlign: "right", fontFamily: MONO, fontSize: mm(fs * 0.86), color: pal.muted }}>{t.meta?.energy != null ? `E${t.meta.energy}` : ""}</span>}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ))}
       </div>
     </div>
   );

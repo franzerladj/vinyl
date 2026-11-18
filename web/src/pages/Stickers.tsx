@@ -13,7 +13,8 @@ import { IconPrint } from "../components/icons";
 import { Sticker } from "../components/print/Sticker";
 import { DEFAULT_ACCENT, InsertCard, ObiFold, ObiStrip, type CardTheme } from "../components/print/InsertCard";
 import { matchesQuery } from "../../../shared/textSearch";
-import { FONTS, type Layout, type PrintFont, type PrintItem, type PrintOpts } from "../components/print/types";
+import { stripPaid } from "../../../shared/paid";
+import { FONTS, onColor, type Layout, type PrintFont, type PrintItem, type PrintOpts } from "../components/print/types";
 
 type Kind = "card" | "obi" | "sticker";
 
@@ -39,6 +40,7 @@ const STICKER_LAYOUTS = {
 const ALL_LAYOUTS: Record<string, Layout> = { ...CARD_LAYOUTS, ...OBI_LAYOUTS, ...STICKER_LAYOUTS };
 
 interface Opts extends PrintOpts {
+  v?: number;
   kind: Kind;
   cardLayout: keyof typeof CARD_LAYOUTS;
   obiLayout: keyof typeof OBI_LAYOUTS;
@@ -64,19 +66,31 @@ const DEFAULTS: Opts = {
   showRating: false,
   showAdded: false,
   accent: DEFAULT_ACCENT,
-  font: "modern",
+  font: "schmal",
   footer: "",
+  stamp: false,
+  mono: false,
+  headline: "artist",
+  frame: false,
+  showCondition: false,
+  showNote: false,
   qrTarget: "discogs",
   skip: 0,
 };
+/** Stand der gespeicherten Einstellungen: ältere bekommen einmal den neuen Look */
+const OPTS_VERSION = 2;
 
-const ACCENTS = ["#ff6a00", "#e5243b", "#0a84ff", "#30d158", "#bf5af2", "#ffd60a", "#0b0b0b"];
+// Schwarz zuerst (druckt jeder Drucker sauber), Lime ist die Markenfarbe; alle taugen als kleine Fläche
+const ACCENTS = ["#0b0b0b", "#c6ff3a", "#e5243b", "#ff6a00", "#ffd60a", "#0a84ff", "#1f9d55", "#8e44ad"];
 
 function qrUrl(o: Opts, r: { id: number; artist: string; title: string }) {
   if (o.qrTarget === "youtube") return `https://www.youtube.com/results?search_query=${encodeURIComponent(`${r.artist} ${r.title}`)}`;
   if (o.qrTarget === "app") return `${location.origin}/release/${r.id}`;
   return discogsReleaseUrl(r.id);
 }
+
+/** „Very Good Plus (VG+)“ → „VG+“ */
+const gradeShort = (g?: string) => (g ? (g.match(/\(([^)]+)\)\s*$/)?.[1] ?? g) : undefined);
 
 const KIND_LABEL: Record<Kind, string> = { card: "Einleger", obi: "Obi-Streifen", sticker: "Sticker" };
 
@@ -92,10 +106,19 @@ export default function Stickers() {
   const [q, setQ] = useState("");
 
   useEffect(() => {
-    getKV("printOpts", DEFAULTS).then((o) => setOpts({ ...DEFAULTS, ...o }));
+    getKV<Partial<Opts>>("printOpts", DEFAULTS).then((saved) => {
+      const o = { ...DEFAULTS, ...saved };
+      // Einstellungen von vor dem neuen Look: Schrift und Farbe auf den neuen Stand, „Cover“ gibt es nicht mehr
+      if ((saved.v ?? 1) < OPTS_VERSION) {
+        if (!saved.font || saved.font === "modern") o.font = "schmal";
+        if (!saved.accent || saved.accent === "#ff6a00") o.accent = DEFAULT_ACCENT;
+      }
+      if (o.theme === "cover") o.theme = "light";
+      setOpts(o);
+    });
   }, []);
   const upd = (p: Partial<Opts>) => {
-    const o = { ...opts, ...p };
+    const o = { ...opts, ...p, v: OPTS_VERSION };
     setOpts(o);
     void setKV("printOpts", o);
   };
@@ -113,6 +136,9 @@ export default function Stickers() {
         printed: meta?.stickerPrintedAt ?? null,
         shelf: meta?.shelf,
         rating: coll.find((c) => c.releaseId === id)?.rating,
+        media: gradeShort(coll.find((c) => c.releaseId === id)?.media),
+        sleeve: gradeShort(coll.find((c) => c.releaseId === id)?.sleeve),
+        note: stripPaid(coll.find((c) => c.releaseId === id)?.note) || undefined,
         added: (() => {
           const d = coll.filter((c) => c.releaseId === id).at(-1)?.dateAdded;
           return d ? new Date(d).toLocaleDateString("de-DE", { month: "2-digit", year: "numeric" }) : undefined;
@@ -129,7 +155,7 @@ export default function Stickers() {
   }, [data, mode, picked]);
 
   // QR-Codes passend zum Farbschema (auf dunklen Karten weiß)
-  const darkQr = opts.kind !== "sticker" && opts.theme !== "light";
+  const darkQr = opts.kind !== "sticker" && (opts.theme === "dark" || (opts.theme === "accent" && !opts.mono && onColor(opts.accent ?? DEFAULT_ACCENT) === "#ffffff"));
   const qrKey = (id: number) => `${id}:${darkQr ? "d" : "l"}:${opts.qrTarget}`;
   useEffect(() => {
     if (!opts.showQr) return;
@@ -167,7 +193,7 @@ export default function Stickers() {
     ) : opts.kind === "obi" ? (
       opts.obiLayout === "obi-fold" ? <ObiFold key={key} s={s} w={tpl.w} h={tpl.h} o={opts} theme={opts.theme} /> : <ObiStrip key={key} s={s} w={tpl.w} h={tpl.h} o={opts} theme={opts.theme} />
     ) : (
-      <Sticker key={key} s={s} w={tpl.w} h={tpl.h} o={opts} />
+      <Sticker key={key} s={s} w={tpl.w} h={tpl.h} o={opts} thermal={layoutKey.startsWith("roll")} />
     );
 
   const print = async () => {
@@ -358,32 +384,84 @@ export default function Stickers() {
               options={[
                 ["light", "Weiß"],
                 ["dark", "Schwarz"],
-                ["cover", "Cover"],
                 ["accent", "Farbe"],
               ]}
               onChange={(theme) => upd({ theme })}
             />
+            <p className="tiny" style={{ margin: 0 }}>
+              {opts.theme === "light" ? "Weiß braucht am wenigsten Tinte und druckt auf jedem Drucker sauber." : "Die ganze Fläche wird bedruckt: braucht viel Tinte und wellt dünnes Papier. Am besten auf dickem Papier oder im Copyshop."}
+            </p>
           </>
         )}
-        <h3>{opts.kind === "sticker" ? "Stil" : "Schrift & Farbe"}</h3>
-        <Seg value={opts.font ?? "modern"} options={(Object.keys(FONTS) as PrintFont[]).map((k) => [k, FONTS[k].label])} onChange={(font) => upd({ font })} />
-        <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-          {ACCENTS.map((c) => (
-            <button
-              key={c}
-              aria-label={`Akzentfarbe ${c}`}
-              onClick={() => upd({ accent: c })}
-              style={{ width: 34, height: 34, borderRadius: "50%", border: 0, background: c, boxShadow: opts.accent === c ? "0 0 0 2px var(--bg), 0 0 0 4px var(--text)" : "inset 0 0 0 1px var(--hairline)", cursor: "pointer" }}
-            />
-          ))}
-          <label style={{ position: "relative", width: 34, height: 34, borderRadius: "50%", overflow: "hidden", background: "conic-gradient(red, yellow, lime, cyan, blue, magenta, red)", cursor: "pointer" }} aria-label="Eigene Farbe">
-            <input type="color" value={opts.accent ?? DEFAULT_ACCENT} onChange={(e) => upd({ accent: e.target.value })} style={{ opacity: 0, position: "absolute", inset: 0, width: "100%", height: "100%" }} />
+        <div className="group">
+          <label className="group-row">
+            <span>
+              Schwarz-Weiß-Drucker
+              <small>Keine Farbflächen, Tonarten im Rahmen statt farbig</small>
+            </span>
+            <input type="checkbox" style={{ marginLeft: "auto" }} checked={Boolean(opts.mono) || layoutKey.startsWith("roll")} disabled={layoutKey.startsWith("roll")} onChange={(e) => upd({ mono: e.target.checked })} />
           </label>
         </div>
+
+        <h3>Schrift</h3>
+        <Seg value={opts.font ?? "schmal"} options={(Object.keys(FONTS) as PrintFont[]).map((k) => [k, FONTS[k].label])} onChange={(font) => upd({ font })} />
+        <Seg
+          value={opts.headline ?? "artist"}
+          options={[
+            ["artist", "Artist groß"],
+            ["title", "Titel groß"],
+          ]}
+          onChange={(headline) => upd({ headline })}
+        />
+
+        {!opts.mono && !layoutKey.startsWith("roll") && (
+          <>
+            <h3>Farbe</h3>
+            <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+              {ACCENTS.map((c) => (
+                <button
+                  key={c}
+                  aria-label={`Akzentfarbe ${c}`}
+                  onClick={() => upd({ accent: c })}
+                  style={{ width: 34, height: 34, borderRadius: "50%", border: 0, background: c, boxShadow: opts.accent === c ? "0 0 0 2px var(--bg), 0 0 0 4px var(--text)" : "inset 0 0 0 1px var(--hairline)", cursor: "pointer" }}
+                />
+              ))}
+              <label className="color-own" aria-label="Eigene Farbe">
+                +
+                <input type="color" value={opts.accent ?? DEFAULT_ACCENT} onChange={(e) => upd({ accent: e.target.value })} />
+              </label>
+            </div>
+            <p className="tiny" style={{ margin: 0 }}>
+              {opts.kind === "sticker" ? "Auf dem Sticker färbt sie die Seiten-Kästchen." : opts.theme === "light" ? "Auf Weiß färbt sie nur Seiten-Kästchen, Streifen und Stempel." : opts.theme === "accent" ? "Die ganze Karte in dieser Farbe." : "Auf Schwarz für Seiten-Kästchen, Streifen und Stempel."}
+            </p>
+          </>
+        )}
+
+        <h3>Deine Zeile</h3>
         <label className="field">
-          Eigene Zeile, z. B. dein DJ-Name
+          Zum Beispiel dein DJ-Name
           <input className="input" maxLength={60} placeholder="Aus der Kiste von …" value={opts.footer ?? ""} onChange={(e) => upd({ footer: e.target.value })} />
         </label>
+        {opts.kind !== "sticker" && (
+          <div className="group">
+            <label className="group-row">
+              <span>
+                Als Stempel
+                <small>Schräg im Rahmen, wie mit dem Stempelkissen</small>
+              </span>
+              <input type="checkbox" style={{ marginLeft: "auto" }} checked={Boolean(opts.stamp)} onChange={(e) => upd({ stamp: e.target.checked })} />
+            </label>
+            {opts.kind === "card" && (
+              <label className="group-row">
+                <span>
+                  Rahmen
+                  <small>Dünne Linie innen, wie ein Etikett</small>
+                </span>
+                <input type="checkbox" style={{ marginLeft: "auto" }} checked={Boolean(opts.frame)} onChange={(e) => upd({ frame: e.target.checked })} />
+              </label>
+            )}
+          </div>
+        )}
 
         <h3>Inhalt</h3>
         <div className="group">
@@ -395,6 +473,8 @@ export default function Stickers() {
               ["showEnergy", "Energie"],
               ["showDuration", "Länge"],
               ["showStyles", "Styles"],
+              ["showCondition", "Zustand (Platte, Hülle)"],
+              ...(opts.kind === "card" ? ([["showNote", "Meine Notiz"]] as const) : []),
               ["showShelf", "Regalplatz"],
               ["showRating", "Meine Bewertung (Sterne)"],
               ["showAdded", "In der Sammlung seit"],
@@ -426,7 +506,7 @@ export default function Stickers() {
           </label>
         )}
         <p className="tiny">
-          Druckdialog: „Tatsächliche Größe / 100 %“, Kopf- und Fußzeilen aus{opts.kind !== "sticker" && ", Hintergrundgrafiken an"}. Für Einleger eignet sich mattes Papier mit 200 bis 300 g/m².
+          Druckdialog: „Tatsächliche Größe / 100 %“, Kopf- und Fußzeilen aus, Hintergrundgrafiken an (sonst fehlen Kästchen und Farben). Für Einleger eignet sich mattes Papier mit 160 bis 250 g/m², das schaffen die meisten Drucker zu Hause über den Einzelblatt-Einzug.
         </p>
         </SwipeArea>
       </div>

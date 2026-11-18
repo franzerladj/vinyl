@@ -21,7 +21,7 @@ const wav = () => {
   await page.waitForSelector("text=45 Platten");
   await page.click(".dig-entry"); // die einzige Berührung
   await page.waitForSelector(".dig-card .dig-deck, .dig-card img", { timeout: 20000 });
-  const label = () => page.evaluate(() => [...document.querySelectorAll(".dig-card button, .dig-card span")].map((e) => e.textContent).find((t) => /Pause|Abspielen|Tippen zum|Lädt|Keine Hörprobe/.test(t)) ?? "-");
+  const label = () => page.evaluate(() => document.querySelector(".dig-playbtn")?.getAttribute("aria-label") ?? "-");
   await page.waitForTimeout(2500);
   const first = await label();
   await page.evaluate(() => { const f = document.querySelector(".dig-feed"); f.scrollBy({ top: f.clientHeight }); });
