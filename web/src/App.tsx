@@ -267,10 +267,11 @@ const pipelineBusy = () => busyCheck();
  * ist dann noch nichts da, was sie verwerfen könnten (sonst träfen sie die gerade abgeholten Werte der anderen Geräte).
  */
 async function runMigrations() {
-  const { migrateAudioMatching, migrateAlbumMatching, migrateTempoV2 } = await import("./lib/sync");
+  const { migrateAudioMatching, migrateAlbumMatching, migrateTempoV2, migrateKeyV2 } = await import("./lib/sync");
   await migrateAudioMatching();
   await migrateAlbumMatching();
   await migrateTempoV2();
+  await migrateKeyV2();
 }
 
 async function startupSync() {

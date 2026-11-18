@@ -123,6 +123,9 @@ export interface FreeOptions {
   measureOnly?: boolean;
 }
 
+/** Ab dieser Sicherheit wird eine gemessene Tonart übernommen */
+export const KEY_MIN_CONFIDENCE = 0.5;
+
 const rank = (t: TrackMeta) => (t.tempoCheck === "unsicher" ? 0 : t.tempoCheck === "einfach" ? 1 : 2);
 
 export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptions) {
@@ -174,7 +177,8 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
           // Messung immer merken; welches Tempo gilt, entscheidet retempo() zusammen mit dem Datenbank-Wert
           patch.measuredBpm = analysis.bpm ? Math.round(analysis.bpm * 10) / 10 : null;
           patch.measuredConf = Math.round(analysis.bpmConfidence * 100) / 100;
-          if (!t.key && analysis.key && analysis.keyConfidence >= 0.3) {
+          // Ab 0,5 stimmen gemessen drei von vier genau und neun von zehn sind mixbar; darunter lieber keine Tonart
+          if (!t.key && analysis.key && analysis.keyConfidence >= KEY_MIN_CONFIDENCE) {
             patch.key = analysis.key;
             patch.keySource = "Analyse (Schätzung)";
           }

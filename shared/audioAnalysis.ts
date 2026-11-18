@@ -1,10 +1,10 @@
 // Audio-Analyse einer Hörprobe, komplett lokal und kostenlos:
-// Tempo (Onset-Autokorrelation), Tonart (Chroma + Krumhansl-Profile) und Energie
+// Tempo (Onset-Autokorrelation), Tonart (siehe keyDetect.ts) und Energie
 // (Lautheit, Schlagdichte, Klanghelligkeit). Ergebnisse sind Schätzungen.
 
-const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-const MAJOR = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
-const MINOR = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+import { fft, hann } from "./fft";
+import { detectKey } from "./keyDetect";
+
 
 export interface AudioAnalysis {
   bpm: number | null;
@@ -15,48 +15,6 @@ export interface AudioAnalysis {
   loudnessDb: number;
   brightnessHz: number;
   onsetsPerSecond: number;
-}
-
-/** In-place-FFT (Radix 2). re/im haben die Länge 2^n. */
-function fft(re: Float64Array, im: Float64Array) {
-  const n = re.length;
-  for (let i = 1, j = 0; i < n; i++) {
-    let bit = n >> 1;
-    for (; j & bit; bit >>= 1) j ^= bit;
-    j ^= bit;
-    if (i < j) {
-      [re[i], re[j]] = [re[j], re[i]];
-      [im[i], im[j]] = [im[j], im[i]];
-    }
-  }
-  for (let len = 2; len <= n; len <<= 1) {
-    const ang = (-2 * Math.PI) / len;
-    const wr = Math.cos(ang);
-    const wi = Math.sin(ang);
-    for (let i = 0; i < n; i += len) {
-      let cr = 1;
-      let ci = 0;
-      for (let k = 0; k < len / 2; k++) {
-        const a = i + k;
-        const b = a + len / 2;
-        const tr = re[b] * cr - im[b] * ci;
-        const ti = re[b] * ci + im[b] * cr;
-        re[b] = re[a] - tr;
-        im[b] = im[a] - ti;
-        re[a] += tr;
-        im[a] += ti;
-        const ncr = cr * wr - ci * wi;
-        ci = cr * wi + ci * wr;
-        cr = ncr;
-      }
-    }
-  }
-}
-
-function hann(n: number) {
-  const w = new Float64Array(n);
-  for (let i = 0; i < n; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (n - 1));
-  return w;
 }
 
 function magnitudes(samples: Float32Array, start: number, size: number, win: Float64Array, re: Float64Array, im: Float64Array) {
@@ -72,34 +30,6 @@ function magnitudes(samples: Float32Array, start: number, size: number, win: Flo
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
 const norm = (v: number, lo: number, hi: number) => clamp01((v - lo) / (hi - lo));
-
-function pearson(a: number[], b: number[]) {
-  const n = a.length;
-  const ma = a.reduce((s, x) => s + x, 0) / n;
-  const mb = b.reduce((s, x) => s + x, 0) / n;
-  let num = 0;
-  let da = 0;
-  let db = 0;
-  for (let i = 0; i < n; i++) {
-    num += (a[i] - ma) * (b[i] - mb);
-    da += (a[i] - ma) ** 2;
-    db += (b[i] - mb) ** 2;
-  }
-  return num / Math.sqrt(da * db || 1);
-}
-
-export function estimateKey(chroma: number[]): { key: string | null; confidence: number } {
-  const scores: { key: string; r: number }[] = [];
-  for (let root = 0; root < 12; root++) {
-    const rot = (p: number[]) => p.map((_, i) => p[(i - root + 12) % 12]);
-    scores.push({ key: NOTE_NAMES[root], r: pearson(chroma, rot(MAJOR)) });
-    scores.push({ key: `${NOTE_NAMES[root]}m`, r: pearson(chroma, rot(MINOR)) });
-  }
-  scores.sort((x, y) => y.r - x.r);
-  const [best, second] = scores;
-  if (!best || best.r < 0.3) return { key: null, confidence: 0 };
-  return { key: best.key, confidence: clamp01((best.r - second.r) * 10) * clamp01((best.r - 0.3) * 2.5) };
-}
 
 export interface AnalysisHints {
   /** Erwartetes Tempo, z. B. aus den Styles der Platte. Hilft bei Halb-/Doppel-/4:3-Verwechslungen. */
@@ -167,28 +97,8 @@ export function analyzeSamples(samples: Float32Array, sampleRate: number, hints:
   // ---------- Tempo ----------
   const { bpm, bpmConfidence } = estimateTempo(flux, lowFlux, fps, hints.expectedBpm ?? null);
 
-  // ---------- Chroma für die Tonart ----------
-  const NK = 8192;
-  const winK = hann(NK);
-  const reK = new Float64Array(NK);
-  const imK = new Float64Array(NK);
-  const chroma = new Array(12).fill(0);
-  const lo = Math.floor((65 * NK) / sampleRate);
-  const hi = Math.min(NK / 2 - 1, Math.ceil((2100 * NK) / sampleRate));
-  for (let start = 0; start + NK <= samples.length; start += NK / 2) {
-    const mag = magnitudes(samples, start, NK, winK, reK, imK);
-    let frameMax = 0;
-    for (let k = lo; k <= hi; k++) frameMax = Math.max(frameMax, mag[k]);
-    if (frameMax <= 0) continue;
-    for (let k = lo; k <= hi; k++) {
-      const freq = (k * sampleRate) / NK;
-      const midi = 69 + 12 * Math.log2(freq / 440);
-      const nearest = Math.round(midi);
-      if (Math.abs(midi - nearest) > 0.35) continue; // nur Bins nah an einem Halbton
-      chroma[((nearest % 12) + 12) % 12] += Math.log1p((mag[k] / frameMax) * 20);
-    }
-  }
-  const { key, confidence: keyConfidence } = chroma.some((v) => v > 0) ? estimateKey(chroma) : { key: null, confidence: 0 };
+  // ---------- Tonart ----------
+  const { key, confidence: keyConfidence } = detectKey(samples, sampleRate);
 
   // ---------- Energie 1..10 ----------
   const e = 0.4 * norm(loudnessDb, -22, -6) + 0.35 * norm(onsetsPerSecond, 2, 9) + 0.25 * norm(brightnessHz, 1200, 4500);

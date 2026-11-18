@@ -529,6 +529,26 @@ export async function migrateAudioMatching() {
   await setKV("lastCollectionSync", 0); // nächster Start analysiert neu
 }
 
+/**
+ * Neue Tonart-Erkennung (an Tanzmusik gelernt, siehe shared/keyDetect.ts): die alte traf nur etwa jedes
+ * vierte Stück. Gemessene Tonarten verwerfen und die Hörproben neu ausmessen lassen. Eigene Eingaben
+ * und beim Mithören bestimmte Tonarten bleiben.
+ */
+export async function migrateKeyV2() {
+  if (await getKV("migration-key-v2", false)) return;
+  await db.tracks.toCollection().modify((t) => {
+    if (t.keySource?.startsWith("Analyse")) {
+      t.key = undefined;
+      t.keySource = undefined;
+    }
+    if (!t.key && t.analyzedAt) {
+      t.analyzedAt = undefined;
+      t.analyzeTries = undefined;
+    }
+  });
+  await setKV("migration-key-v2", true);
+}
+
 /** Einmalig nach Einführung der Album-Zuordnung: Tracks ohne BPM nochmal suchen lassen */
 export async function migrateAlbumMatching() {
   if (await getKV("migration-album-v1", false)) return;
