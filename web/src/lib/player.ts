@@ -41,12 +41,12 @@ function audio(): HTMLAudioElement {
   if (el) return el;
   el = new Audio();
   el.preload = "none";
-  el.addEventListener("play", () => set({ playing: true, failed: false }));
+  el.addEventListener("play", () => (set({ playing: true, failed: false }), sessionState("playing")));
   el.addEventListener("playing", () => {
     skipDir = 0;
     skipped = 0;
   });
-  el.addEventListener("pause", () => set({ playing: false }));
+  el.addEventListener("pause", () => (set({ playing: false }), sessionState("paused")));
   el.addEventListener("ended", () => {
     set({ playing: false });
     // Nächster Track der Platte oder des Sets
@@ -59,6 +59,8 @@ function audio(): HTMLAudioElement {
     set({ playing: false, failed: true });
   });
   for (const ev of ["timeupdate", "durationchange", "seeked", "emptied"]) el.addEventListener(ev, () => timeSubs.forEach((f) => f()));
+  // Länge und Stelle auch dem System melden (Balken auf dem Sperrbildschirm)
+  for (const ev of ["durationchange", "seeked", "play", "ratechange"]) el.addEventListener(ev, sessionPosition);
   mediaSession();
   return el;
 }
@@ -78,12 +80,38 @@ function mediaSession() {
   on("pause", () => el?.pause());
   on("nexttrack", () => next());
   on("previoustrack", () => prev());
+  on("stop", () => stop());
+  try {
+    ms.setActionHandler("seekto", (d) => {
+      if (el && d.seekTime != null) el.currentTime = d.seekTime;
+    });
+  } catch {
+    /* kennt der Browser nicht */
+  }
+}
+/** Dem System sagen, ob gerade etwas läuft: manche Geräte zeigen die Bedienung sonst nicht an */
+function sessionState(s: "playing" | "paused" | "none") {
+  try {
+    if (navigator.mediaSession) navigator.mediaSession.playbackState = s;
+  } catch {
+    /* egal */
+  }
+}
+function sessionPosition() {
+  try {
+    if (!el || !navigator.mediaSession?.setPositionState || !Number.isFinite(el.duration) || el.duration <= 0) return;
+    navigator.mediaSession.setPositionState({ duration: el.duration, position: Math.min(el.currentTime, el.duration), playbackRate: el.playbackRate || 1 });
+  } catch {
+    /* egal */
+  }
 }
 function announce(now: NowPlaying) {
   const ms = typeof navigator !== "undefined" ? navigator.mediaSession : undefined;
   if (!ms || typeof MediaMetadata === "undefined") return;
   try {
-    ms.metadata = new MediaMetadata({ title: now.title, artist: now.artist, artwork: now.cover ? [{ src: now.cover }] : [] });
+    // Bild über den eigenen Server: Discogs-Bilder kommen ohne CORS, manche Geräte zeigen sie dann nicht
+    const art = now.cover && /^https:\/\/(i|st|img)\.discogs\.com\//.test(now.cover) ? `/api/img?u=${encodeURIComponent(now.cover)}` : now.cover;
+    ms.metadata = new MediaMetadata({ title: now.title, artist: now.artist, album: "Crate", artwork: art ? [{ src: art, sizes: "512x512", type: "image/jpeg" }] : [{ src: "/icon-512.png?v=4", sizes: "512x512", type: "image/png" }] });
   } catch {
     /* egal */
   }
@@ -160,6 +188,7 @@ export function pause() {
 export function stop() {
   el?.pause();
   skipDir = 0;
+  sessionState("none");
   set({ now: null, playing: false, failed: false, queue: [], index: -1, full: false });
 }
 

@@ -1,5 +1,5 @@
 import { useBuzz } from "../lib/buzz";
-import { apkOutdated, LATEST_APK } from "../lib/push";
+import { apkName, apkOutdated, LATEST_APK } from "../lib/push";
 import { Hint } from "../components/Welcome";
 import { DailyRecord } from "../components/DailyRecord";
 import { Link } from "react-router-dom";
@@ -141,7 +141,7 @@ export default function Home() {
         {apkOutdated() && (
           <Hint id={`apk-${LATEST_APK}`}>
             <b>Neue Version der Android-App.</b> Mit neuem Logo auf dem Startbildschirm und Teilen direkt in die Instagram-Story.{" "}
-            <a href="/download/crate.apk">Jetzt laden und installieren</a>
+            <a href={`/download/crate.apk?v=${LATEST_APK}`} download={`crate-${apkName(LATEST_APK)}.apk`}>Version {apkName(LATEST_APK)} laden und installieren</a>
           </Hint>
         )}
         {stylus?.wear != null && stylus.wear >= 0.9 && (

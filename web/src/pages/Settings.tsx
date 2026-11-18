@@ -21,7 +21,7 @@ import { renderProfileCard } from "../lib/shareCard";
 import { inviteLink } from "../lib/friends";
 import { loadMyProfile, saveMyProfile } from "../lib/profile";
 import { GEAR, linkText, LINK_LABEL, parseLink, PLAY_LABEL, sanitizeProfile, type CrateProfile, type GearSlot, type PlayMode } from "../../../shared/profile";
-import { appInfo, canOpenAndroidSettings, DEFAULT_PREFS, disablePush, enablePush, isIOS, openAndroidNotificationSettings, PushBlocked, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs, appAsksItself } from "../lib/push";
+import { appInfo, canOpenAndroidSettings, DEFAULT_PREFS, disablePush, enablePush, isIOS, openAndroidNotificationSettings, PushBlocked, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs, appAsksItself, runningAs } from "../lib/push";
 import { DEFAULT_SHIP, type ShipConfig } from "../../../shared/shipping";
 import {
   IconBell,
@@ -645,6 +645,10 @@ function AboutPage() {
             Version {__APP_VERSION__} · {new Date(__BUILD_DATE__).toLocaleDateString("de-DE")}
           </div>
         </div>
+        <Group title="Diese Installation" foot="Die Crate-App für Android kommt als Datei von crate-8vf.pages.dev/app. „Über Chrome installiert“ ist eine zweite, eigene App: dort erneuert Google das Icon nur langsam.">
+          <Row label="Läuft als" value={runningAs()} />
+          <Row label="Stand" value={`v${__APP_VERSION__}`} />
+        </Group>
         <Group title="Datenschutz" foot="Auf dem Server liegt nur, was du zwischen deinen Geräten abgleichst, dein Crate-Profil und, wenn eingeschaltet, Mitteilungen. Alles lässt sich in den Einstellungen löschen. Dein Discogs-Passwort sieht die App nie.">
           <Row label="Deine Daten" value="nur auf dem Gerät" />
           <Row label="Discogs-Zugang" value="verschlüsselt im Cookie" />

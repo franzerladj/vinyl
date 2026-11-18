@@ -35,6 +35,27 @@ function DigSheet({ onClose, stack, children }: { onClose: () => void; stack?: b
 
 type Audio = "idle" | "loading" | "playing" | "paused" | "none";
 
+/**
+ * YouTube-Video im Feed mit Ton starten, ohne dass man es antippen muss. Mit Ton von selbst zu starten
+ * verweigert der YouTube-Player am Handy; stumm startet er. Deshalb: stumm starten, dann über die
+ * Player-Schnittstelle den Ton einschalten. Der Browser lässt das zu, weil man in Crate schon getippt
+ * und gewischt hat. Auf dem iPhone geht das nicht (dort pausiert das Video beim Einschalten ohne Tipp):
+ * es bleibt stumm, YouTube zeigt selbst „Zum Einschalten tippen“.
+ */
+function unmuteYouTube(frame: HTMLIFrameElement) {
+  if (/iP(hone|ad|od)/.test(navigator.userAgent)) return;
+  const send = (func: string, args: unknown[] = []) => frame.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args }), "https://www.youtube-nocookie.com");
+  // Der Player meldet nicht verlässlich, wann er bereit ist: ein paar Mal versuchen
+  for (const ms of [500, 1200, 2500, 4000]) {
+    setTimeout(() => {
+      if (!frame.isConnected) return;
+      send("unMute");
+      send("setVolume", [100]);
+      send("playVideo");
+    }, ms);
+  }
+}
+
 export default function Dig() {
   const nav = useNavigate();
   const [cards, setCards] = useState<DigCard[]>([]);
@@ -458,7 +479,7 @@ export default function Dig() {
                   <div className="dig-body">
                     <div className="dig-stage" onClick={() => onCardTap(c)}>
                       {i === active && video ? (
-                        <iframe className="dig-video" src={`https://www.youtube-nocookie.com/embed/${video}?autoplay=1&playsinline=1&rel=0`} title={c.title} allow="autoplay; encrypted-media" allowFullScreen />
+                        <iframe className="dig-video" src={`https://www.youtube-nocookie.com/embed/${video}?autoplay=1&mute=1&playsinline=1&rel=0&enablejsapi=1&origin=${encodeURIComponent(location.origin)}`} title={c.title} allow="autoplay; encrypted-media" allowFullScreen onLoad={(e) => unmuteYouTube(e.currentTarget)} />
                       ) : (
                         // Hülle mit Platte: beim Abspielen fährt die Platte heraus und dreht sich
                         <div className={`dig-deck${i === active && audioState === "playing" ? " playing" : ""}`}>

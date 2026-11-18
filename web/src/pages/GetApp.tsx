@@ -2,6 +2,7 @@
 // Ohne Anmeldung erreichbar (/app).
 import { Link } from "react-router-dom";
 import { LogoMark, Wordmark } from "../components/Logo";
+import { apkName, LATEST_APK } from "../lib/push";
 
 const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
 const isAndroid = /Android/i.test(ua);
@@ -13,12 +14,14 @@ function Android({ lead }: { lead: boolean }) {
     <section className={`getapp-card${lead ? " lead" : ""}`}>
       <span className="eyebrow">Android</span>
       <b>Als App installieren</b>
-      <a className="btn primary block lg" href="/download/crate.apk" download>
+      <a className="btn primary block lg" href={`/download/crate.apk?v=${LATEST_APK}`} download={`crate-${apkName(LATEST_APK)}.apk`}>
         Crate für Android laden
       </a>
-      <span className="tiny">APK, 0,5 MB, ab Android 5. Braucht Chrome auf dem Handy.</span>
+      <span className="tiny">Version {apkName(LATEST_APK)} · APK, 0,5 MB, ab Android 5. Braucht Chrome auf dem Handy.</span>
       <ol className="getapp-steps">
-        <li>Datei laden und antippen.</li>
+        <li>
+          Datei laden und antippen. Sie heißt <b>crate-{apkName(LATEST_APK)}.apk</b>: liegt in deinen Downloads noch eine ältere „crate.apk“, nimm nicht die.
+        </li>
         <li>Fragt Android nach „Unbekannte Apps installieren“: für den Browser einmal erlauben.</li>
         <li>„Installieren“ tippen, dann Crate öffnen und mit Discogs anmelden.</li>
       </ol>

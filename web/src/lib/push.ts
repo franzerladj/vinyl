@@ -53,7 +53,22 @@ export function appInfo(): AppInfo {
   }
 }
 /** Aktuelle Android-App (versionCode). Ältere bekommen auf Start einen Hinweis zum Aktualisieren. */
-export const LATEST_APK = 8;
+export const LATEST_APK = 9;
+/** Versionsname je versionCode der Android-App (für die Anzeige) */
+export const APK_NAMES: Record<number, string> = { 9: "1.8", 8: "1.7", 7: "1.6", 6: "1.5" };
+export const apkName = (v: number) => APK_NAMES[v] ?? (v ? `Stand ${v}` : "ältere Version");
+/**
+ * Wie Crate gerade läuft. Wichtig zum Auseinanderhalten: Chrome kann die Seite auch selbst installieren
+ * („App installieren“ im Chrome-Menü). Das ist eine zweite, eigene App mit eigenem Icon, das Google nur
+ * langsam erneuert: wer dort das alte Logo sieht, hat nicht die Crate-App aus der APK vor sich.
+ */
+export function runningAs(): string {
+  const a = appInfo();
+  if (a.android) return `Android-App ${apkName(a.v)}`;
+  const standalone = typeof window !== "undefined" && (window.matchMedia?.("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true);
+  if (standalone) return /Android/i.test(navigator.userAgent) ? "über Chrome installiert (nicht die Crate-App)" : "vom Home-Bildschirm";
+  return "im Browser";
+}
 export const apkOutdated = () => appInfo().android && appInfo().v > 0 && appInfo().v < LATEST_APK;
 
 /** Ab App-Version 1.7 fragt die App selbst (Dialog, sonst Einstellungen) und meldet Chrome nie mehr „gesperrt“ */
