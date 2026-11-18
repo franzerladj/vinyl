@@ -125,6 +125,10 @@ export interface FreeOptions {
 
 /** Ab dieser Sicherheit wird eine gemessene Tonart übernommen */
 export const KEY_MIN_CONFIDENCE = 0.5;
+/** Ab dieser Sicherheit gilt sie als sicher (ohne „?“) */
+export const KEY_SURE_CONFIDENCE = 0.7;
+export const KEY_SOURCE_SURE = "Analyse (sicher)";
+export const KEY_SOURCE_GUESS = "Analyse (Schätzung)";
 
 const rank = (t: TrackMeta) => (t.tempoCheck === "unsicher" ? 0 : t.tempoCheck === "einfach" ? 1 : 2);
 
@@ -180,7 +184,8 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
           // Ab 0,5 stimmen gemessen drei von vier genau und neun von zehn sind mixbar; darunter lieber keine Tonart
           if (!t.key && analysis.key && analysis.keyConfidence >= KEY_MIN_CONFIDENCE) {
             patch.key = analysis.key;
-            patch.keySource = "Analyse (Schätzung)";
+            // Ab 0,7 stimmen gemessen 85 % genau: gilt als sicher. Darunter bleibt es eine Schätzung mit „?“
+            patch.keySource = analysis.keyConfidence >= KEY_SURE_CONFIDENCE ? KEY_SOURCE_SURE : KEY_SOURCE_GUESS;
           }
         }
       }

@@ -46,12 +46,17 @@ export const camelotColor = (k?: string | null) => {
   return c ? CAMELOT_COLORS[c.num - 1] : null;
 };
 
-export function KeyBadge({ k }: { k?: string | null }) {
+/** Gemessene Tonart, bei der sich die Messung nicht sicher war (stimmt gemessen bei drei von vier) */
+export const keyUnsure = (t?: { key?: string | null; keySource?: string } | null) => Boolean(t?.key && t.keySource === "Analyse (Schätzung)");
+
+export function KeyBadge({ k, unsure }: { k?: string | null; unsure?: boolean }) {
   const c = parseKey(k);
-  if (!c) return k ? <span className="badge">{k}</span> : null;
+  const mark = unsure ? <i className="key-q" aria-label="Tonart geschätzt">?</i> : null;
+  if (!c) return k ? <span className="badge">{k}{mark}</span> : null;
   return (
-    <span className="badge cam" style={{ background: CAMELOT_COLORS[c.num - 1], opacity: c.letter === "A" ? 0.88 : 1 }} title={k ?? ""}>
+    <span className="badge cam" style={{ background: CAMELOT_COLORS[c.num - 1], opacity: c.letter === "A" ? 0.88 : 1 }} title={unsure ? `${k ?? ""} (geschätzt, per Mithören bestätigen)` : (k ?? "")}>
       {camelotString(c)}
+      {mark}
     </span>
   );
 }

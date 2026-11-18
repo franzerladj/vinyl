@@ -240,6 +240,8 @@ export interface Me {
 
 export const getMe = () => fetch("/api/me", { credentials: "include" }).then((r) => r.json() as Promise<Me>);
 export const logout = () => fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+/** Alle anderen Geräte abmelden (dieses bleibt angemeldet) */
+export const revokeOtherSessions = () => api<{ ok: boolean }>("/api/auth/revoke-others", { method: "POST" });
 
 /** Gibt es irgendeine Bilderkennung auf dem Server? */
 export const canRecognize = (m: Me | null) => Boolean(m?.features.freeAi);

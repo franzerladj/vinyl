@@ -3,13 +3,7 @@ import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, type Release, type TrackMeta } from "../lib/db";
-import {
-  Cover,
-  Empty,
-  Energy,
-  KeyBadge,
-  useDebounced,
-} from "../components/bits";
+import { Cover, Empty, Energy, KeyBadge, useDebounced, keyUnsure } from "../components/bits";
 import { IconPlus } from "../components/icons";
 import { matchesQuery } from "../../../shared/textSearch";
 import {
@@ -328,7 +322,7 @@ export function TrackLine({
           ) : (
             <span className="tiny">BPM?</span>
           )}
-          <KeyBadge k={t.key} />
+          <KeyBadge k={t.key} unsure={keyUnsure(t)} />
         </div>
         <Energy v={t.energy} />
         {actions}

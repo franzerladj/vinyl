@@ -1,3 +1,4 @@
+import { sellCandidates, sinceText } from "../../../shared/sellable";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
@@ -527,6 +528,62 @@ const toggle = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) =
 const BASIS: Record<string, string> = { grade: "nach deinem Zustand", vgplus: "Richtwert VG+", lowest: "günstigstes Angebot" };
 
 /** Wert der Sammlung: Gesamtwert von Discogs, wertvollste Platten, Einzelwerte nachladen */
+/** „Was könnte weg?“: wertvolle Platten, die in keinem Set stehen. Nur wenn es überhaupt Sets gibt. */
+function SellList({ values, paid }: { values: Awaited<ReturnType<typeof recordValues>>; paid: Awaited<ReturnType<typeof paidPrices>> }) {
+  const [all, setAll] = useState(false);
+  const rows = useLiveQuery(async () => {
+    const sets = await db.sets.toArray();
+    if (!sets.some((x) => x.trackIds.length || x.crateIds?.length)) return null;
+    const trackIds = [...new Set(sets.flatMap((x) => [...x.trackIds, ...(x.played ?? [])]))];
+    const inSets = new Map<number, number>();
+    const bump = (rid: number) => inSets.set(rid, (inSets.get(rid) ?? 0) + 1);
+    for (const t of await db.tracks.bulkGet(trackIds)) if (t) bump(t.releaseId);
+    for (const x of sets) for (const rid of x.crateIds ?? []) bump(rid);
+    const coll = await db.collection.toArray();
+    const metas = new Map((await db.recordMeta.bulkGet([...new Set(coll.map((c) => c.releaseId))])).filter(Boolean).map((m) => [m!.releaseId, m!]));
+    const seen = new Set<number>();
+    const input = coll
+      .filter((c) => !seen.has(c.releaseId) && seen.add(c.releaseId))
+      .map((c) => ({ id: c.releaseId, value: values.get(c.releaseId)?.value ?? null, paid: paid.get(c.releaseId)?.value ?? null, rating: c.rating, dateAdded: c.dateAdded, sets: inSets.get(c.releaseId) ?? 0, lent: Boolean(metas.get(c.releaseId)?.lentTo) }));
+    const cands = sellCandidates(input, new Date().toISOString().slice(0, 10));
+    const rels = await db.releases.bulkGet(cands.map((c) => c.id));
+    return cands.map((c, i) => ({ ...c, r: rels[i], cur: values.get(c.id)?.currency ?? "EUR" })).filter((x) => x.r);
+  }, [values, paid]);
+  if (!rows?.length) return null;
+  const sum = rows.reduce((a, r) => a + r.value, 0);
+  const shown = all ? rows : rows.slice(0, 4);
+  return (
+    <div className="card stack" style={{ gap: 8 }}>
+      <b>Was könnte weg?</b>
+      <span className="sub">
+        {rows.length === 1 ? "Eine Platte steht" : `${rows.length} Platten stehen`} in keinem deiner Sets und {rows.length === 1 ? "ist" : "sind"} zusammen etwa {money(roughly(sum), rows[0].cur).replace(/,00(?=\s|$)/, "")} wert. Neue Platten, verliehene und alles ab vier Sternen bleiben außen vor.
+      </span>
+      <div className="list">
+        {shown.map(({ id, value, gain, months, r, cur }) => (
+          <Link key={id} to={`/release/${id}`} viewTransition className="rec value-rec" style={{ color: "inherit" }}>
+            <Cover src={r!.thumb} />
+            <div className="rec-main">
+              <div className="rec-title">{r!.title}</div>
+              <div className="rec-artist">{r!.artist}</div>
+              <div className="rec-meta">
+                <span>
+                  {sinceText(months)} in der Sammlung{gain != null && gain > 0 ? ` · ${money(gain, cur)} über Kaufpreis` : ""}
+                </span>
+              </div>
+            </div>
+            <b className="mono">{money(value, cur)}</b>
+          </Link>
+        ))}
+      </div>
+      {rows.length > 4 && (
+        <button className="btn tinted" onClick={() => setAll(!all)}>
+          {all ? "Weniger zeigen" : `Alle ${rows.length} zeigen`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function ValueSheet({ total, values, paid, count, onSort }: { total: Awaited<ReturnType<typeof cachedCollectionValue>>; values: Awaited<ReturnType<typeof recordValues>>; paid: Awaited<ReturnType<typeof paidPrices>>; count: number; onSort: () => void }) {
   const [paidList, setPaidList] = useState(false);
   const paidSum = [...paid.values()].reduce((s, p) => s + p.value, 0);
@@ -606,6 +663,8 @@ function ValueSheet({ total, values, paid, count, onSort }: { total: Awaited<Ret
           </div>
         </>
       )}
+
+      <SellList values={values} paid={paid} />
 
       <div className="card stack" style={{ gap: 8 }}>
         <b>Was du bezahlt hast</b>

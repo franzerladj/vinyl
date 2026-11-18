@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, getKV, setKV, type Release } from "../lib/db";
-import { discogs as discogsApi, logout } from "../lib/api";
+import { discogs as discogsApi, logout, revokeOtherSessions } from "../lib/api";
 import { autoPipeline, fetchMissingDetails, getAutoSettings, lookupAudioFor, tagVibes, type AutoSettings } from "../lib/sync";
 import { suggestionsState } from "../lib/prices";
 import { ask, toast, useStore } from "../lib/store";
@@ -285,6 +285,17 @@ function Overview() {
                   /* egal */
                 }
                 location.href = "/";
+              }}
+            />
+            <Row
+              label="Andere Geräte abmelden"
+              sub="Handy verloren oder an einem fremden Computer angemeldet gewesen? Dieses Gerät bleibt angemeldet."
+              onClick={async () => {
+                if (!(await ask({ title: "Alle anderen Geräte abmelden?", body: "Überall sonst muss man sich neu bei Discogs anmelden. Das greift nach ein bis zwei Minuten. Dieses Gerät bleibt angemeldet.", ok: "Abmelden", danger: true }))) return;
+                revokeOtherSessions().then(
+                  () => toast("Andere Geräte werden abgemeldet"),
+                  (e: Error) => toast(e.message),
+                );
               }}
             />
             <Row

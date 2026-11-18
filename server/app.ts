@@ -49,7 +49,28 @@ function sameSecret(a: string | undefined, b: string): boolean {
 }
 
 const cookieOpts = (c: C) => ({ httpOnly: true, secure: c.var.cfg.appUrl.startsWith("https://"), sameSite: "Lax" as const, path: "/" });
-const rawSession = (c: C) => unseal<Session>(c.var.cfg.sessionSecret, getCookie(c, SESSION));
+/**
+ * Widerruf: „Auf allen anderen Geräten abmelden“ legt je Konto einen Zeitpunkt im KV ab (`rev:<name>`).
+ * Sitzungen, die davor ausgestellt wurden, gelten nicht mehr. Der Zeitpunkt wird je Worker eine Minute
+ * gemerkt (sonst kostete jede signierte Discogs-Anfrage einen KV-Zugriff): der Widerruf greift also
+ * nach spätestens ein bis zwei Minuten überall.
+ */
+const revCache = new Map<string, { at: number; until: number }>();
+const REV_TTL = 60_000;
+async function revokedAt(c: C, username: string): Promise<number> {
+  const key = username.toLowerCase();
+  const hit = revCache.get(key);
+  if (hit && hit.until > Date.now()) return hit.at;
+  const at = Number(await c.var.cfg.kv.get(`rev:${key}`).catch(() => null)) || 0;
+  revCache.set(key, { at, until: Date.now() + REV_TTL });
+  if (revCache.size > 2000) revCache.clear();
+  return at;
+}
+const rawSession = async (c: C) => {
+  const s = await unseal<Session>(c.var.cfg.sessionSecret, getCookie(c, SESSION));
+  if (s?.username && (s.iat ?? 0) < (await revokedAt(c, s.username))) return null;
+  return s;
+};
 /** Nur Sitzungen mit vom Server bei Discogs bestätigtem Namen zählen (alte unbestätigte werden nachgeprüft) */
 const session = async (c: C) => {
   const s = await rawSession(c);
@@ -208,6 +229,18 @@ app.post("/api/auth/exchange", async (c) => {
 
 app.post("/api/auth/logout", (c) => {
   deleteCookie(c, SESSION, { path: "/" });
+  return c.json({ ok: true });
+});
+
+/** Alle anderen Geräte abmelden: ältere Sitzungen gelten nicht mehr, dieses Gerät bekommt eine frische */
+app.post("/api/auth/revoke-others", async (c) => {
+  const s = await session(c);
+  if (!s) return c.json({ message: "nicht angemeldet" }, 401);
+  const now = Date.now();
+  const key = s.username.toLowerCase();
+  await c.var.cfg.kv.put(`rev:${key}`, String(now));
+  revCache.set(key, { at: now, until: now + REV_TTL });
+  await setSession(c, s);
   return c.json({ ok: true });
 });
 

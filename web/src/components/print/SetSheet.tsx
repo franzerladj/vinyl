@@ -3,7 +3,7 @@
 // (zum Wiederfinden in der Kiste), Tempo, Tonart, Energie und die eigene Mix-Notiz.
 import type { DJSet, Release, TrackMeta } from "../../lib/db";
 import { FONTS, headStyle, MONO, type PrintOpts } from "./types";
-import { Bars, capsLine, catnoOf, cleanLabel, InlineVersion, KeyTag, mm, palette } from "./kit";
+import { Bars, capsLine, catnoOf, cleanLabel, InlineVersion, KeyTag, mm, palette, keyGuess } from "./kit";
 
 const dateText = (d?: string) => (d ? new Date(d).toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "long", year: "numeric" }) : "");
 
@@ -60,7 +60,7 @@ export function SetSheet({ set, tracks, rels, o }: { set: DJSet; tracks: TrackMe
             </span>
             <span style={{ width: mm(14), flex: "none", textAlign: "right", fontFamily: MONO, fontWeight: 800, fontSize: mm(fs * 1.12) }}>{t.bpm ? `${t.tempoCheck === "unsicher" ? "~" : ""}${Math.round(t.bpm)}` : ""}</span>
             <span style={{ width: mm(15), flex: "none", textAlign: "right" }}>
-              <KeyTag k={t.key} size={fs} pal={pal} o={{ ...o, showCamelot: true, showKey: true }} />
+              <KeyTag k={t.key} size={fs} pal={pal} o={{ ...o, showCamelot: true, showKey: true }} unsure={keyGuess(t)} />
             </span>
             <span style={{ width: mm(12), flex: "none", textAlign: "right", paddingTop: mm(fs * 0.14) }}>
               <Bars v={t.energy} size={fs} pal={pal} />

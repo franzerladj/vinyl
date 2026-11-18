@@ -12,7 +12,7 @@ import { GRADE_HINT, SLEEVE_HINT, MEDIA_GRADES, SLEEVE_GRADES, pressingInfo, sho
 import type { CollectionItem } from "../lib/db";
 import { discogsReleaseUrl, discogsSellUrl, formatLine, money, sideOf } from "../lib/format";
 import { askText, toast, useStore } from "../lib/store";
-import { Avatar, Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, Sparkline, TapTempo, type Preview, keepParens, DiscogsCredit } from "../components/bits";
+import { Avatar, Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, Sparkline, TapTempo, type Preview, keepParens, DiscogsCredit, keyUnsure } from "../components/bits";
 import { loadPriceInfo, setTargetPrice } from "../lib/prices";
 import { friendsFor, lendRecord, messageUrl } from "../lib/friends";
 import { MenuSheet } from "../components/ui";
@@ -380,7 +380,7 @@ export default function ReleasePage() {
                       ) : (
                         <span className="tiny">–</span>
                       )}
-                      <KeyBadge k={m?.key} />
+                      <KeyBadge k={m?.key} unsure={keyUnsure(m)} />
                     </div>
                     <div style={{ marginTop: 4 }}>
                       <Energy v={m?.energy} />

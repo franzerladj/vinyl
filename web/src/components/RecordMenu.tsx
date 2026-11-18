@@ -9,11 +9,15 @@ import { previewUrl } from "../lib/free";
 import { addWant, removeWant } from "../lib/sync";
 import { discogsReleaseUrl } from "../lib/format";
 import { toast } from "../lib/store";
-import { haptic, keepParens, overlayOpen, useBackClose, useSwipeDown } from "./bits";
-import { IconHeart, IconPlay, IconShare, IconRecord, IconUser } from "./icons";
+import { haptic, keepParens, overlayOpen, Sheet, useBackClose, useSwipeDown } from "./bits";
+import { IconFolder, IconHeart, IconPlay, IconShare, IconRecord, IconSleeves, IconUser } from "./icons";
 import { RecommendSheet } from "./Buzz";
+import { FolderChooser } from "./Folders";
+import { cachedFolders, folderIdFor, moveToFolder, setWantFolder } from "../lib/folders";
+import { customFolders, NO_FOLDER, wantFolderOf } from "../../../shared/folders";
+import { useLiveQuery } from "dexie-react-hooks";
 
-type Ctx = { rel: Release; owned: boolean; wanted: boolean; track?: { title: string; artist: string; deezerId?: number; id: string } };
+type Ctx = { rel: Release; owned: boolean; wanted: boolean; folder: string | null; track?: { title: string; artist: string; deezerId?: number; id: string } };
 
 const SKIP = ".dig, .sheet, [role=dialog], .ys, .pager-pane.peek";
 
@@ -33,7 +37,13 @@ export function RecordMenu() {
       const t = tracks.sort((x, y) => x.position.localeCompare(y.position, "de", { numeric: true })).find((x) => x.deezerId) ?? tracks[0];
       haptic(14);
       suppress = performance.now();
-      setCtx({ rel, owned: own > 0, wanted: Boolean(want), track: t && { title: t.title, artist: t.artist, deezerId: t.deezerId ?? undefined, id: t.id } });
+      // Aktueller Ordner: bei Platten aus der Sammlung der Discogs-Ordner, bei Wants die Marke in der Notiz
+      let folder: string | null = null;
+      if (own > 0) {
+        const copies = await db.collection.where("releaseId").equals(id).toArray();
+        folder = customFolders(await cachedFolders()).find((f) => copies.some((c) => c.folderId === f.id))?.name ?? null;
+      } else if (want) folder = wantFolderOf(want.notes);
+      setCtx({ rel, owned: own > 0, wanted: Boolean(want), folder, track: t && { title: t.title, artist: t.artist, deezerId: t.deezerId ?? undefined, id: t.id } });
     };
     const target = (e: Event) => {
       const el = e.target as HTMLElement | null;
@@ -93,10 +103,33 @@ export function RecordMenu() {
     return () => window.removeEventListener("keydown", onKey);
   }, [ctx]);
   const [rec, setRec] = useState<Release | null>(null);
+  const [filing, setFiling] = useState<{ id: number; kind: "coll" | "want"; current: string | null } | null>(null);
+  const [crating, setCrating] = useState<Release | null>(null);
   const body = useRef<HTMLDivElement>(null);
   useSwipeDown(body, () => setCtx(null), Boolean(ctx));
   useBackClose(Boolean(ctx), () => setCtx(null));
-  if (!ctx) return <RecommendSheet release={rec} onClose={() => setRec(null)} />;
+  if (!ctx)
+    return (
+      <>
+        <RecommendSheet release={rec} onClose={() => setRec(null)} />
+        <FolderChooser
+          open={Boolean(filing)}
+          onClose={() => setFiling(null)}
+          kind={filing?.kind ?? "coll"}
+          current={filing?.current ?? null}
+          onPick={(name) => {
+            if (!filing) return;
+            const id = filing.id;
+            const job = filing.kind === "want" ? setWantFolder([id], name) : (name ? folderIdFor(name) : Promise.resolve(NO_FOLDER)).then((fid) => moveToFolder([id], fid));
+            job.then(
+              () => toast(name ? `In „${name}“ einsortiert` : "Ohne Ordner"),
+              (e) => toast((e as Error).message),
+            );
+          }}
+        />
+        <CrateSheet release={crating} onClose={() => setCrating(null)} />
+      </>
+    );
   const { rel, owned, wanted, track } = ctx;
   const close = () => setCtx(null);
   const act = (fn: () => void) => () => {
@@ -128,6 +161,8 @@ export function RecordMenu() {
           },
         ]
       : []),
+    ...(owned || wanted ? [{ label: ctx.folder ? `Ordner: ${ctx.folder}` : "In einen Ordner legen", icon: <IconFolder />, run: () => setFiling({ id: rel.id, kind: owned ? ("coll" as const) : ("want" as const), current: ctx.folder }) }] : []),
+    ...(owned ? [{ label: "In die Kiste für ein Set", icon: <IconSleeves />, run: () => setCrating(rel) }] : []),
     { label: "Einem Freund empfehlen", icon: <IconUser />, run: () => setRec(rel) },
     {
       label: "Teilen",
@@ -160,5 +195,51 @@ export function RecordMenu() {
       </div>
     </div>,
     document.body,
+  );
+}
+
+/** Platte in die Kiste eines Sets legen: anstehende Sets zuerst, dann die neuesten */
+function CrateSheet({ release, onClose }: { release: Release | null; onClose: () => void }) {
+  const sets = useLiveQuery(async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const all = await db.sets.toArray();
+    const next = all.filter((x) => x.date && x.date >= today).sort((a, b) => a.date!.localeCompare(b.date!));
+    const rest = all.filter((x) => !next.includes(x)).sort((a, b) => b.createdAt - a.createdAt);
+    return [...next, ...rest].slice(0, 8);
+    // Bei jedem Öffnen neu lesen
+  }, [release?.id]);
+  const add = async (setId: number, name: string) => {
+    if (!release) return;
+    const cur = await db.sets.get(setId);
+    if (!cur) return;
+    const crate = cur.crateIds ?? [];
+    haptic(8);
+    onClose();
+    if (crate.includes(release.id)) return toast(`Liegt schon in der Kiste für „${name}“`);
+    await db.sets.update(setId, { crateIds: [...crate, release.id] });
+    toast(`In der Kiste für „${name}“`);
+  };
+  return (
+    <Sheet open={Boolean(release)} onClose={onClose}>
+      <div className="sheet-title">
+        <h3>In welche Kiste?</h3>
+      </div>
+      {sets && sets.length > 0 ? (
+        <div className="option-list">
+          {sets.map((x) => (
+            <button key={x.id} className="option" onClick={() => void add(x.id!, x.name || "Set")}>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                {x.name || "Set"}
+                <small style={{ display: "block", color: "var(--text-2)", fontSize: 13 }}>
+                  {[x.date ? new Date(x.date).toLocaleDateString("de-DE", { day: "numeric", month: "short" }) : null, `${(x.crateIds ?? []).length} in der Kiste`, release && (x.crateIds ?? []).includes(release.id) ? "liegt schon drin" : null].filter(Boolean).join(" · ")}
+                </small>
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="sub">Du hast noch kein Set. Leg unter „Sets“ eines an, dann kannst du Platten von überall in seine Kiste legen.</p>
+      )}
+    </Sheet>
   );
 }

@@ -4,7 +4,7 @@
 // Zahlen in Mono. Weiß braucht kaum Tinte; Farbe sitzt nur in kleinen Flächen.
 import { splitVersion } from "../../../../shared/trackTitle";
 import { FONTS, headStyle, MONO, stars, type PrintItem, type PrintOpts, type PrintTrack } from "./types";
-import { Bars, bpmRange, bpmText, capsLine, catnoOf, clamp, cleanLabel, groupSides, InlineVersion, KeyTag, mm, palette, SideTag, Stamp, TitleLines, VERSION_SCALE, type CardTheme, type Pal } from "./kit";
+import { Bars, bpmRange, bpmText, capsLine, catnoOf, clamp, cleanLabel, groupSides, InlineVersion, KeyTag, mm, palette, SideTag, Stamp, TitleLines, VERSION_SCALE, type CardTheme, type Pal, keyGuess } from "./kit";
 
 export { DEFAULT_ACCENT, InlineVersion, VERSION_SCALE, type CardTheme } from "./kit";
 
@@ -173,7 +173,7 @@ export function InsertCard({ s, w, h, o, theme }: { s: PrintItem; w: number; h: 
                         {hasBpm && <span style={{ width: mm(m.bpmW), flex: "none", textAlign: "right", fontFamily: MONO, fontWeight: 800, whiteSpace: "nowrap" }}>{bpmText(tr)}</span>}
                         {hasKey && (
                           <span style={{ width: mm(m.keyW), flex: "none", textAlign: "right" }}>
-                            <KeyTag k={tr.meta?.key} size={fs} pal={pal} o={o} />
+                            <KeyTag k={tr.meta?.key} size={fs} pal={pal} o={o} unsure={keyGuess(tr.meta)} />
                           </span>
                         )}
                         {hasEnergy && (
@@ -285,7 +285,7 @@ export function ObiStrip({ s, w, h, o, theme, front }: { s: PrintItem; w: number
                     {bpmLen > 0 && <span style={{ flex: "none", fontFamily: MONO, fontWeight: 800, whiteSpace: "nowrap" }}>{bpmText(tr)}</span>}
                     {hasKey && (
                       <span style={{ flex: "none", width: mm(fs * 2.1), textAlign: "right" }}>
-                        <KeyTag k={tr.meta?.key} size={fs} pal={pal} o={o} />
+                        <KeyTag k={tr.meta?.key} size={fs} pal={pal} o={o} unsure={keyGuess(tr.meta)} />
                       </span>
                     )}
                   </div>

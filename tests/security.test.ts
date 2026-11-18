@@ -172,3 +172,39 @@ describe("Story-Bild für die Android-App", () => {
     expect(r.status).toBe(415);
   });
 });
+
+describe("Sitzungen widerrufen", () => {
+  const old = async (name: string, iat: number) => `crate_session=${await seal(SECRET, { token: "t", secret: "s", username: name, verified: true, iat })}`;
+  const post = (path: string, cookie: string) => req(path, { method: "POST", headers: { Cookie: cookie, Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json" }, body: "{}" });
+
+  it("meldet alle anderen Geräte ab und lässt dieses angemeldet", async () => {
+    const laptop = await old("revoker", Date.now() - 5 * 86400_000);
+    const phone = await old("revoker", Date.now() - 1000);
+    // Vorher gelten beide
+    expect(((await (await req("/api/me", { headers: { Cookie: laptop } })).json()) as { username: string | null }).username).toBe("revoker");
+    const r = await post("/api/auth/revoke-others", phone);
+    expect(r.status).toBe(200);
+    const fresh = r.headers.get("Set-Cookie")!.split(";")[0];
+    expect(fresh).toContain("crate_session=");
+    // Die alte Sitzung des Laptops gilt nicht mehr, auch nicht zum Signieren
+    expect(((await (await req("/api/me", { headers: { Cookie: laptop } })).json()) as { username: string | null }).username).toBeNull();
+    const sign = await req("/api/sign", { method: "POST", headers: { Cookie: laptop, Origin: ORIGIN, "Sec-Fetch-Site": "same-origin", "Content-Type": "application/json" }, body: JSON.stringify({ method: "GET", path: "/users/revoker" }) });
+    expect(((await sign.json()) as { mode?: string; authorization?: string }).authorization).toBeUndefined();
+    // Auch das alte Cookie des Handys ist verbrannt, das frische gilt
+    expect(((await (await req("/api/me", { headers: { Cookie: phone } })).json()) as { username: string | null }).username).toBeNull();
+    expect(((await (await req("/api/me", { headers: { Cookie: fresh } })).json()) as { username: string | null }).username).toBe("revoker");
+  });
+
+  it("trifft nur das eigene Konto und braucht eine Anmeldung", async () => {
+    const other = await old("bystander", Date.now() - 5 * 86400_000);
+    expect(((await (await req("/api/me", { headers: { Cookie: other } })).json()) as { username: string | null }).username).toBe("bystander");
+    expect((await req("/api/auth/revoke-others", { method: "POST", headers: { Origin: ORIGIN, "Sec-Fetch-Site": "same-origin" } })).status).toBe(401);
+  });
+
+  it("lässt sich nicht von einer fremden Seite auslösen", async () => {
+    const mine = await old("victim", Date.now() - 1000);
+    const r = await req("/api/auth/revoke-others", { method: "POST", headers: { Cookie: mine, Origin: "https://evil.example", "Sec-Fetch-Site": "cross-site" } });
+    expect(r.status).toBe(403);
+    expect(((await (await req("/api/me", { headers: { Cookie: mine } })).json()) as { username: string | null }).username).toBe("victim");
+  });
+});

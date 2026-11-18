@@ -154,7 +154,8 @@ export default function SetEditor() {
     const stars = t.stars || data?.ratings.get(t.releaseId) || 0;
     // Unsicheres Tempo zählt bei Vorschlägen weniger, gegengeprüftes voll
     const bpmQ = t.bpm ? (t.tempoCheck === "unsicher" ? 0.4 : t.tempoCheck === "sicher" ? 1 : 0.85) : estBpm.has(t.id) ? 0.35 : 0;
-    const keyQ = t.key ? (t.keySource?.startsWith("Analyse") ? 0.6 : 1) : 0;
+    // Sicher gemessene Tonarten zählen fast voll, Schätzungen deutlich weniger
+    const keyQ = t.key ? (t.keySource === "Analyse (sicher)" ? 0.85 : t.keySource?.startsWith("Analyse") ? 0.6 : 1) : 0;
     const bpm = t.bpm ?? estBpm.get(t.id) ?? null;
     return {
       id: t.id,

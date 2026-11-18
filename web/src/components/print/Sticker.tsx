@@ -2,7 +2,7 @@
 // Bewusst Schwarz auf Weiß: Etikettendrucker können nichts anderes, und auf dem Bogen spart es Tinte.
 // Farbe gibt es nur für die Tonart-Etiketten (abschaltbar über „Schwarz-Weiß-Drucker“).
 import { FONTS, headStyle, MONO, stars, type PrintItem, type PrintOpts } from "./types";
-import { bpmText, capsLine, catnoOf, cleanLabel, groupSides, InlineVersion, KeyTag, mm, palette, SideTag } from "./kit";
+import { bpmText, capsLine, catnoOf, cleanLabel, groupSides, InlineVersion, KeyTag, mm, palette, SideTag, keyGuess } from "./kit";
 
 export function Sticker({ s, w, h, o, thermal }: { s: PrintItem; w: number; h: number; o: PrintOpts; thermal?: boolean }) {
   // Thermodrucker: nie Farbe, auch wenn sie eingeschaltet ist
@@ -90,7 +90,7 @@ export function Sticker({ s, w, h, o, thermal }: { s: PrintItem; w: number; h: n
                     {hasBpm && <span style={{ flex: "none", width: mm(bpmLen * fs * 0.6), textAlign: "right", fontFamily: MONO, fontWeight: 800 }}>{bpmText(t)}</span>}
                     {hasKey && (
                       <span style={{ flex: "none", width: mm(fs * 2.25), textAlign: "right", lineHeight: 1 }}>
-                        <KeyTag k={t.meta?.key} size={fs} pal={pal} o={opt} />
+                        <KeyTag k={t.meta?.key} size={fs} pal={pal} o={opt} unsure={keyGuess(t.meta)} />
                       </span>
                     )}
                     {hasEnergy && <span style={{ flex: "none", width: mm(fs * 1.5), textAlign: "right", fontFamily: MONO, fontSize: mm(fs * 0.86), color: pal.muted }}>{t.meta?.energy != null ? `E${t.meta.energy}` : ""}</span>}

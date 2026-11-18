@@ -111,7 +111,7 @@ export function SideTag({ side, size, pal }: { side: string; size: number; pal: 
  * Tonart als Etikett. Farbig: Camelot-Farbe als Fläche (die Farben kennt jeder, der mit dem Rad mischt).
  * Schwarz-Weiß: nur Rahmen, Moll (A) gefüllt, Dur (B) leer, damit man es auch ohne Farbe unterscheidet.
  */
-export function KeyTag({ k, size, pal, o }: { k?: string | null; size: number; pal: Pal; o: PrintOpts }) {
+export function KeyTag({ k, size, pal, o, unsure }: { k?: string | null; size: number; pal: Pal; o: PrintOpts; unsure?: boolean }) {
   const c = parseKey(k);
   if (!c || !o.showCamelot) return k && o.showKey ? <span style={{ fontFamily: MONO, fontSize: mm(size * 0.86), fontWeight: 700 }}>{k}</span> : null;
   const colored = !o.mono;
@@ -121,7 +121,7 @@ export function KeyTag({ k, size, pal, o }: { k?: string | null; size: number; p
       style={{
         display: "inline-block",
         verticalAlign: "middle",
-        minWidth: mm(size * 2.05),
+        minWidth: mm(size * (unsure ? 2.5 : 2.05)),
         textAlign: "center",
         padding: `${mm(size * 0.1)} ${mm(size * 0.22)}`,
         boxSizing: "border-box",
@@ -136,9 +136,13 @@ export function KeyTag({ k, size, pal, o }: { k?: string | null; size: number; p
       }}
     >
       {camelotString(c)}
+      {unsure ? "?" : ""}
     </span>
   );
 }
+
+/** Nur geschätzte Tonart (die Messung war sich nicht sicher): bekommt im Druck ein „?“ */
+export const keyGuess = (t?: { keySource?: string } | null) => t?.keySource === "Analyse (Schätzung)";
 
 /** Energie als fünf Balken */
 export function Bars({ v, size, pal }: { v?: number | null; size: number; pal: Pal }) {
