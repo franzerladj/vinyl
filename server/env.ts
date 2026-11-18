@@ -4,6 +4,7 @@ import { d1Buzz, memoryBuzz, type BuzzStore } from "./buzz";
 import { memoryKV, type KV, type PushConfig } from "./push";
 import { VAPID_PUBLIC_KEY } from "../shared/pushKey";
 import { d1Store, memoryStore, type D1Like, type SyncStore } from "./devsync";
+import { d1Native, memoryNative, type NativeStore } from "./native";
 
 /** Minimaler Typ für das Workers-AI-Binding (Cloudflare) */
 export interface AiBinding {
@@ -35,6 +36,10 @@ export const syncStore = (env: Env): SyncStore => (env.SYNC ? d1Store(env.SYNC) 
 let localBuzz: BuzzStore | null = null;
 /** Soziales (Reaktionen, Kommentare, Aktivität): dieselbe D1-Datenbank, sonst Arbeitsspeicher */
 export const buzzStore = (env: Env): BuzzStore => (env.SYNC ? d1Buzz(env.SYNC) : (localBuzz ??= memoryBuzz()));
+
+let localNative: NativeStore | null = null;
+/** Mitteilungen für Android-Apps, die selbst abholen: dieselbe D1-Datenbank, sonst Arbeitsspeicher */
+export const nativeStore = (env: Env): NativeStore => (env.SYNC ? d1Native(env.SYNC) : (localNative ??= memoryNative()));
 
 export interface Config {
   appUrl: string;
@@ -71,6 +76,7 @@ export function readConfig(env: Env, requestUrl: string): Config {
       })(),
       publicKey: VAPID_PUBLIC_KEY,
       subject: `${(env.APP_URL || new URL(requestUrl).origin).replace(/\/$/, "")}/impressum`,
+      native: nativeStore(env),
     },
     cronSecret: env.CRON_SECRET ?? "",
   };

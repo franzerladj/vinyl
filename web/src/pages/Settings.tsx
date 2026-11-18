@@ -21,7 +21,7 @@ import { renderProfileCard } from "../lib/shareCard";
 import { inviteLink } from "../lib/friends";
 import { loadMyProfile, saveMyProfile } from "../lib/profile";
 import { GEAR, linkText, LINK_LABEL, parseLink, PLAY_LABEL, sanitizeProfile, type CrateProfile, type GearSlot, type PlayMode } from "../../../shared/profile";
-import { appInfo, canOpenAndroidSettings, DEFAULT_PREFS, disablePush, enablePush, isIOS, openAndroidNotificationSettings, PushBlocked, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs, appAsksItself, runningAs } from "../lib/push";
+import { apkName, appInfo, DEFAULT_PREFS, disablePush, enablePush, isIOS, LATEST_APK, nativePush, PushBlocked, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs, runningAs } from "../lib/push";
 import { DEFAULT_SHIP, type ShipConfig } from "../../../shared/shipping";
 import {
   IconBell,
@@ -730,7 +730,8 @@ function usePushSwitch() {
         await setKV("pushPrefs", p);
         setBlocked(false);
         toast("Mitteilungen sind an");
-        void sendTestPush().catch(() => undefined);
+        // In der Android-App kommt die Begrüßung beim ersten Abholen von selbst
+        if (!nativePush()) void sendTestPush().catch(() => undefined);
       } else {
         await disablePush();
         toast("Mitteilungen sind aus");
@@ -767,7 +768,8 @@ function NotificationsPage() {
   const [available, setAvailable] = useState(true);
   // Gewünscht, aber gesperrt: Hilfe gleich oben zeigen
   const wanted = useLiveQuery(() => getKV("pushWanted", false), [], false);
-  const denied = "Notification" in window && Notification.permission === "denied";
+  // In der Android-App ab 1.9 zählt die Erlaubnis des Browsers nicht mehr
+  const denied = !nativePush() && "Notification" in window && Notification.permission === "denied";
   useEffect(() => {
     void (async () => {
       const st = await pushStatus().catch(() => null);
@@ -805,7 +807,13 @@ function NotificationsPage() {
           </Group>
         ) : (
           <>
-            <Group foot={available ? "Für Wantlist und Erinnerungen prüft Crate alle 10 Minuten bei Discogs. Dafür liegen deine Wants, Wunschpreise und Termine verschlüsselt auf dem Server, nur solange Mitteilungen an sind." : "Mitteilungen sind auf dem Server noch nicht eingerichtet."}>
+            <Group
+              foot={
+                !available && !nativePush()
+                  ? "Mitteilungen sind auf dem Server noch nicht eingerichtet."
+                  : `Für Wantlist und Erinnerungen prüft Crate alle 10 Minuten bei Discogs. Dafür liegen deine Wants, Wunschpreise und Termine verschlüsselt auf dem Server, nur solange Mitteilungen an sind.${nativePush() ? " Die App holt Neues bei jedem Öffnen ab und sonst etwa alle 15 Minuten, im Ruhezustand des Handys auch später." : ""}`
+              }
+            >
               <Row
                 icon={<IconBell />}
                
@@ -1296,54 +1304,41 @@ function DevicesPage() {
 function PushBlockedHelp({ onRetry }: { onRetry?: () => void }) {
   const ua = navigator.userAgent;
   const app = appInfo();
+  const native = nativePush();
   const samsung = /SamsungBrowser/i.test(ua);
   const chrome = ua.match(/Chrome\/(\d+)/)?.[1];
   const tech = [
-    `Erlaubnis: ${"Notification" in window ? Notification.permission : "fehlt"}`,
+    native ? "Mitteilungen über die App" : `Erlaubnis: ${"Notification" in window ? Notification.permission : "fehlt"}`,
     app.android ? `Android-App ${app.v ? `(${app.v})` : "(alt)"}` : window.matchMedia?.("(display-mode: standalone)").matches ? "installiert" : "im Browser",
     samsung ? "Samsung Internet" : chrome ? `Chrome ${chrome}` : "anderer Browser",
     ua.match(/Android [\d.]+/)?.[0] ?? "",
   ].filter(Boolean).join(" · ");
   return (
     <div className="push-help">
-      <b className="push-help-title">Mitteilungen sind gesperrt</b>
-      {appAsksItself() ? (
+      <b className="push-help-title">{app.android && !native ? "Dafür braucht es die neue App" : "Mitteilungen sind gesperrt"}</b>
+      {native ? (
         <>
-          <p className="sub">Chrome, in dem Crate läuft, hat sich noch eine alte Sperre gemerkt. Starte dein Handy einmal neu und öffne Crate. Danach reicht der Schalter: Crate fragt selbst und führt dich bei Bedarf in die Android-Einstellungen.</p>
-          <p className="tiny">Statt Neustart geht auch: Android-Einstellungen → Apps → Chrome → „Stopp erzwingen“, dann Crate öffnen.</p>
-        </>
-      ) : canOpenAndroidSettings() ? (
-        <>
-          <ol className="push-steps">
-            <li>
-              <b>In Android erlauben.</b> Tippe unten und schalte dort alles ein. Ist schon alles an, weiter mit Schritt 2.
-            </li>
-            <li>
-              <b>Handy einmal neu starten</b> und Crate öffnen. Chrome, in dem Crate läuft, merkt sich die alte Sperre bis zu seinem nächsten Neustart. Danach geht der Schalter von selbst an.
-            </li>
-          </ol>
-          <button className="btn primary block lg" onClick={openAndroidNotificationSettings}>
-            In Android erlauben
-          </button>
-          <a className="btn block" href="/download/crate.apk" download>
-            Neue App-Version laden (macht das künftig von selbst)
-          </a>
-          <p className="tiny">Statt Neustart geht auch: Android-Einstellungen → Apps → Chrome → „Stopp erzwingen“, dann Crate öffnen.</p>
+          <p className="sub">Android lässt Crate gerade keine Mitteilungen zeigen. Tippe unten: Crate öffnet die richtige Stelle in den Android-Einstellungen. Dort einschalten, zurückkommen, fertig.</p>
+          {onRetry && (
+            <button className="btn primary block lg" onClick={onRetry}>
+              In Android erlauben
+            </button>
+          )}
         </>
       ) : app.android ? (
         <>
-          <p className="sub">Deine Crate-App ist noch die alte Version. Die neue öffnet die richtige Stelle in Android mit einem Tipp.</p>
-          <a className="btn primary block lg" href="/download/crate.apk" download>
-            Neue App-Version laden
+          <p className="sub">Die neue Crate-App zeigt Mitteilungen selbst an und braucht dafür Chrome nicht mehr. Deine Version kann das noch nicht.</p>
+          <a className="btn primary block lg" href={`/download/crate.apk?v=${LATEST_APK}`} download={`crate-${apkName(LATEST_APK)}.apk`}>
+            Version {apkName(LATEST_APK)} laden
           </a>
-          <p className="tiny">Danach installieren, Crate öffnen und hier Mitteilungen einschalten.</p>
+          <p className="tiny">Datei antippen und installieren (deine Daten bleiben), Crate öffnen und den Schalter hier einschalten. Die Datei heißt crate-{apkName(LATEST_APK)}.apk.</p>
         </>
       ) : /Android/i.test(ua) ? (
         <p className="sub">In Chrome oben rechts ⋮ → Einstellungen → Website-Einstellungen → Benachrichtigungen → crate-8vf.pages.dev auf „Zulassen“, dann zurück.</p>
       ) : (
         <p className="sub">Erlaube Mitteilungen für diese Seite in den Einstellungen deines Browsers, dann zurück.</p>
       )}
-      {onRetry && (
+      {onRetry && !app.android && (
         <button className="btn block" onClick={onRetry}>
           Nochmal versuchen
         </button>

@@ -40,6 +40,8 @@ export interface WatchedWant {
 
 export interface UserRec {
   subs: (PushSub & { addedAt: number })[];
+  /** Android-Apps, die ihre Mitteilungen selbst abholen (Kennwörter, siehe server/native.ts) */
+  native?: string[];
   prefs: Record<PushKind, boolean>;
   /** Discogs-Zugang, versiegelt mit SESSION_SECRET */
   sess: string;
@@ -118,6 +120,22 @@ export interface PushConfig {
   privateJwk: JsonWebKey | null;
   publicKey: string;
   subject: string;
+  /** Warteschlange für Android-Apps, die selbst abholen */
+  native?: { enqueue(tokens: string[], msg: Message): Promise<void> };
+}
+
+/** Geräte, die Mitteilungen bekommen: Browser-Abos und Android-Apps */
+export const deviceCount = (rec: UserRec | null | undefined) => (rec ? rec.subs.length + (rec.native?.length ?? 0) : 0);
+
+/** An die Android-Apps eines Nutzers (wartet dort, bis die App abholt) */
+export async function sendNative(cfg: PushConfig, rec: UserRec, msg: Message): Promise<number> {
+  if (!rec.native?.length || !cfg.native) return 0;
+  try {
+    await cfg.native.enqueue(rec.native, msg);
+    return rec.native.length;
+  } catch {
+    return 0;
+  }
 }
 
 /** Eine Mitteilung an ein Abo schicken. Gibt "gone" zurück, wenn das Abo nicht mehr existiert. */
@@ -157,8 +175,8 @@ export async function saveUser(kv: KV, u: string, rec: UserRec) {
 
 /** An alle Geräte eines Nutzers schicken, abgelaufene Abos entfernen */
 export async function notifyUser(kv: KV, cfg: PushConfig, u: string, rec: UserRec, kind: PushKind, msg: Message): Promise<number> {
-  if (!rec.prefs[kind] || !rec.subs.length) return 0;
-  let sent = 0;
+  if (!rec.prefs[kind] || !deviceCount(rec)) return 0;
+  let sent = await sendNative(cfg, rec, msg);
   const keep: UserRec["subs"] = [];
   for (const s of rec.subs) {
     const r = await sendPush(cfg, s, msg);

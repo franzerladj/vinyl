@@ -1,5 +1,5 @@
 import { useBuzz } from "../lib/buzz";
-import { apkName, apkOutdated, LATEST_APK } from "../lib/push";
+import { apkName, apkOutdated, LATEST_APK, nativePush, nativeToken } from "../lib/push";
 import { Hint } from "../components/Welcome";
 import { DailyRecord } from "../components/DailyRecord";
 import { Link } from "react-router-dom";
@@ -140,8 +140,14 @@ export default function Home() {
         )}
         {apkOutdated() && (
           <Hint id={`apk-${LATEST_APK}`}>
-            <b>Neue Version der Android-App.</b> Mit neuem Logo auf dem Startbildschirm und Teilen direkt in die Instagram-Story.{" "}
+            <b>Neue Version der Android-App.</b> Sie zeigt Mitteilungen jetzt selbst an, ohne Chrome.{" "}
             <a href={`/download/crate.apk?v=${LATEST_APK}`} download={`crate-${apkName(LATEST_APK)}.apk`}>Version {apkName(LATEST_APK)} laden und installieren</a>
+          </Hint>
+        )}
+        {nativePush() && !nativeToken() && (
+          <Hint id="native-push">
+            <b>Mitteilungen laufen jetzt in der App.</b> Einmal einschalten, dann meldet sich Crate bei Wants, Freunden und Gigs.{" "}
+            <Link to="/settings/notifications" viewTransition>Zu den Mitteilungen</Link>
           </Hint>
         )}
         {stylus?.wear != null && stylus.wear >= 0.9 && (

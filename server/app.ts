@@ -4,7 +4,7 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { readConfig, type Config, type Env } from "./env";
 import { seal, SESSION_DAYS, unseal, type Session } from "./session";
 import { authHeaders, authorizeUrl, discogsFetch, DiscogsBusy, getAccessToken, getRequestToken } from "./discogs";
-import { ALL_KINDS, bundle, currentSlot, dueReminders, isPushEndpoint, loadUser, pickWants, notifyUser, saveUser, sendPush, userKey, wantChange, type Message, type PushSub, type Stat, type UserRec, type WatchedWant } from "./push";
+import { ALL_KINDS, bundle, currentSlot, deviceCount, dueReminders, isPushEndpoint, loadUser, pickWants, notifyUser, saveUser, sendNative, sendPush, userKey, wantChange, type Message, type PushSub, type Stat, type UserRec, type WatchedWant } from "./push";
 import { oauthHmacHeader, oauthHmacParams } from "./oauthSign";
 import { recognizeRecordFree, tagVibesFree, type VibeInput } from "./ai";
 import { fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
@@ -12,7 +12,7 @@ import { lastfmTags } from "./lastfm";
 import { profileEmpty, sanitizeProfile, type CrateProfile } from "../shared/profile";
 import { buildIcs } from "../shared/ics";
 import { pushOps } from "./devsync";
-import { buzzStore, syncStore } from "./env";
+import { buzzStore, nativeStore, syncStore } from "./env";
 import { cleanText, validPost } from "./buzz";
 import { cleanOwnPost, validRef } from "../shared/ownPost";
 import { ANNOUNCE } from "../shared/announce";
@@ -424,7 +424,7 @@ app.post("/api/push/subscribe", async (c) => {
   const known = await loadUser(cfg.kv, s.username);
   const rec = known ?? emptyRec("");
   // Wer Mitteilungen gerade erst einschaltet, hat die aktuelle Version schon: keine alte Update-Mitteilung nachreichen
-  if (!known?.subs.length && ANNOUNCE) rec.announce = ANNOUNCE.id;
+  if (!deviceCount(known) && ANNOUNCE) rec.announce = ANNOUNCE.id;
   rec.sess = await seal(cfg.sessionSecret, { token: s.token, secret: s.secret, username: s.username });
   rec.subs = [...rec.subs.filter((x) => x.endpoint !== subscription.endpoint), { endpoint: subscription.endpoint, keys: subscription.keys, addedAt: Date.now() }].slice(-5);
   if (prefs) rec.prefs = { ...rec.prefs, ...cleanPrefs(prefs) };
@@ -453,7 +453,7 @@ app.post("/api/push/unsubscribe", async (c) => {
   if (!rec) return c.json({ ok: true });
   rec.subs = endpoint ? rec.subs.filter((x) => x.endpoint !== endpoint) : [];
   // Ohne Geräte nichts mehr aufbewahren
-  if (!rec.subs.length) await cfg.kv.delete(userKey(s.username));
+  if (!deviceCount(rec)) await cfg.kv.delete(userKey(s.username));
   else await saveUser(cfg.kv, s.username, rec);
   return c.json({ ok: true });
 });
@@ -462,7 +462,7 @@ app.get("/api/push/status", async (c) => {
   const cfg = c.var.cfg;
   const s = await session(c);
   const rec = s?.username ? await loadUser(cfg.kv, s.username) : null;
-  return c.json({ available: Boolean(cfg.push.privateJwk), devices: rec?.subs.length ?? 0, prefs: rec?.prefs ?? null });
+  return c.json({ available: Boolean(cfg.push.privateJwk), devices: deviceCount(rec), prefs: rec?.prefs ?? null });
 });
 
 app.post("/api/push/prefs", async (c) => {
@@ -509,7 +509,7 @@ app.post("/api/push/friend-added", async (c) => {
   if (await cfg.kv.get(pairKey)) return c.json({ ok: true, status: "schon-gemeldet" });
   await cfg.kv.put(pairKey, "1", { expirationTtl: 30 * 86_400 });
   const rec = await loadUser(cfg.kv, friend);
-  if (rec?.subs.length) {
+  if (rec && deviceCount(rec)) {
     const n = await notifyUser(cfg.kv, cfg.push, friend, rec, "friends", { title: "Neue Freundschaft auf Crate", body: `${s.username} hat dich als Freund hinzugefügt. Tippen, um zurück zu folgen.`, url: `/friends?add=${encodeURIComponent(s.username)}`, tag: `friend-${s.username}` });
     return c.json({ ok: true, status: n ? "zugestellt" : "aus" });
   }
@@ -541,7 +541,7 @@ const validName = (u: unknown): u is string => typeof u === "string" && /^[\w.\-
 async function tellFriend(cfg: Config, to: string, msg: Message) {
   const rec = await loadUser(cfg.kv, to);
   // Soziales soll sofort ankommen, nicht erst, wenn das Handy aufwacht
-  if (rec?.subs.length) await notifyUser(cfg.kv, cfg.push, to, rec, "friends", { ...msg, urgent: true }).catch(() => 0);
+  if (rec && deviceCount(rec)) await notifyUser(cfg.kv, cfg.push, to, rec, "friends", { ...msg, urgent: true }).catch(() => 0);
 }
 async function befriend(cfg: Config, me: string, other: string, mine: Social, theirs: Social) {
   mine.friends = [...without(mine.friends, other), other];
@@ -624,15 +624,112 @@ app.post("/api/friends/remove", async (c) => {
   return c.json({ ok: true });
 });
 
+// ---------- Mitteilungen in der Android-App ohne Browser (siehe server/native.ts) ----------
+const NATIVE_TOKEN = /^[a-f0-9]{64}$/;
+const newToken = () => [...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+/** Einschalten: Kennwort für dieses Gerät ausstellen. Die Webseite reicht es über crate://push an die App. */
+app.post("/api/push/native/start", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const body = await c.req.json<{ prefs?: Partial<UserRec["prefs"]>; replace?: string }>().catch(() => ({}) as { prefs?: Partial<UserRec["prefs"]>; replace?: string });
+  const store = nativeStore(c.env ?? {});
+  const user = s.username.toLowerCase();
+  const known = await loadUser(cfg.kv, s.username);
+  const rec = known ?? emptyRec("");
+  if (!deviceCount(known) && ANNOUNCE) rec.announce = ANNOUNCE.id;
+  rec.sess = await seal(cfg.sessionSecret, { token: s.token, secret: s.secret, username: s.username });
+  let list = rec.native ?? [];
+  // Das alte Kennwort dieses Geräts ersetzen (Schalter erneut angetippt)
+  if (body.replace && NATIVE_TOKEN.test(body.replace) && list.includes(body.replace)) {
+    await store.remove(body.replace);
+    list = list.filter((t) => t !== body.replace);
+  }
+  const token = newToken();
+  await store.link(token, user, Date.now());
+  list = [...list, token];
+  // Höchstens fünf Geräte: die ältesten fallen weg
+  for (const old of list.slice(0, -5)) await store.remove(old);
+  rec.native = list.slice(-5);
+  if (body.prefs) rec.prefs = { ...rec.prefs, ...cleanPrefs(body.prefs) };
+  await saveUser(cfg.kv, s.username, rec);
+  // Erscheint, sobald die App das erste Mal abholt: so sieht man gleich, dass es geht
+  await store.enqueue([token], { title: "Mitteilungen sind an", body: "Crate meldet sich ab jetzt direkt aus der App: Wantlist, Freunde, Gigs.", url: "/settings/notifications", tag: "welcome" });
+  return c.json({ token, prefs: rec.prefs });
+});
+
+/** Hat die App das Kennwort übernommen, und erlaubt Android ihr Mitteilungen? */
+app.get("/api/push/native/status", async (c) => {
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const t = c.req.query("t") ?? "";
+  const d = NATIVE_TOKEN.test(t) ? await nativeStore(c.env ?? {}).device(t) : null;
+  if (!d || d.user !== s.username.toLowerCase()) return c.json({ known: false, linked: false, ok: false });
+  return c.json({ known: true, linked: d.seen != null, ok: d.ok });
+});
+
+app.post("/api/push/native/stop", async (c) => {
+  const cfg = c.var.cfg;
+  const s = await session(c);
+  if (!s?.username) return c.json({ ok: true });
+  const { token } = await c.req.json<{ token?: string }>().catch(() => ({}) as { token?: string });
+  const store = nativeStore(c.env ?? {});
+  const rec = await loadUser(cfg.kv, s.username);
+  if (token && NATIVE_TOKEN.test(token)) {
+    const d = await store.device(token);
+    if (d?.user === s.username.toLowerCase()) await store.remove(token);
+  }
+  if (rec) {
+    rec.native = (rec.native ?? []).filter((t) => t !== token);
+    if (!deviceCount(rec)) await cfg.kv.delete(userKey(s.username));
+    else await saveUser(cfg.kv, s.username, rec);
+  }
+  return c.json({ ok: true });
+});
+
+/** Mitteilung vom eigenen Gerät (z. B. neue Pressung nach dem Abgleich): wartet, bis die App abholt */
+app.post("/api/push/native/self", async (c) => {
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const b = await c.req.json<{ token?: string; title?: string; body?: string; url?: string; tag?: string }>().catch(() => ({}) as { token?: string; title?: string; body?: string; url?: string; tag?: string });
+  const store = nativeStore(c.env ?? {});
+  const d = b.token && NATIVE_TOKEN.test(b.token) ? await store.device(b.token) : null;
+  if (!d || d.user !== s.username.toLowerCase() || !b.title) return c.json({ ok: false });
+  const url = typeof b.url === "string" && b.url.startsWith("/") && !b.url.startsWith("//") ? b.url.slice(0, 200) : "/";
+  await store.enqueue([b.token!], { title: cleanText(b.title, 120), body: cleanText(b.body ?? "", 400), url, tag: cleanText(b.tag ?? "", 40) || undefined });
+  return c.json({ ok: true });
+});
+
+/**
+ * Die App holt ab. Ohne Anmeldung: das Kennwort ist der Ausweis (die App hat kein Cookie).
+ * 410 = dieses Gerät ist abgemeldet, die App hört auf zu fragen.
+ */
+app.get("/api/push/native/poll", async (c) => {
+  const t = c.req.query("t") ?? "";
+  const store = nativeStore(c.env ?? {});
+  const d = NATIVE_TOKEN.test(t) ? await store.device(t) : null;
+  c.header("Cache-Control", "no-store");
+  if (!d) return c.json({ message: "abgemeldet" }, 410);
+  const ok = c.req.query("ok") === "1";
+  const now = Date.now();
+  // Nur schreiben, wenn sich etwas geändert hat oder der Stand alt ist (schont das Schreib-Kontingent)
+  if (d.seen == null || d.ok !== ok || now - d.seen > 6 * 3600_000) await store.touch(t, ok, now);
+  // Solange Android nichts zeigen lässt, bleibt alles liegen
+  const messages = ok ? await store.take(t) : [];
+  return c.json({ messages, every: 15 });
+});
+
 app.post("/api/push/test", async (c) => {
   const cfg = c.var.cfg;
   const s = await session(c);
   if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
   const rec = await loadUser(cfg.kv, s.username);
-  if (!rec?.subs.length) return c.json({ message: "Auf diesem Gerät sind Mitteilungen aus" }, 404);
-  let ok = 0;
-  for (const sub of rec.subs) if ((await sendPush(cfg.push, sub, { title: "Crate", body: "So sehen Mitteilungen aus. Alles eingerichtet.", url: "/settings/notifications", tag: "test", urgent: true })) === "ok") ok++;
-  return c.json({ sent: ok, devices: rec.subs.length });
+  if (!rec || !deviceCount(rec)) return c.json({ message: "Auf diesem Gerät sind Mitteilungen aus" }, 404);
+  const test: Message = { title: "Crate", body: "So sehen Mitteilungen aus. Alles eingerichtet.", url: "/settings/notifications", tag: "test", urgent: true };
+  let ok = await sendNative(cfg.push, rec, test);
+  for (const sub of rec.subs) if ((await sendPush(cfg.push, sub, test)) === "ok") ok++;
+  return c.json({ sent: ok, devices: deviceCount(rec) });
 });
 
 /** Für den Zeitplan-Worker: alle Nutzer mit Mitteilungen (er ruft dann für jeden /api/push/run?u= auf) */
@@ -652,7 +749,7 @@ app.post("/api/push/users", async (c) => {
 /** Einen Nutzer prüfen: fällige Erinnerungen und eine Runde Wants (wichtige zuerst) */
 async function runUser(cfg: Config, u: string, budget: number) {
   const rec = await loadUser(cfg.kv, u);
-  if (!rec?.subs.length) return { u, skipped: true };
+  if (!rec || !deviceCount(rec)) return { u, skipped: true };
   const startSubs = new Set(rec.subs.map((x) => x.endpoint));
   let changed = false;
   for (const d of dueReminders(rec)) {
@@ -665,6 +762,7 @@ async function runUser(cfg: Config, u: string, budget: number) {
   if (ANNOUNCE && rec.announce !== ANNOUNCE.id) {
     budget -= rec.subs.length;
     const keep: UserRec["subs"] = [];
+    await sendNative(cfg.push, rec, { title: ANNOUNCE.title, body: ANNOUNCE.body, url: ANNOUNCE.url, tag: "update" });
     for (const sub of rec.subs) if ((await sendPush(cfg.push, sub, { title: ANNOUNCE.title, body: ANNOUNCE.body, url: ANNOUNCE.url, tag: "update" })) !== "gone") keep.push(sub);
     rec.subs = keep;
     rec.announce = ANNOUNCE.id;
@@ -706,6 +804,7 @@ async function runUser(cfg: Config, u: string, budget: number) {
     if (fresh) {
       const removed = new Set([...startSubs].filter((e) => !rec.subs.some((x) => x.endpoint === e)));
       rec.subs = fresh.subs.filter((x) => !removed.has(x.endpoint));
+      rec.native = fresh.native;
       rec.prefs = fresh.prefs;
       rec.sess = fresh.sess;
     }
@@ -944,6 +1043,7 @@ app.delete("/api/me", async (c) => {
   await cfg.kv.delete(socKey(u));
   await syncStore(c.env ?? {}).clear(u);
   await buzzStore(c.env ?? {}).clear(u);
+  await nativeStore(c.env ?? {}).clear(u);
   deleteCookie(c, SESSION, { path: "/" });
   return c.json({ ok: true });
 });

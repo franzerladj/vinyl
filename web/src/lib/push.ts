@@ -20,6 +20,8 @@ export const isStandalone = () => matchMedia("(display-mode: standalone)").match
 export type PushSupport = "ok" | "install" | "unsupported";
 /** Was geht auf diesem Gerät? "install" = iPhone im Browser, erst zum Home-Bildschirm hinzufügen */
 export function pushSupport(): PushSupport {
+  // Die Android-App zeigt Mitteilungen selbst an, der Browser muss dafür nichts können
+  if (nativePush()) return "ok";
   if (isIOS() && !isStandalone()) return "install";
   if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "unsupported";
   return "ok";
@@ -53,9 +55,9 @@ export function appInfo(): AppInfo {
   }
 }
 /** Aktuelle Android-App (versionCode). Ältere bekommen auf Start einen Hinweis zum Aktualisieren. */
-export const LATEST_APK = 9;
+export const LATEST_APK = 10;
 /** Versionsname je versionCode der Android-App (für die Anzeige) */
-export const APK_NAMES: Record<number, string> = { 9: "1.8", 8: "1.7", 7: "1.6", 6: "1.5" };
+export const APK_NAMES: Record<number, string> = { 10: "1.9", 9: "1.8", 8: "1.7", 7: "1.6", 6: "1.5" };
 export const apkName = (v: number) => APK_NAMES[v] ?? (v ? `Stand ${v}` : "ältere Version");
 /**
  * Wie Crate gerade läuft. Wichtig zum Auseinanderhalten: Chrome kann die Seite auch selbst installieren
@@ -80,6 +82,74 @@ export function openAndroidNotificationSettings() {
   location.href = "intent://notifications#Intent;scheme=crate;package=de.feuerpfeil.crate;end";
 }
 
+// ---------- Mitteilungen direkt in der Android-App (ab 1.9) ----------
+// Chrome gab die Erlaubnis der App nicht verlässlich an die Seite weiter („gesperrt“, obwohl in Android erlaubt).
+// Ab 1.9 braucht es Chrome dafür nicht mehr: die Seite holt beim Server ein Kennwort für dieses Gerät und reicht es
+// über crate://push an die App. Die App fragt Android selbst nach der Erlaubnis, holt Mitteilungen beim Server ab
+// (bei jedem Öffnen und etwa alle 15 Minuten) und zeigt sie an. `Notification.permission` spielt keine Rolle mehr.
+export const nativePush = () => appInfo().android && appInfo().v >= 10;
+const NATIVE_KEY = "crate:native-push";
+export const nativeToken = (): string | null => {
+  try {
+    return localStorage.getItem(NATIVE_KEY);
+  } catch {
+    return null;
+  }
+};
+const setNativeToken = (t: string | null) => {
+  try {
+    if (t) localStorage.setItem(NATIVE_KEY, t);
+    else localStorage.removeItem(NATIVE_KEY);
+  } catch {
+    /* egal */
+  }
+};
+const openApp = (query: string) => {
+  location.href = `intent://push?${query}#Intent;scheme=crate;package=de.feuerpfeil.crate;end`;
+};
+/** Die App soll jetzt abholen (z. B. die Test-Mitteilung), nicht erst beim nächsten Durchlauf */
+export const nativePollNow = () => openApp("poll=1");
+export const nativeStatus = (t: string) => json<{ known: boolean; linked: boolean; ok: boolean }>(`/api/push/native/status?t=${t}`);
+
+/** Warten, bis die App das Kennwort übernommen und dem Server gemeldet hat, ob Android Mitteilungen erlaubt */
+async function waitForApp(token: string, ms: number): Promise<"ok" | "blocked" | "silent"> {
+  const until = Date.now() + ms;
+  let last: { linked: boolean; ok: boolean } | null = null;
+  while (Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 1200));
+    last = await nativeStatus(token).catch(() => last);
+    // Die App meldet sich erst, wenn sie mit Dialog oder Einstellungen fertig ist
+    if (last?.linked) return last.ok ? "ok" : "blocked";
+  }
+  return "silent";
+}
+
+async function enableNative(prefs: PushPrefs): Promise<PushPrefs> {
+  const r = await json<{ token: string; prefs: PushPrefs }>("/api/push/native/start", { prefs, replace: nativeToken() ?? undefined });
+  setNativeToken(r.token);
+  // Ein altes Browser-Abo dieses Geräts braucht es nicht mehr (sonst käme alles doppelt)
+  void currentWebSubscription().then(async (sub) => {
+    if (!sub) return;
+    await json("/api/push/unsubscribe", { endpoint: sub.endpoint }).catch(() => undefined);
+    await sub.unsubscribe().catch(() => undefined);
+  });
+  openApp(`t=${r.token}`);
+  // Die App fragt jetzt Android (Dialog oder Einstellungen). Das kann dauern, wenn man in die Einstellungen muss.
+  const state = await waitForApp(r.token, 60_000);
+  if (state === "blocked") throw new PushBlocked();
+  // Meldet sie sich später doch noch (lange in den Einstellungen gewesen), schaltet resumePushIfWanted beim Zurückkommen ein
+  if (state === "silent") throw new Error("Die App hat sich noch nicht gemeldet. Bitte Crate schließen, neu öffnen und den Schalter nochmal antippen.");
+  await setKV("pushOn", true);
+  await syncPushData();
+  return r.prefs;
+}
+
+async function currentWebSubscription(): Promise<PushSubscription | null> {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  return (await reg?.pushManager.getSubscription()) ?? null;
+}
+
 /** Mitteilungen sind gesperrt (Android oder Browser): die Oberfläche zeigt dann den Weg zum Erlauben */
 export class PushBlocked extends Error {
   constructor() {
@@ -91,6 +161,7 @@ export class PushBlocked extends Error {
 export async function enablePush(prefs: PushPrefs = DEFAULT_PREFS): Promise<PushPrefs> {
   // Wunsch merken: kommt die Erlaubnis später (z. B. aus den Android-Einstellungen zurück), schaltet Crate selbst ein
   await setKV("pushWanted", true);
+  if (nativePush()) return enableNative(prefs);
   const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
   if (perm === "denied") throw new PushBlocked();
   if (perm !== "granted") throw new Error(appAsksItself() ? "Mitteilungen sind in Android noch aus. Tipp den Schalter nochmal an und erlaube sie." : "Ohne Erlaubnis gehen keine Mitteilungen");
@@ -107,6 +178,24 @@ export async function enablePush(prefs: PushPrefs = DEFAULT_PREFS): Promise<Push
  * still einschalten. So reicht es, in Android zu erlauben und zurückzukommen.
  */
 export async function resumePushIfWanted(): Promise<boolean> {
+  if (nativePush()) {
+    // Stand der App nachsehen: in Android erlaubt oder entzogen, auf einem anderen Gerät abgemeldet
+    const t = nativeToken();
+    const on = await getKV("pushOn", false);
+    if (!t) {
+      // Neue App, aber noch das alte Browser-Abo: der Schalter zeigt „aus“, bis man ihn einmal antippt
+      if (on) await setKV("pushOn", false);
+      return false;
+    }
+    const st = await nativeStatus(t).catch(() => null);
+    if (!st) return false;
+    const now = st.known && st.linked && st.ok;
+    if (now === on) return false;
+    await setKV("pushOn", now);
+    if (!st.known) setNativeToken(null);
+    if (now) await syncPushData();
+    return now && Boolean(await getKV("pushWanted", false));
+  }
   if (pushSupport() !== "ok" || Notification.permission !== "granted") return false;
   if (!(await getKV("pushWanted", false))) return false;
   if ((await getKV("pushOn", false)) && (await currentSubscription())) return false;
@@ -121,7 +210,12 @@ export async function resumePushIfWanted(): Promise<boolean> {
 
 export async function disablePush() {
   await setKV("pushWanted", false);
-  const sub = await currentSubscription();
+  const t = nativeToken();
+  if (t) {
+    await json("/api/push/native/stop", { token: t }).catch(() => undefined);
+    setNativeToken(null);
+  }
+  const sub = await currentWebSubscription();
   await json("/api/push/unsubscribe", { endpoint: sub?.endpoint }).catch(() => undefined);
   await sub?.unsubscribe().catch(() => undefined);
   await setKV("pushOn", false);
@@ -129,7 +223,12 @@ export async function disablePush() {
 
 export const pushStatus = () => json<{ available: boolean; devices: number; prefs: PushPrefs | null }>("/api/push/status");
 export const savePushPrefs = (p: Partial<PushPrefs>) => json<{ prefs: PushPrefs }>("/api/push/prefs", p);
-export const sendTestPush = () => json<{ sent: number; devices: number }>("/api/push/test", {});
+export async function sendTestPush() {
+  const r = await json<{ sent: number; devices: number }>("/api/push/test", {});
+  // Die App soll sie gleich abholen statt beim nächsten Durchlauf
+  if (nativePush() && nativeToken()) nativePollNow();
+  return r;
+}
 
 /** Wants mit Wunschpreisen, verliehene Platten und Set-Termine an den Server geben (nur wenn Mitteilungen an sind) */
 export async function syncPushData() {
@@ -158,6 +257,14 @@ export async function notifyFriendAdded(friend: string): Promise<"zugestellt" | 
 
 /** Mitteilung direkt vom Gerät (z. B. neue Angebote bei Lieblingshändlern nach dem Sync) */
 export async function localNotify(kind: PushKind, title: string, body: string, url = "/") {
+  if (nativePush()) {
+    // In der Android-App: beim Server hinterlegen, die App zeigt es beim nächsten Abholen
+    const t = nativeToken();
+    if (!t || !(await getKV("pushOn", false))) return;
+    if (!(await getKV<PushPrefs>("pushPrefs", DEFAULT_PREFS))[kind]) return;
+    await json("/api/push/native/self", { token: t, title, body, url, tag: kind }).catch(() => undefined);
+    return;
+  }
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   if (!(await getKV("pushOn", false))) return;
   const prefs = await getKV<PushPrefs>("pushPrefs", DEFAULT_PREFS);

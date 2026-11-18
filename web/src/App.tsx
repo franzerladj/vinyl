@@ -490,6 +490,8 @@ export default function App() {
           void import("./lib/push").then((p) => p.resumePushIfWanted()).then((ok) => ok && toast("Mitteilungen sind an"));
         resume();
         document.addEventListener("visibilitychange", () => !document.hidden && resume());
+        // Aus dem Android-Dialog oder den Einstellungen zurück: dabei bleibt die Seite oft sichtbar, bekommt aber den Fokus wieder
+        window.addEventListener("focus", resume);
         // Nach dem ersten Bild die übrigen Seiten im Leerlauf vorladen
         setTimeout(preloadPages, 1500);
         // Die Kiste fürs Diggen vorpacken (nur wer schon gediggt hat): beim Antippen steht die erste Karte sofort da

@@ -2,6 +2,7 @@ package de.feuerpfeil.crate;
 
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.os.Bundle;
 
 import com.google.androidbrowserhelper.trusted.LauncherActivity;
 import com.google.androidbrowserhelper.trusted.TwaLauncher;
@@ -13,6 +14,20 @@ import com.google.androidbrowserhelper.trusted.TwaLauncher;
  */
 public class CrateLauncherActivity extends LauncherActivity {
     private static final String CHROME = "com.android.chrome";
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        // Mitteilungen der App: bei jedem Öffnen abholen und das regelmäßige Abholen sicherstellen
+        try {
+            if (Poller.token(this) != null) {
+                Poller.schedule(this);
+                Poller.pollAsync(this);
+            }
+        } catch (Exception e) {
+            // darf den Start nie aufhalten
+        }
+    }
 
     @Override
     protected TwaLauncher createTwaLauncher() {

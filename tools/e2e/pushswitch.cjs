@@ -1,4 +1,4 @@
-// Mitteilungen: ein Schalter in den Einstellungen. Erlaubt = an (mit Probe), gesperrt = Blatt mit Knopf nach Android,
+// Mitteilungen im Browser und in älteren Android-Apps: ein Schalter. Erlaubt = an (mit Probe), gesperrt = Blatt (ältere App: neue Version laden),
 // erlaubt nach dem Zurückkommen = schaltet selbst ein.
 const { chromium, devices } = require("playwright");
 const install = require("./mock.cjs");
@@ -42,7 +42,8 @@ const B = "http://localhost:8787";
         an: calls.includes("subscribe"),
         probe: calls.includes("test"),
         blatt: await page.locator(".push-help-title").isVisible().catch(() => false),
-        knopf: await page.locator("button:has-text('In Android erlauben')").isVisible().catch(() => false),
+        // Ältere Android-Apps bekommen statt eines Umwegs über Chrome die neue Version angeboten (siehe nativepush.cjs)
+        neueVersion: await page.locator(".push-help a:has-text('laden')").isVisible().catch(() => false),
         errors,
       };
       if (mode === "gesperrt") await page.screenshot({ path: `${__dirname}/push-gesperrt.png` });

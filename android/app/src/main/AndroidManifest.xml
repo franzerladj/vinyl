@@ -5,6 +5,8 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Das regelmäßige Abholen der Mitteilungen soll einen Neustart des Handys überleben -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Chrome muss für CrateLauncherActivity sichtbar sein (Android 11+) -->
     <queries>
@@ -65,6 +67,24 @@
                 <data android:scheme="crate" android:host="notifications" />
             </intent-filter>
         </activity>
+
+        <!-- crate://push?t=...: Mitteilungen in der App selbst einschalten (ohne Chrome), siehe Poller -->
+        <activity
+            android:name=".NativePushActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="crate" android:host="push" />
+            </intent-filter>
+        </activity>
+        <service
+            android:name=".PollJobService"
+            android:exported="true"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!-- crate://story?id=...: Bild von der Webseite direkt in die Instagram-Story -->
         <activity
