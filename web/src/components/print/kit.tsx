@@ -1,11 +1,13 @@
 // Bausteine für alles, was gedruckt wird: Farben je Look, Seiten-Kästchen, Tonart-Etikett, Energie-Balken.
 // Gestaltung wie ein Plattenlabel: Schwarz auf Weiß, klare Linien, Zahlen in Mono. Farbe nur als kleine Fläche,
 // damit auch ein Tintenstrahler zu Hause nicht leer läuft und ein Schwarz-Weiß-Laser alles sauber druckt.
+import "@fontsource/courier-prime/400.css";
+import "@fontsource/courier-prime/700.css";
 import { camelotString, parseKey } from "../../../../shared/music";
 import { sideOf } from "../../lib/format";
 import { splitVersion } from "../../../../shared/trackTitle";
 import { CAMELOT_COLORS } from "../bits";
-import { MONO, onColor, type PrintOpts, type PrintTrack } from "./types";
+import { DATA, onColor, type PrintOpts, type PrintTrack } from "./types";
 
 export type CardTheme = "light" | "dark" | "accent" | "cover";
 
@@ -103,7 +105,7 @@ export function bpmRange(tracks: PrintTrack[]): string {
 /** Seiten-Kästchen: Buchstabe hell auf dunkler Fläche, wie der Aufdruck „SIDE A“ auf dem Label */
 export function SideTag({ side, size, pal }: { side: string; size: number; pal: Pal }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: mm(size), height: mm(size), padding: `0 ${mm(size * 0.16)}`, boxSizing: "border-box", background: pal.mark, color: pal.markInk, fontFamily: MONO, fontWeight: 800, fontSize: mm(size * 0.68), lineHeight: 1, flex: "none" }}>{side}</span>
+    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: mm(size), height: mm(size), padding: `0 ${mm(size * 0.16)}`, boxSizing: "border-box", background: pal.mark, color: pal.markInk, ...DATA, fontWeight: 800, fontSize: mm(size * 0.68), lineHeight: 1, flex: "none" }}>{side}</span>
   );
 }
 
@@ -113,7 +115,7 @@ export function SideTag({ side, size, pal }: { side: string; size: number; pal: 
  */
 export function KeyTag({ k, size, pal, o, unsure }: { k?: string | null; size: number; pal: Pal; o: PrintOpts; unsure?: boolean }) {
   const c = parseKey(k);
-  if (!c || !o.showCamelot) return k && o.showKey ? <span style={{ fontFamily: MONO, fontSize: mm(size * 0.86), fontWeight: 700 }}>{k}</span> : null;
+  if (!c || !o.showCamelot) return k && o.showKey ? <span style={{ ...DATA, fontSize: mm(size * 0.86), fontWeight: 700 }}>{k}</span> : null;
   const colored = !o.mono;
   const filled = !colored && c.letter === "A";
   return (
@@ -129,7 +131,7 @@ export function KeyTag({ k, size, pal, o, unsure }: { k?: string | null; size: n
         background: colored ? CAMELOT_COLORS[c.num - 1] : filled ? pal.fg : "transparent",
         color: colored ? "#0b0b0b" : filled ? pal.bg : pal.fg,
         boxShadow: colored ? undefined : `inset 0 0 0 0.25mm ${pal.fg}`,
-        fontFamily: MONO,
+        ...DATA,
         fontWeight: 800,
         fontSize: mm(size * 0.8),
         lineHeight: 1.12,
@@ -159,12 +161,12 @@ export function Bars({ v, size, pal }: { v?: number | null; size: number; pal: P
 /** Eigene Zeile als Stempel: schräg, im Rahmen, wie mit dem Stempelkissen auf die Hülle gedrückt */
 export function Stamp({ text, size, pal }: { text: string; size: number; pal: Pal }) {
   return (
-    <span style={{ display: "inline-block", maxWidth: "100%", padding: `${mm(size * 0.32)} ${mm(size * 0.6)}`, border: `${mm(Math.max(0.35, size * 0.14))} solid ${pal.sign}`, color: pal.sign, fontFamily: MONO, fontWeight: 800, fontSize: mm(size), lineHeight: 1.1, letterSpacing: "0.06em", textTransform: "uppercase", rotate: "-3deg", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", boxSizing: "border-box" }}>{text}</span>
+    <span style={{ display: "inline-block", maxWidth: "100%", padding: `${mm(size * 0.32)} ${mm(size * 0.6)}`, border: `${mm(Math.max(0.35, size * 0.14))} solid ${pal.sign}`, color: pal.sign, ...DATA, fontWeight: 800, fontSize: mm(size), lineHeight: 1.1, letterSpacing: "0.06em", textTransform: "uppercase", rotate: "-3deg", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", boxSizing: "border-box" }}>{text}</span>
   );
 }
 
 /** Zeile in kleinen Versalien (Katalognummer, Label, Land) */
-export const capsLine = (size: number, color: string): React.CSSProperties => ({ fontFamily: MONO, fontSize: mm(size), lineHeight: 1.25, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color });
+export const capsLine = (size: number, color: string): React.CSSProperties => ({ ...DATA, fontSize: mm(size), lineHeight: 1.25, fontWeight: 600, letterSpacing: "0.07em", textTransform: "uppercase", color });
 
 export const cleanLabel = (name?: string) => (name ?? "").replace(/\s\(\d+\)$/, "");
 export const catnoOf = (label?: { catno?: string }) => (label?.catno && label.catno.toLowerCase() !== "none" ? label.catno : "");

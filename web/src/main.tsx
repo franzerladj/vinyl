@@ -6,7 +6,6 @@ import App, { ErrorPage, routes } from "./App";
 import "@fontsource-variable/inter/wght.css";
 import "@fontsource-variable/archivo/wdth.css";
 import "@fontsource-variable/fraunces/wght.css";
-import "@fontsource-variable/jetbrains-mono/wght.css";
 import "./styles.css";
 import { applyTheme } from "./lib/theme";
 import { registerSW } from "virtual:pwa-register";
@@ -94,7 +93,7 @@ if (splash) {
   } catch {
     /* egal */
   }
-  Promise.all([document.fonts.load('900 40px "Archivo Variable"'), document.fonts.load('600 12px "JetBrains Mono Variable"')])
+  Promise.all([document.fonts.load('900 40px "Archivo Variable"')])
     .then(() => splash.classList.add("fonts"))
     .catch(() => undefined);
   const minMs = seen ? 300 : 1400;

@@ -57,19 +57,26 @@ export type PrintFont = "schmal" | "modern" | "klassisch" | "mono" | "schlicht";
 
 const INTER = "'Inter Variable', 'Inter', -apple-system, system-ui, sans-serif";
 const ARCHIVO = "'Archivo Variable', 'Archivo', 'Inter Variable', 'Inter', system-ui, sans-serif";
-/** Zahlen, Positionen, Katalognummern */
-export const MONO = "'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace";
+/**
+ * Zahlen, Positionen, Katalognummern: Archivo etwas schmal. Bei 88 % Breite ist ein Zeichen rund 0,6 em breit,
+ * damit passen die Spaltenbreiten der Vorlagen (die mit 0,6 em je Zeichen rechnen) weiter. Vorher JetBrains Mono.
+ */
+export const DATA: React.CSSProperties = { fontFamily: ARCHIVO, fontStretch: "88%", fontVariationSettings: '"wdth" 88', fontVariantNumeric: "tabular-nums" };
+/** Stil „Getippt“: Schreibmaschine, wie auf alten Promo-Zetteln und White Labels */
+const TYPED = "'Courier Prime', 'Courier New', Courier, monospace";
 
 /**
- * Überschrift- und Textschrift je Stil. cw: Breite eines Zeichens in em (für die Größenberechnung),
- * max: größte Überschrift in mm auf einer A6-Karte.
+ * Überschrift- und Textschrift je Stil. cw: Breite eines Zeichens der Überschrift in em (für die Größenberechnung),
+ * max: größte Überschrift in mm auf einer A6-Karte, bw: Breite eines Zeichens im Fließtext in em (für die Umbrüche
+ * der Tracktitel; die Schreibmaschine ist deutlich breiter als Inter, sonst laufen die Zeilen über).
  */
-export const FONTS: Record<PrintFont, { head: string; body: string; stretch: string; wdth: number; weight: number; upper: boolean; label: string; cw: number; max: number }> = {
-  schmal: { head: ARCHIVO, body: INTER, stretch: "62%", wdth: 62, weight: 900, upper: true, label: "Schmal", cw: 0.47, max: 15 },
-  modern: { head: ARCHIVO, body: INTER, stretch: "125%", wdth: 125, weight: 900, upper: true, label: "Breit", cw: 1.02, max: 8 },
-  klassisch: { head: "'Fraunces Variable', Georgia, serif", body: "'Fraunces Variable', Georgia, serif", stretch: "100%", wdth: 100, weight: 700, upper: false, label: "Serif", cw: 0.56, max: 10 },
-  mono: { head: MONO, body: MONO, stretch: "100%", wdth: 100, weight: 800, upper: true, label: "Mono", cw: 0.62, max: 8 },
-  schlicht: { head: INTER, body: INTER, stretch: "100%", wdth: 100, weight: 800, upper: false, label: "Klar", cw: 0.6, max: 9 },
+export const FONTS: Record<PrintFont, { head: string; body: string; stretch: string; wdth: number; weight: number; upper: boolean; label: string; cw: number; max: number; bw: number }> = {
+  schmal: { head: ARCHIVO, body: INTER, stretch: "62%", wdth: 62, weight: 900, upper: true, label: "Schmal", cw: 0.47, max: 15, bw: 0.53 },
+  modern: { head: ARCHIVO, body: INTER, stretch: "125%", wdth: 125, weight: 900, upper: true, label: "Breit", cw: 1.02, max: 8, bw: 0.53 },
+  klassisch: { head: "'Fraunces Variable', Georgia, serif", body: "'Fraunces Variable', Georgia, serif", stretch: "100%", wdth: 100, weight: 700, upper: false, label: "Serif", cw: 0.56, max: 10, bw: 0.53 },
+  // Schlüssel bleibt „mono“ (gespeicherte Einstellungen), die Schrift ist jetzt eine Schreibmaschine
+  mono: { head: TYPED, body: TYPED, stretch: "100%", wdth: 100, weight: 700, upper: true, label: "Getippt", cw: 0.62, max: 8, bw: 0.63 },
+  schlicht: { head: INTER, body: INTER, stretch: "100%", wdth: 100, weight: 800, upper: false, label: "Klar", cw: 0.6, max: 9, bw: 0.53 },
 };
 
 /** Schrift-Angaben für eine Überschrift im gewählten Stil */

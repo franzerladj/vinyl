@@ -2,7 +2,7 @@
 // A4 hoch, Schwarz auf Weiß. Je Track: Nummer, Seite, Titel und Artist, Platte mit Katalognummer
 // (zum Wiederfinden in der Kiste), Tempo, Tonart, Energie und die eigene Mix-Notiz.
 import type { DJSet, Release, TrackMeta } from "../../lib/db";
-import { FONTS, headStyle, MONO, type PrintOpts } from "./types";
+import { FONTS, headStyle, DATA, type PrintOpts } from "./types";
 import { Bars, capsLine, catnoOf, cleanLabel, InlineVersion, KeyTag, mm, palette, keyGuess } from "./kit";
 
 const dateText = (d?: string) => (d ? new Date(d).toLocaleDateString("de-DE", { weekday: "short", day: "numeric", month: "long", year: "numeric" }) : "");
@@ -46,8 +46,8 @@ export function SetSheet({ set, tracks, rels, o }: { set: DJSet; tracks: TrackMe
         const note = set.mixNotes?.[t.id];
         return (
           <div key={`${t.id}-${i}`} style={{ display: "flex", alignItems: "flex-start", minHeight: mm(rowH), padding: `${mm(rowH * 0.13)} 0`, boxSizing: "border-box", borderBottom: `0.2mm solid ${pal.hair}`, breakInside: "avoid", pageBreakInside: "avoid", fontSize: mm(fs), lineHeight: 1.22 }}>
-            <span style={{ width: mm(9), flex: "none", fontFamily: MONO, fontWeight: 800 }}>{String(i + 1).padStart(2, "0")}</span>
-            <span style={{ width: mm(11), flex: "none", fontFamily: MONO, fontWeight: 700, color: pal.muted }}>{t.position}</span>
+            <span style={{ width: mm(9), flex: "none", ...DATA, fontWeight: 800 }}>{String(i + 1).padStart(2, "0")}</span>
+            <span style={{ width: mm(11), flex: "none", ...DATA, fontWeight: 700, color: pal.muted }}>{t.position}</span>
             <span style={{ flex: 1, minWidth: 0 }}>
               <span style={{ display: "block", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 <InlineVersion title={t.title} />
@@ -58,7 +58,7 @@ export function SetSheet({ set, tracks, rels, o }: { set: DJSet; tracks: TrackMe
               </span>
               {note && <span style={{ display: "block", fontSize: mm(fs * 0.84), fontStyle: "italic", marginTop: mm(0.4) }}>{note}</span>}
             </span>
-            <span style={{ width: mm(14), flex: "none", textAlign: "right", fontFamily: MONO, fontWeight: 800, fontSize: mm(fs * 1.12) }}>{t.bpm ? `${t.tempoCheck === "unsicher" ? "~" : ""}${Math.round(t.bpm)}` : ""}</span>
+            <span style={{ width: mm(14), flex: "none", textAlign: "right", ...DATA, fontWeight: 800, fontSize: mm(fs * 1.12) }}>{t.bpm ? `${t.tempoCheck === "unsicher" ? "~" : ""}${Math.round(t.bpm)}` : ""}</span>
             <span style={{ width: mm(15), flex: "none", textAlign: "right" }}>
               <KeyTag k={t.key} size={fs} pal={pal} o={{ ...o, showCamelot: true, showKey: true }} unsure={keyGuess(t)} />
             </span>

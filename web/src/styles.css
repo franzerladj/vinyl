@@ -7,6 +7,9 @@
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter Variable", "Inter", system-ui, sans-serif;
   --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter Variable", "Inter", system-ui, sans-serif;
   --font-brand: "Archivo Variable", "Archivo", "Inter Variable", "Inter", system-ui, sans-serif;
+  /* Daten (Katalognummern, Positionen, Zustand, Datum): dieselbe Familie wie die Titel, aber breit und klein.
+     Vorher JetBrains Mono, das wirkte nach Code-Editor. Breite und Ziffern setzt die Regel am Ende der Datei. */
+  --font-data: "Archivo Variable", "Archivo", "Inter Variable", "Inter", system-ui, sans-serif;
 
   /* Dunkel (Standard): Tinte wie eine dunkle Plattenhülle, warm statt Apple-Schwarz */
   --bg: #0b0b0b;
@@ -357,7 +360,6 @@ details[open] > summary::after { transform: rotate(270deg); }
 .energy-bar i:nth-child(1) { height: 5px; } .energy-bar i:nth-child(2) { height: 7px; } .energy-bar i:nth-child(3) { height: 9px; } .energy-bar i:nth-child(4) { height: 11px; } .energy-bar i:nth-child(5) { height: 12px; }
 .energy-bar i.on { background: var(--accent); }
 .video { aspect-ratio: 16 / 9; width: 100%; border: 0; border-radius: var(--r); background: var(--surface); }
-.code { font-family: ui-monospace, "SF Mono", monospace; font-size: 12px; word-break: break-all; background: var(--surface-2); padding: 10px; border-radius: 10px; max-height: 100px; overflow: auto; color: var(--text-2); }
 video.scan { display: block; width: 100%; border-radius: var(--r-lg); background: #000; aspect-ratio: 1; max-height: 52vh; object-fit: cover; }
 .scan-wrap { position: relative; overflow: hidden; border-radius: var(--r-lg); }
 .scan-frame { position: absolute; inset: 28% 8%; border-radius: 18px; box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.45); border: 2px solid rgba(255, 255, 255, 0.9); }
@@ -1014,7 +1016,7 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .login-claim { margin: 10px 0 0; font-size: 17px; color: var(--text-2); }
 .side-list { list-style: none; padding: 0; margin: 30px 0 28px; text-align: left; display: grid; gap: 16px; border-top: 1px solid var(--hairline); padding-top: 18px; }
 .side-list li { display: flex; gap: 14px; align-items: baseline; }
-.side-list .pos { flex: none; width: 30px; font: 700 14px/1.3 "JetBrains Mono Variable", ui-monospace, monospace; color: var(--accent); }
+.side-list .pos { flex: none; width: 30px; font: 700 14px/1.3 var(--font-data); color: var(--accent); }
 .side-list b { display: block; font-size: 16px; }
 .side-list .sub { font-size: 14.5px; line-height: 1.4; }
 
@@ -1022,7 +1024,7 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .page-head h1, .home-hero h1 { font-family: var(--font-brand); font-weight: 900; font-stretch: 62%; text-transform: uppercase; letter-spacing: 0.005em; line-height: 0.92; }
 .page-head h1 { font-size: clamp(40px, 12vw, 46px); }
 .home-hero h1 { font-size: clamp(46px, 14.5vw, 60px); max-width: 12ch; }
-.eyebrow { font-family: "JetBrains Mono Variable", ui-monospace, monospace; font-weight: 600; letter-spacing: 0; font-size: 12.5px; }
+.eyebrow { font-family: var(--font-data); font-weight: 600; letter-spacing: 0; font-size: 12.5px; }
 /* Kein Leuchten, keine Weichzeichner-Wolken: flach und klar */
 .home-hero-bg { display: none; }
 .home-hero::after { display: none; }
@@ -1030,11 +1032,11 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .fab { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35); }
 
 /* ---------- Zustand und Pressung ---------- */
-.mono { font-family: "JetBrains Mono Variable", ui-monospace, monospace; font-size: 0.92em; letter-spacing: 0; }
+.mono { font-family: var(--font-data); font-size: 0.9em; font-weight: 600; letter-spacing: 0.005em; }
 .grade-row { gap: 8px; }
 .grade-pill { display: inline-flex; align-items: baseline; gap: 6px; border: 0; border-radius: 8px; padding: 6px 10px; background: var(--surface-2); color: var(--text); font: inherit; cursor: pointer; }
 .grade-pill small { font-size: 12px; color: var(--text-2); }
-.grade-pill b { font: 700 15px "JetBrains Mono Variable", ui-monospace, monospace; }
+.grade-pill b { font: 700 15px var(--font-data); }
 .grade-opt { display: flex; align-items: center; gap: 14px; width: 100%; border: 0; background: none; color: var(--text); font: inherit; text-align: left; padding: 12px 2px; border-bottom: 0.5px solid var(--hairline); cursor: pointer; }
 .grade-opt b { width: 84px; flex: none; font-size: 17px; white-space: nowrap; }
 .grade-opt span { flex: 1; min-width: 0; color: var(--text-2); }
@@ -1069,13 +1071,13 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 /* Setup im Profil, wie ein Technical Rider */
 .rider { width: min(100%, 360px); margin-top: 10px; padding: 12px 14px; border-radius: 16px; background: var(--surface); text-align: left; }
 .rider-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
-.rider-head span { font: 700 11px/1 "JetBrains Mono Variable", ui-monospace, monospace; letter-spacing: 0; color: var(--text-2); }
+.rider-head span { font: 700 11px/1 var(--font-data); letter-spacing: 0; color: var(--text-2); }
 .rider-head b { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); color: var(--text); white-space: nowrap; }
 .rider-head b.on { background: var(--accent); color: var(--accent-ink); }
 .rider dl { margin: 0; }
 .rider dl > div { display: grid; grid-template-columns: 84px 1fr; gap: 10px; padding: 7px 0; border-top: 0.5px solid var(--hairline); }
 .rider dl > div:first-child { border-top: 0; }
-.rider dt { font: 600 11px/1.6 "JetBrains Mono Variable", ui-monospace, monospace; letter-spacing: 0; color: var(--text-3); padding-top: 1px; }
+.rider dt { font: 600 11px/1.6 var(--font-data); letter-spacing: 0; color: var(--text-3); padding-top: 1px; }
 .rider dd { margin: 0; font-size: 14px; font-weight: 600; line-height: 1.35; min-width: 0; overflow-wrap: anywhere; hyphens: manual; -webkit-hyphens: manual; }
 .pe-field input[list]::-webkit-calendar-picker-indicator { display: none !important; }
 
@@ -1252,7 +1254,7 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .folder-tabs { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px var(--gutter) 8px; scroll-padding: 0 var(--gutter); }
 .folder-tabs::-webkit-scrollbar { display: none; }
 .folder-tab { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--surface-2); color: var(--text); font-size: 14px; font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer; transition: transform .2s var(--ease), opacity .2s var(--ease); }
-.folder-tab .folder-n { font: 500 12px/1 "JetBrains Mono Variable", ui-monospace, monospace; opacity: .55; }
+.folder-tab .folder-n { font: 500 12px/1 var(--font-data); opacity: .55; }
 .folder-tab.on { background: var(--accent); color: var(--accent-ink); }
 .folder-tab.on .folder-n { opacity: .8; }
 .folder-tab.ghost { background: none; color: var(--accent); padding: 0 6px; }
@@ -1356,7 +1358,7 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 }
 @keyframes dialog-in { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
 .dig-keys { position: absolute; z-index: 3; right: 18px; bottom: calc(var(--dig-bar, 84px) + 14px); font-size: 12px; color: rgba(245, 245, 244, 0.55); text-align: right; line-height: 1.6; pointer-events: none; }
-.dig-keys kbd { font: 600 11px/1 "JetBrains Mono Variable", ui-monospace, monospace; padding: 2px 5px; border-radius: 4px; background: rgba(255, 255, 255, 0.1); color: #f5f5f4; }
+.dig-keys kbd { font: 600 11px/1 var(--font-data); padding: 2px 5px; border-radius: 4px; background: rgba(255, 255, 255, 0.1); color: #f5f5f4; }
 @media (max-width: 1023px), (hover: none) { .dig-keys { display: none !important; } }
 .sheet .row > span.sub { flex: none; white-space: nowrap; }
 
@@ -1380,7 +1382,7 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .tempo-check { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--warn, #d98a00) 12%, transparent); }
 .tempo-check.einfach { background: var(--surface-2); }
 .tempo-check > span { font-size: 14px; color: var(--text-2); }
-.tool-n { font: 600 11px/1 "JetBrains Mono Variable", ui-monospace, monospace; opacity: 0.7; margin-left: 2px; }
+.tool-n { font: 600 11px/1 var(--font-data); opacity: 0.7; margin-left: 2px; }
 
 /* Icons statt Text-Zeichen (▶ ❚❚ ♥ ✓) */
 .pos-ico svg { width: 15px; height: 15px; vertical-align: -2px; }
@@ -1460,7 +1462,7 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .friend-card-who { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .friend-card-who b { font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .friend-card-who .sub { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.friend-taste { flex: none; font: 700 13px/1 "JetBrains Mono Variable", ui-monospace, monospace; color: var(--text-2); }
+.friend-taste { flex: none; font: 700 13px/1 var(--font-data); color: var(--text-2); }
 .friend-covers { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
 .friend-covers img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 4px; display: block; background: var(--surface-2); }
 .friend-card-tags { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1520,7 +1522,7 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .ys-slide { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 14px; min-height: 0; position: relative; }
 .ys-slide > *, .ys-slide .ys-bar, .ys-slide .ys-list li, .ys-slide .ys-duo > div, .ys-slide .ys-stack img { animation: ysUp 0.7s var(--spring) both; animation-delay: calc(var(--i, 0) * 110ms + 80ms); }
 @keyframes ysUp { from { opacity: 0; transform: translateY(28px); } }
-.ys-eyebrow { font: 500 13px/1.3 "JetBrains Mono Variable", ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.75; }
+.ys-eyebrow { font: 500 13px/1.3 var(--font-data); text-transform: uppercase; letter-spacing: 0.04em; opacity: 0.75; }
 .ys-giant { display: block; font: 900 clamp(110px, 38vw, 220px)/0.82 var(--font-brand); font-stretch: 62%; font-variation-settings: "wdth" 62; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .ys-big { display: block; font: 900 clamp(48px, 15vw, 96px)/0.88 var(--font-brand); font-stretch: 62%; font-variation-settings: "wdth" 62; text-transform: uppercase; word-spacing: 0.12em; overflow-wrap: anywhere; hyphens: none; }
 .ys-line { font-size: 20px; line-height: 1.3; font-weight: 600; max-width: 22em; }
@@ -1544,7 +1546,7 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .ys-bars { display: grid; gap: 12px; margin-top: 18px; animation: none !important; }
 .ys-bar { display: grid; grid-template-columns: 1fr auto; gap: 6px 10px; align-items: center; }
 .ys-bar span { font-weight: 700; font-size: 16px; }
-.ys-bar em { font: 500 14px "JetBrains Mono Variable", monospace; font-style: normal; opacity: 0.7; }
+.ys-bar em { font: 500 14px var(--font-data); font-style: normal; opacity: 0.7; }
 .ys-bar i { grid-column: 1 / -1; height: 10px; border-radius: 5px; background: #c6ff3a; transform-origin: left; animation: ysGrow 1.1s var(--spring) both; animation-delay: calc(var(--i, 0) * 110ms + 300ms); }
 @keyframes ysGrow { from { transform: scaleX(0); } }
 .ys-duo { display: flex; gap: 28px; animation: none !important; }
@@ -1832,3 +1834,10 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .guide-tip .chev, .guide-entry .chev { color: var(--text-3); flex: none; }
 /* Knopf, der wie ein Link im Text aussieht (z. B. „Jetzt aktualisieren“ im Hinweis) */
 .link-btn { background: none; border: 0; padding: 0; margin: 0; font: inherit; font-weight: 700; color: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+/* ---------- Daten-Schrift: Archivo breit ----------
+   Gilt für alles, was var(--font-data) benutzt. Steht am Ende, weil die Kurzform `font:` die Breite zurücksetzt.
+   Neue Stellen hier eintragen. */
+.side-list .pos, .eyebrow, .mono, .grade-pill b, .rider-head span, .rider dt, .folder-tab .folder-n, .dig-keys kbd, .tool-n, .friend-taste, .ys-eyebrow, .ys-bar em { font-stretch: 112%; font-variation-settings: "wdth" 112; font-variant-numeric: tabular-nums; }
+/* Laufende Zeit im Player: gleich breite Ziffern, damit nichts zittert (Archivo hat keine) */
+.np-times.mono { font-family: var(--font); font-stretch: normal; font-variation-settings: normal; font-weight: 500; }

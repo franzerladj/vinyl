@@ -3,7 +3,7 @@
 // Gestaltung wie ein Plattenlabel: Katalognummer oben, große schmale Überschrift, Seiten als Kästchen,
 // Zahlen in Mono. Weiß braucht kaum Tinte; Farbe sitzt nur in kleinen Flächen.
 import { splitVersion } from "../../../../shared/trackTitle";
-import { FONTS, headStyle, MONO, stars, type PrintItem, type PrintOpts, type PrintTrack } from "./types";
+import { FONTS, headStyle, DATA, stars, type PrintItem, type PrintOpts, type PrintTrack } from "./types";
 import { Bars, bpmRange, bpmText, capsLine, catnoOf, clamp, cleanLabel, groupSides, InlineVersion, KeyTag, mm, palette, SideTag, Stamp, TitleLines, VERSION_SCALE, type CardTheme, type Pal, keyGuess } from "./kit";
 
 export { DEFAULT_ACCENT, InlineVersion, VERSION_SCALE, type CardTheme } from "./kit";
@@ -73,7 +73,7 @@ export function InsertCard({ s, w, h, o, theme }: { s: PrintItem; w: number; h: 
     const nrgW = hasEnergy ? f * 1.25 + 1.6 : 0;
     const durW = hasDur ? f * 0.6 * 5 + 1.6 : 0;
     const titleW = Math.max(6, colW - posW - bpmW - keyW - nrgW - durW);
-    const perLine = titleW / (f * 0.53);
+    const perLine = titleW / (f * F.bw);
     // Version in Klammern steht immer in eigener Zeile, etwas kleiner (VERSION_SCALE)
     const lines = (t: PrintTrack) => {
       const { main, version } = splitVersion(fullTitle(t));
@@ -165,12 +165,12 @@ export function InsertCard({ s, w, h, o, theme }: { s: PrintItem; w: number; h: 
                   <div style={{ display: "flex", flexDirection: "column", gap: mm(lineH * 0.1) }}>
                     {ts.map((tr) => (
                       <div key={tr.position} style={{ display: "flex", alignItems: "flex-start", minHeight: mm(lineH * 0.94), fontSize: mm(fs), lineHeight: mm(lineH * 0.94) }}>
-                        <span style={{ width: mm(m.posW), flex: "none", fontFamily: MONO, fontWeight: 700, fontSize: mm(fs * 0.92), color: pal.muted, whiteSpace: "nowrap" }}>{tr.position}</span>
+                        <span style={{ width: mm(m.posW), flex: "none", ...DATA, fontWeight: 700, fontSize: mm(fs * 0.92), color: pal.muted, whiteSpace: "nowrap" }}>{tr.position}</span>
                         <span style={{ flex: 1, minWidth: 0, fontWeight: 500, overflowWrap: "break-word" }}>
                           <TitleLines artist={tr.meta?.artist && tr.meta.artist !== r.artist ? tr.meta.artist : null} title={tr.title} muted={pal.muted} lineH={lineH * 0.94} />
                         </span>
-                        {hasDur && <span style={{ width: mm(m.durW), flex: "none", textAlign: "right", fontFamily: MONO, fontSize: mm(fs * 0.86), color: pal.muted, whiteSpace: "nowrap" }}>{tr.duration}</span>}
-                        {hasBpm && <span style={{ width: mm(m.bpmW), flex: "none", textAlign: "right", fontFamily: MONO, fontWeight: 800, whiteSpace: "nowrap" }}>{bpmText(tr)}</span>}
+                        {hasDur && <span style={{ width: mm(m.durW), flex: "none", textAlign: "right", ...DATA, fontSize: mm(fs * 0.86), color: pal.muted, whiteSpace: "nowrap" }}>{tr.duration}</span>}
+                        {hasBpm && <span style={{ width: mm(m.bpmW), flex: "none", textAlign: "right", ...DATA, fontWeight: 800, whiteSpace: "nowrap" }}>{bpmText(tr)}</span>}
                         {hasKey && (
                           <span style={{ width: mm(m.keyW), flex: "none", textAlign: "right" }}>
                             <KeyTag k={tr.meta?.key} size={fs} pal={pal} o={o} unsure={keyGuess(tr.meta)} />
@@ -278,11 +278,11 @@ export function ObiStrip({ s, w, h, o, theme, front }: { s: PrintItem; w: number
                 )}
                 {ts.map((tr) => (
                   <div key={tr.position} style={{ display: "flex", alignItems: "flex-start", gap: mm(1.1), height: mm(rowH(tr)), fontSize: mm(fs), lineHeight: mm(lineH * 0.78), paddingTop: mm(lineH * 0.11), boxSizing: "border-box" }}>
-                    <span style={{ width: mm(posLen * fs * 0.6 + 0.6), flex: "none", fontFamily: MONO, fontWeight: 700, fontSize: mm(fs * 0.9), color: pal.muted, whiteSpace: "nowrap" }}>{tr.position}</span>
+                    <span style={{ width: mm(posLen * fs * 0.6 + 0.6), flex: "none", ...DATA, fontWeight: 700, fontSize: mm(fs * 0.9), color: pal.muted, whiteSpace: "nowrap" }}>{tr.position}</span>
                     <span style={{ flex: 1, minWidth: 0, ...clamp(rowLines(tr)), overflowWrap: "break-word" }}>
                       <InlineVersion title={tr.title} />
                     </span>
-                    {bpmLen > 0 && <span style={{ flex: "none", fontFamily: MONO, fontWeight: 800, whiteSpace: "nowrap" }}>{bpmText(tr)}</span>}
+                    {bpmLen > 0 && <span style={{ flex: "none", ...DATA, fontWeight: 800, whiteSpace: "nowrap" }}>{bpmText(tr)}</span>}
                     {hasKey && (
                       <span style={{ flex: "none", width: mm(fs * 2.1), textAlign: "right" }}>
                         <KeyTag k={tr.meta?.key} size={fs} pal={pal} o={o} unsure={keyGuess(tr.meta)} />
@@ -318,7 +318,7 @@ function ObiSummary({ range, keys, count, pal, o }: { range: string; keys: strin
       {range && (
         <div style={{ border: `0.5mm solid ${pal.fg}`, padding: `${mm(1.4)} ${mm(1.6)} ${mm(1.6)}`, textAlign: "center" }}>
           <div style={capsLine(2, pal.muted)}>Tempo</div>
-          <div style={{ fontFamily: MONO, fontWeight: 800, fontSize: mm(range.length > 5 ? 5.4 : 6.6), lineHeight: 1.05, letterSpacing: "-0.03em" }}>{range}</div>
+          <div style={{ ...DATA, fontWeight: 800, fontSize: mm(range.length > 5 ? 5.4 : 6.6), lineHeight: 1.05, letterSpacing: "-0.03em" }}>{range}</div>
           <div style={capsLine(2, pal.muted)}>BPM</div>
         </div>
       )}
