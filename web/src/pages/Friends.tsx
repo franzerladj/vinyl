@@ -490,7 +490,7 @@ function FriendDetail({ u }: { u: string }) {
         {((tab === "coll" && !f.collectionPrivate) || (tab === "want" && !f.wantsPrivate)) && (
           <div className="search-bar">
             <IconSearch />
-            <input className="input" type="search" placeholder={tab === "coll" ? `In der Sammlung von ${u} suchen …` : `In der Wantlist von ${u} suchen …`} value={q} onChange={(e) => setQ(e.target.value)} />
+            <input className="input" type="search" autoCorrect="off" autoCapitalize="none" spellCheck={false} placeholder={tab === "coll" ? `In der Sammlung von ${u} suchen …` : `In der Wantlist von ${u} suchen …`} value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
         )}
         {hint[tab] && ids.length > 0 && <p className="sub" style={{ margin: "0 2px" }}>{hint[tab]}</p>}

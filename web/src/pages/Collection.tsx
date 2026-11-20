@@ -341,7 +341,7 @@ export default function Collection() {
       <div className="toolbar" ref={toolbar} data-title={folder && folder !== "-" ? folder : "Sammlung"}>
         <div className="search-bar">
           <IconSearch />
-          <input className="input" type="search" placeholder="Artist, Titel, Label, Track, Regal …" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
+          <input className="input" type="search" autoCorrect="off" autoCapitalize="none" spellCheck={false} placeholder="Artist, Titel, Label, Track, Regal …" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
         </div>
         <div className="toolbar-row">
           <SortButton options={SORTS} value={sort} onClick={() => setSheet("sort")} />

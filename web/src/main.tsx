@@ -10,7 +10,7 @@ import "./styles.css";
 import { applyTheme } from "./lib/theme";
 import { registerSW } from "virtual:pwa-register";
 import { getState, setState } from "./lib/store";
-import { noteAppLaunch } from "./lib/push";
+import { isIOS, isStandalone, noteAppLaunch } from "./lib/push";
 import { unlockDigAudio } from "./lib/digAudio";
 
 applyTheme();
@@ -18,10 +18,17 @@ noteAppLaunch();
 
 // iPhone: kein Heranzoomen beim Tippen in ein Feld (Zoomen mit zwei Fingern bleibt möglich,
 // iOS ignoriert maximum-scale dafür). Und :active-Zustände brauchen einen Touch-Listener.
-if (/iP(hone|ad|od)/.test(navigator.userAgent)) {
+// iPadOS meldet sich als „Macintosh“: deshalb isIOS() (prüft auch Touch am Mac-Namen).
+const onIOS = isIOS();
+const iosApp = onIOS && isStandalone();
+if (onIOS) {
   document.querySelector('meta[name="viewport"]')?.setAttribute("content", "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover");
   document.documentElement.classList.add("ios");
+  // Home-Bildschirm-App: die Statusleiste hat dort immer weiße Schrift (siehe „ios-app“ in styles.css)
+  if (iosApp) document.documentElement.classList.add("ios-app");
 }
+// Der Browser soll die lokalen Daten (Sets, eigene Tempi, Likes) nicht von sich aus wegräumen
+void navigator.storage?.persist?.().catch(() => undefined);
 document.addEventListener("touchstart", () => undefined, { passive: true });
 // Erste Berührung schaltet den Ton fürs Diggen frei (iPhone verlangt das einmal pro Sitzung)
 for (const ev of ["touchend", "click"] as const) document.addEventListener(ev, () => unlockDigAudio(), { capture: true, passive: true });
@@ -55,9 +62,14 @@ const updateSW = registerSW({
 // Richtung des Seitenwechsels für die Animation: Zurück (Geste, Taste, Browser) gleitet nach rechts
 window.addEventListener(
   "popstate",
-  () => {
+  (e) => {
     document.documentElement.classList.add("vt-back");
     document.documentElement.classList.remove("vt-tab");
+    // Safari hat die Seite beim Wisch vom Rand schon selbst verschoben: nicht noch einmal gleiten lassen
+    if ((e as PopStateEvent & { hasUAVisualTransition?: boolean }).hasUAVisualTransition) {
+      document.documentElement.classList.add("vt-none");
+      setTimeout(() => document.documentElement.classList.remove("vt-none"), 450);
+    }
   },
   true,
 );
@@ -96,7 +108,8 @@ if (splash) {
   Promise.all([document.fonts.load('900 40px "Archivo Variable"')])
     .then(() => splash.classList.add("fonts"))
     .catch(() => undefined);
-  const minMs = seen ? 300 : 1400;
+  // iPhone-App: das Startbild von iOS hat das Logo schon gezeigt, also nur kurz
+  const minMs = seen || iosApp ? 300 : 1400;
   requestAnimationFrame(() =>
     setTimeout(() => {
       splash.classList.add("out");

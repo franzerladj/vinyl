@@ -1178,12 +1178,22 @@ function LiveMode({ tracks, rels, notes, played, onPlayed, onClose }: { tracks: 
   useBackClose(true, onClose);
   useEffect(() => {
     // Bildschirm anlassen, solange der Live-Modus offen ist
+    // Das System gibt die Sperre frei, sobald die App im Hintergrund war: beim Zurückkommen neu holen
     let lock: { release(): Promise<void> } | null = null;
-    (navigator as Navigator & { wakeLock?: { request(t: "screen"): Promise<{ release(): Promise<void> }> } }).wakeLock?.request("screen").then(
-      (l) => (lock = l),
-      () => undefined,
-    );
-    return () => void lock?.release();
+    let alive = true;
+    const hold = () =>
+      (navigator as Navigator & { wakeLock?: { request(t: "screen"): Promise<{ release(): Promise<void> }> } }).wakeLock?.request("screen").then(
+        (l) => (alive ? (lock = l) : void l.release()),
+        () => undefined,
+      );
+    const onShow = () => document.visibilityState === "visible" && void hold();
+    void hold();
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      alive = false;
+      document.removeEventListener("visibilitychange", onShow);
+      void lock?.release();
+    };
   }, []);
   useRootClass("in-live", Boolean(cur));
   if (!cur) return null;

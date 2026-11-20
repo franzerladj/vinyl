@@ -314,7 +314,10 @@ async function startupSync() {
   window.addEventListener("online", () => void run());
   // Mitteilung kam an, während Crate offen ist: Anfragen und Aktivität gleich nachladen
   navigator.serviceWorker?.addEventListener("message", (e) => {
-    if ((e.data as { type?: string } | null)?.type !== "crate-push") return;
+    const d = e.data as { type?: string; url?: string } | null;
+    // Mitteilung angetippt, aber der Browser kann die offene Seite nicht selbst umlenken
+    if (d?.type === "crate-open" && d.url && new URL(d.url, location.origin).origin === location.origin) return void location.assign(d.url);
+    if (d?.type !== "crate-push") return;
     void import("./lib/social").then((m) => m.refreshSocial()).catch(() => undefined);
     void import("./lib/buzz").then((m) => m.refreshBuzz()).catch(() => undefined);
     void import("./lib/dm").then((m) => m.refreshThreads()).catch(() => undefined);
@@ -406,6 +409,17 @@ export default function App() {
   const me = useStore((s) => s.me);
   const social = useLiveQuery(() => cachedSocial(), []);
   const buzz = useBuzz();
+  // Zahl am App-Symbol (iPhone ab iOS 16.4 als Home-Bildschirm-App, Android): offene Anfragen, Aktivität, Nachrichten
+  const badge = (social?.in.length ?? 0) + buzz.unread + (buzz.dm ?? 0);
+  useEffect(() => {
+    const n = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> };
+    try {
+      if (badge > 0) void n.setAppBadge?.(badge).catch(() => undefined);
+      else void n.clearAppBadge?.().catch(() => undefined);
+    } catch {
+      /* nicht überall erlaubt */
+    }
+  }, [badge]);
   const [loaded, setLoaded] = useState(false);
   const online = useOnline();
   const loc = useLocation();

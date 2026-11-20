@@ -31,12 +31,14 @@ export function unlockDigAudio() {
   a.play().then(
     () => {
       unlocked = true;
-      a.muted = false;
-      // Hat das Diggen inzwischen schon eine Hörprobe geladen, die nicht anhalten
+      // Hat das Diggen inzwischen schon eine Hörprobe geladen, die nicht anhalten.
+      // Reihenfolge: erst anhalten, dann den Ton einschalten. Ein laufendes Element mit Ton übernimmt auf dem
+      // iPhone die Tonausgabe, dann würde Musik aus einer anderen App beim ersten Tipp in Crate verstummen.
       if (a.src.startsWith("data:")) {
         a.pause();
         a.removeAttribute("src");
       }
+      a.muted = false;
     },
     () => {
       a.muted = false;

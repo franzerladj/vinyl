@@ -43,7 +43,7 @@ type Audio = "idle" | "loading" | "playing" | "paused" | "none";
  * es bleibt stumm, YouTube zeigt selbst „Zum Einschalten tippen“.
  */
 function unmuteYouTube(frame: HTMLIFrameElement) {
-  if (/iP(hone|ad|od)/.test(navigator.userAgent)) return;
+  if (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) return;
   const send = (func: string, args: unknown[] = []) => frame.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args }), "https://www.youtube-nocookie.com");
   // Der Player meldet nicht verlässlich, wann er bereit ist: ein paar Mal versuchen
   for (const ms of [500, 1200, 2500, 4000]) {

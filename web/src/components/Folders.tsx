@@ -261,7 +261,7 @@ function FolderSorter({ kind, name, recs, folderId, onBack, onSaved, onRenamed, 
       <div className="sub">
         {sel.size} {sel.size === 1 ? "Platte" : "Platten"} im Ordner. Antippen zum Einsortieren oder Rausnehmen.
       </div>
-      <input className="input" type="search" placeholder="Artist, Titel, Style …" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input className="input" type="search" autoCorrect="off" autoCapitalize="none" spellCheck={false} placeholder="Artist, Titel, Style …" value={q} onChange={(e) => setQ(e.target.value)} />
       <div className="chips chips-scroll">
         <button className={`chip ${!style ? "on" : ""}`} onClick={() => setStyle("")}>
           Alle Styles

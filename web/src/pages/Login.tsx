@@ -14,6 +14,11 @@ const SIDES: [string, string, string][] = [
 export default function Login({ me }: { me: Me | null }) {
   const status = new URLSearchParams(location.search).get("login");
   const [busyText, setBusyText] = useState<string | null>(null);
+  useEffect(() => {
+    const back = (e: PageTransitionEvent) => e.persisted && setBusyText(null);
+    window.addEventListener("pageshow", back);
+    return () => window.removeEventListener("pageshow", back);
+  }, []);
   return (
     <div className="app" style={{ paddingBottom: 0 }}>
       <div className="hero">

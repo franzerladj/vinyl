@@ -209,7 +209,7 @@ export default function Scan() {
 
   const showForm = mode === "manual" || rec || (results && mode !== "photo");
   const field = (k: keyof Fields, ph: string, mode?: "numeric") => (
-    <input className="input" placeholder={ph} inputMode={mode} value={fields[k]} onChange={(e) => setFields({ ...fields, [k]: e.target.value })} />
+    <input className="input" placeholder={ph} inputMode={mode} autoCorrect="off" autoCapitalize="none" spellCheck={false} value={fields[k]} onChange={(e) => setFields({ ...fields, [k]: e.target.value })} />
   );
 
   return (

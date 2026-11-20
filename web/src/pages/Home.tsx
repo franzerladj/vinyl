@@ -1,5 +1,5 @@
 import { useBuzz } from "../lib/buzz";
-import { apkName, apkOutdated, canSelfUpdate, LATEST_APK, nativePush, nativeToken, updateApp } from "../lib/push";
+import { apkName, apkOutdated, canSelfUpdate, isIOS, isStandalone, LATEST_APK, nativePush, nativeToken, updateApp } from "../lib/push";
 import { Hint } from "../components/Welcome";
 import { DailyRecord } from "../components/DailyRecord";
 import { Link } from "react-router-dom";
@@ -171,6 +171,12 @@ export default function Home() {
                 </a>
               </>
             )}
+          </Hint>
+        )}
+        {isIOS() && !isStandalone() && (
+          <Hint id="ios-home">
+            <b>Leg Crate auf den Home-Bildschirm.</b> Im Safari-Tab räumt das iPhone nach sieben Tagen ohne Besuch deine Sets und eigenen Tempi weg, und Mitteilungen gehen nur als App.{" "}
+            <Link to="/app" viewTransition>So geht es</Link>
           </Hint>
         )}
         {nativePush() && !nativeToken() && (

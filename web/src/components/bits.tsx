@@ -12,7 +12,7 @@ import { discogsPauseMs } from "../lib/api";
 // iOS kennt navigator.vibrate nicht. Safari ab iOS 18 gibt aber beim Umlegen eines System-Schalters
 // (<input type="checkbox" switch>) ein spürbares Tick. Ein unsichtbarer Schalter liefert so echtes Feedback.
 let iosSwitch: HTMLLabelElement | null = null;
-const isIOS = typeof navigator !== "undefined" && /iP(hone|ad|od)/.test(navigator.userAgent) && !("vibrate" in navigator);
+const isIOS = typeof navigator !== "undefined" && (/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) && !("vibrate" in navigator);
 function iosTick() {
   if (!iosSwitch) {
     iosSwitch = document.createElement("label");

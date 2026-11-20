@@ -275,7 +275,7 @@ export default function Wantlist() {
       <div className="toolbar" ref={toolbar} data-title={folder && folder !== "-" ? folder : "Wantlist"}>
         <div className="search-bar">
           <IconSearch />
-          <input className="input" type="search" placeholder="In der Wantlist suchen …" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
+          <input className="input" type="search" autoCorrect="off" autoCapitalize="none" spellCheck={false} placeholder="In der Wantlist suchen …" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
         </div>
         <div className="toolbar-row">
           <SortButton options={SORTS} value={sort} onClick={() => setSheet("sort")} />

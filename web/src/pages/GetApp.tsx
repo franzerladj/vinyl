@@ -30,16 +30,24 @@ function Android({ lead }: { lead: boolean }) {
   );
 }
 
+/** Eingebaute Browser von Instagram, Facebook, Line, TikTok und Co.: dort lässt sich nichts auf den Home-Bildschirm legen */
+const inAppBrowser = () => /Instagram|FBAN|FBAV|FB_IAB|Line\/|TikTok|musical_ly|Snapchat|Pinterest|LinkedInApp|GSA\//i.test(navigator.userAgent);
+
 function IPhone({ lead }: { lead: boolean }) {
   return (
     <section className={`getapp-card${lead ? " lead" : ""}`}>
       <span className="eyebrow">iPhone und iPad</span>
       <b>Auf den Home-Bildschirm legen</b>
+      {inAppBrowser() && (
+        <p className="getapp-warn">
+          Du bist gerade im Browser einer anderen App (Instagram, WhatsApp …). Dort fehlt „Zum Home-Bildschirm“. Tipp auf die drei Punkte und wähle <b>In Safari öffnen</b>.
+        </p>
+      )}
       <ol className="getapp-steps">
         <li>
           Diese Seite in <b>Safari</b> öffnen.
         </li>
-        <li>Unten auf „Teilen“ tippen (Quadrat mit Pfeil).</li>
+        <li>Auf „Teilen“ tippen (Quadrat mit Pfeil): am iPhone unten in der Leiste oder hinter den drei Punkten, am iPad oben rechts.</li>
         <li>„Zum Home-Bildschirm“ wählen, dann „Hinzufügen“.</li>
         <li>Crate vom Home-Bildschirm aus öffnen und mit Discogs anmelden.</li>
       </ol>

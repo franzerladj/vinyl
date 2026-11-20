@@ -7,7 +7,7 @@ import { authHeaders, authorizeUrl, discogsFetch, DiscogsBusy, getAccessToken, g
 import { ALL_KINDS, KIND_DEFAULT, kindOn, bundle, currentSlot, deviceCount, dueReminders, isPushEndpoint, loadUser, pickWants, notifyUser, saveUser, sendNative, sendPush, userKey, wantChange, type Message, type PushSub, type Stat, type UserRec, type WatchedWant } from "./push";
 import { oauthHmacHeader, oauthHmacParams } from "./oauthSign";
 import { recognizeRecordFree, tagVibesFree, type VibeInput } from "./ai";
-import { DeezerBusy, fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
+import { audioRange, DeezerBusy, fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
 import { lastfmTags } from "./lastfm";
 import { profileEmpty, sanitizeProfile, type CrateProfile } from "../shared/profile";
 import { buildIcs } from "../shared/ics";
@@ -380,9 +380,10 @@ app.post("/api/audio/release", async (c) => {
   }
 });
 
-app.get("/api/audio/preview/:id", (c) => fetchPreviewById(Number(c.req.param("id"))));
+// Mit Range (Abschnitte): Safari verlangt das für Audio, siehe audioRange
+app.get("/api/audio/preview/:id", async (c) => audioRange(await fetchPreviewById(Number(c.req.param("id"))), c.req.header("Range")));
 
-app.get("/api/audio/preview", (c) => fetchPreview(c.req.query("artist") ?? "", c.req.query("title") ?? "", Number(c.req.query("duration")) || null, c.req.query("warm") === "1"));
+app.get("/api/audio/preview", async (c) => audioRange(await fetchPreview(c.req.query("artist") ?? "", c.req.query("title") ?? "", Number(c.req.query("duration")) || null, c.req.query("warm") === "1"), c.req.header("Range")));
 
 app.get("/api/lastfm/tags", async (c) => {
   if (!c.var.cfg.lastfmKey) return c.json({ message: "LASTFM_API_KEY fehlt" }, 501);

@@ -154,6 +154,31 @@ const none = () => new Response("Keine Hörprobe", { status: 404 });
 const audioKey = (id: number) => `https://memo.crate.invalid/dzaudio/${id}`;
 const audioOut = (body: BodyInit | null, type: string | null) => new Response(body, { headers: { "Content-Type": type ?? "audio/mpeg", "Cache-Control": "private, max-age=3600" } });
 
+/**
+ * Hörprobe so ausliefern, wie Safari sie erwartet: mit Länge und mit Abschnitten (Range).
+ * Safaris Medien-Lader fragt zuerst „bytes=0-1“ und will darauf 206 mit Content-Range. Ohne das kennt das iPhone
+ * die Dauer nicht (Spulen und Sperrbildschirm tot), manche Versionen spielen gar nicht. Chrome ist es egal.
+ */
+export async function audioRange(res: Response, range: string | null | undefined): Promise<Response> {
+  if (res.status !== 200 || !res.body) return res;
+  const buf = await res.arrayBuffer();
+  const total = buf.byteLength;
+  const headers = new Headers(res.headers);
+  headers.set("Accept-Ranges", "bytes");
+  const m = /^bytes=(\d*)-(\d*)$/.exec((range ?? "").trim());
+  if (!m || (!m[1] && !m[2])) {
+    headers.set("Content-Length", String(total));
+    return new Response(buf, { status: 200, headers });
+  }
+  // „bytes=-500“ = die letzten 500, „bytes=100-“ = ab 100 bis zum Ende
+  const start = m[1] ? Number(m[1]) : Math.max(0, total - Number(m[2]));
+  const end = m[1] && m[2] ? Math.min(Number(m[2]), total - 1) : total - 1;
+  if (!total || start >= total || start > end) return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${total}`, "Cache-Control": "no-store" } });
+  headers.set("Content-Range", `bytes ${start}-${end}/${total}`);
+  headers.set("Content-Length", String(end - start + 1));
+  return new Response(buf.slice(start, end + 1), { status: 206, headers });
+}
+
 /** Liegt die Hörprobe noch im Zwischenspeicher (10 Minuten)? Dann braucht es Deezer gar nicht. */
 async function cachedAudio(id: number): Promise<Response | null> {
   try {

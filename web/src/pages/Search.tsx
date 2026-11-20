@@ -95,7 +95,7 @@ export default function Search() {
           className="search-bar"
         >
           <IconSearch />
-          <input className="input" type="search" placeholder="Artist, Titel, Katalognummer …" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
+          <input className="input" type="search" autoCorrect="off" autoCapitalize="none" spellCheck={false} placeholder="Artist, Titel, Katalognummer …" value={q} onChange={(e) => setQ(e.target.value)} enterKeyHint="search" />
         </form>
         <div className="chips">
           {[

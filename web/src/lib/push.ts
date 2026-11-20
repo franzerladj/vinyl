@@ -195,10 +195,13 @@ export class PushBlocked extends Error {
 
 /** Mitteilungen einschalten (muss aus einem Tipp heraus aufgerufen werden) */
 export async function enablePush(prefs: PushPrefs = DEFAULT_PREFS): Promise<PushPrefs> {
+  // Die Frage nach der Erlaubnis zuerst und ohne Umweg: Safari fragt nur direkt aus dem Tipp heraus,
+  // nach einem Warten auf den Speicher gälte der Tipp als verfallen und es sähe aus wie „gesperrt“.
+  const asking = nativePush() || Notification.permission === "granted" ? null : Notification.requestPermission();
   // Wunsch merken: kommt die Erlaubnis später (z. B. aus den Android-Einstellungen zurück), schaltet Crate selbst ein
   await setKV("pushWanted", true);
   if (nativePush()) return enableNative(prefs);
-  const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+  const perm = asking ? await asking : "granted";
   if (perm === "denied") throw new PushBlocked();
   if (perm !== "granted") throw new Error(appAsksItself() ? "Mitteilungen sind in Android noch aus. Tipp den Schalter nochmal an und erlaube sie." : "Ohne Erlaubnis gehen keine Mitteilungen");
   const reg = await navigator.serviceWorker.ready;

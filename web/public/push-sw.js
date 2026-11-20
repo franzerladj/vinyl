@@ -16,6 +16,8 @@ self.addEventListener("push", (event) => {
         badge: "/badge-96.png",
         data: { url: d.url || "/" },
       }),
+      // Punkt am App-Symbol (iPhone, Android): die App setzt beim Öffnen die genaue Zahl oder räumt ihn weg
+      self.navigator.setAppBadge ? self.navigator.setAppBadge().catch(() => undefined) : undefined,
       // Ist Crate gerade offen, holt die Seite den neuen Stand sofort (Punkt am Freunde-Tab, Aktivität)
       self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => list.forEach((c) => c.postMessage({ type: "crate-push", tag: d.tag || "" }))),
     ]),
@@ -29,7 +31,9 @@ self.addEventListener("notificationclick", (event) => {
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
       for (const c of list) {
         if (new URL(c.url).origin === self.location.origin && "focus" in c) {
-          c.navigate(url).catch(() => undefined);
+          // navigate gibt es nicht überall: dann der Seite die Adresse schicken, sie wechselt selbst
+          if ("navigate" in c) c.navigate(url).catch(() => undefined);
+          else c.postMessage({ type: "crate-open", url });
           return c.focus();
         }
       }
