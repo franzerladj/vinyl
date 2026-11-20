@@ -15,7 +15,7 @@ import { askText, toast, useStore } from "../lib/store";
 import { Avatar, Cover, DealDot, Empty, Energy, haptic, KeyBadge, Sheet, SkeletonRows, Sparkline, TapTempo, type Preview, keepParens, DiscogsCredit, keyUnsure } from "../components/bits";
 import { loadPriceInfo, setTargetPrice } from "../lib/prices";
 import { friendsFor, lendRecord, messageUrl } from "../lib/friends";
-import { cachedSocial } from "../lib/social";
+import { useMessageFriend } from "../components/Messages";
 import { MenuSheet } from "../components/ui";
 import { previewUrl } from "../lib/free";
 import { setYtConsent, ytConsent } from "../lib/theme";
@@ -51,7 +51,7 @@ export default function ReleasePage() {
   const copies = useLiveQuery(() => db.collection.where("releaseId").equals(id).toArray(), [id], [] as CollectionItem[]);
   const market = useLiveQuery(() => marketValueOf(id, copies[0]?.media), [id, copies[0]?.media]);
   const buddies = useLiveQuery(() => friendsFor(id), [id]);
-  const crateFriends = useLiveQuery(async () => (await cachedSocial()).friends.map((x) => x.toLowerCase()), [], [] as string[]);
+  const msg = useMessageFriend();
   const friendNames = useLiveQuery(async () => (await db.friends.toArray()).map((f) => f.username), [], [] as string[]);
   // Nadel setzt auf: kurzes Klopfen, wenn der Tonarm die Platte erreicht
   useEffect(() => {
@@ -315,24 +315,19 @@ export default function ReleasePage() {
                     <b style={{ fontWeight: 600 }}>{friend.name || friend.username}</b>
                     <span className="sub" style={{ display: "block", fontSize: 13 }}>{kind === "coll" ? "hat diese Platte" : "sucht diese Platte auch"}</span>
                   </span>
-                  {/* Freund hat sie, du nicht: auf Crate direkt zum Leihen anfragen, sonst über Discogs fragen */}
-                  {kind === "coll" && inColl === 0 &&
-                    (crateFriends.includes(friend.username.toLowerCase()) ? (
-                      <button
-                        className="btn small tinted"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          nav(`/chat/${encodeURIComponent(friend.username)}`, { viewTransition: true, state: { attach: { kind: "borrow", releaseId: id, title: rel ? `${rel.artist} – ${rel.title}` : "Platte", thumb: rel?.thumb } } });
-                        }}
-                      >
-                        Leihen?
-                      </button>
-                    ) : isWant ? (
-                      <a className="btn small tinted" href={messageUrl(friend.username)} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>
-                        Fragen
-                      </a>
-                    ) : null)}
+                  {/* Freund hat sie, du nicht: zum Leihen anfragen. Ohne Crate-Freundschaft erklärt ein Blatt den Weg dahin. */}
+                  {kind === "coll" && inColl === 0 && (
+                    <button
+                      className="btn small tinted"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        void msg.open(friend.username, { kind: "borrow", releaseId: id, title: rel ? `${rel.artist} – ${rel.title}` : "Platte", thumb: rel?.thumb });
+                      }}
+                    >
+                      Leihen?
+                    </button>
+                  )}
                 </Link>
               ))}
             </div>
@@ -668,6 +663,7 @@ export default function ReleasePage() {
           />
         )}
       </Sheet>
+      {msg.sheet}
     </>
   );
 }

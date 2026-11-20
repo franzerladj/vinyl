@@ -1,6 +1,6 @@
 import { SwipeArea } from "../components/Pager";
 import { Activity, ShareSetsSwitch } from "../components/Buzz";
-import { Messages } from "../components/Messages";
+import { Messages, useMessageFriend } from "../components/Messages";
 import { refreshBuzz } from "../lib/buzz";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -345,8 +345,9 @@ type Tab = "hasYourWants" | "wantsYours" | "coll" | "want" | "shared";
 
 function FriendDetail({ u }: { u: string }) {
   const nav = useNavigate();
-  // Nachrichten gehen nur unter Freunden, die sich auf Crate gegenseitig bestätigt haben
-  const onCrate = useLiveQuery(async () => (await cachedSocial()).friends.some((x) => x.toLowerCase() === u.toLowerCase()), [u], false);
+  // Nachrichten gehen nur unter Crate-Freunden: sonst erklärt ein Blatt, was fehlt (Anfrage offen, Einladung)
+  const msg = useMessageFriend();
+  const pending = useLiveQuery(async () => (await cachedSocial()).out.some((x) => x.toLowerCase() === u.toLowerCase()), [u], false);
   const jobs = useStore((s) => s.jobs);
   // Reiter und Suche bleiben, wenn man eine Platte öffnet und zurückkommt (sonst landet man wieder ganz oben)
   const memo = `crate:friend:${u}`;
@@ -441,19 +442,14 @@ function FriendDetail({ u }: { u: string }) {
           )}
         </ProfileHeader>
         <div className="row" style={{ gap: 8 }}>
-          {onCrate ? (
-            <Link className="btn small primary" to={`/chat/${encodeURIComponent(u)}`} viewTransition>
-              <IconChat /> Nachricht
-            </Link>
-          ) : (
-            <a className="btn small primary" href={messageUrl(u)} target="_blank" rel="noreferrer">
-              Nachricht auf Discogs
-            </a>
-          )}
+          <button className="btn small primary" onClick={() => void msg.open(u)}>
+            <IconChat /> Nachricht
+          </button>
           <a className="btn small" href={collectionUrl(u)} target="_blank" rel="noreferrer">
             Auf Discogs ↗
           </a>
         </div>
+        {pending && <span className="tiny">Deine Anfrage ist noch offen. Schreiben und Leihen gehen, sobald {u} sie annimmt.</span>}
       </div>
 
       <div className="page stack" style={{ paddingTop: 0 }}>
@@ -538,6 +534,7 @@ function FriendDetail({ u }: { u: string }) {
           },
         ]}
       />
+      {msg.sheet}
     </>
   );
 }

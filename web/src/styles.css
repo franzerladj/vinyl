@@ -1931,3 +1931,4 @@ html.ios-app[data-theme="light"] body::after { content: ""; position: fixed; z-i
 .ios input::-webkit-date-and-time-value { text-align: left; }
 .ios input[type="search"]::-webkit-search-decoration { display: none; }
 .getapp-warn { margin: 0; padding: 12px 14px; border-radius: var(--r-sm); background: var(--surface-2); font-size: 14.5px; line-height: 1.4; }
+.connect-text { margin: 0; font-size: 15.5px; line-height: 1.45; -webkit-hyphens: manual; hyphens: manual; }
