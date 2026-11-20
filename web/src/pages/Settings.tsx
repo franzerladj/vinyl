@@ -1,4 +1,5 @@
 // Einstellungen im iOS-Stil: Übersicht mit Gruppen, Unterseiten pro Bereich.
+import { GuideTip } from "../components/GuideTip";
 import { SyncStatus } from "../components/SyncStatus";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -1225,6 +1226,10 @@ function StylusPage() {
             }}
           />
         </Group>
+        <div className="stack" style={{ gap: 8, marginTop: 18 }}>
+          <GuideTip slug="nadel-reinigen" />
+          <GuideTip slug="nadel-wechseln" />
+        </div>
       </div>
     </>
   );

@@ -1,3 +1,4 @@
+import { GuideTip } from "../components/GuideTip";
 import { sellCandidates, sinceText } from "../../../shared/sellable";
 import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -580,6 +581,7 @@ function SellList({ values, paid }: { values: Awaited<ReturnType<typeof recordVa
           {all ? "Weniger zeigen" : `Alle ${rows.length} zeigen`}
         </button>
       )}
+      <GuideTip slug="verschicken" />
     </div>
   );
 }

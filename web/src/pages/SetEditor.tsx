@@ -1,5 +1,6 @@
 // Set kuratieren: Kiste packen, Reihenfolge selbst bauen, „Was passt danach?“ mit Begründung,
 // Mix-Notizen, Reinhören, Live-Modus. Die Automatik ist nur noch eine Hilfe, kein Ersatz.
+import { GuideTip } from "../components/GuideTip";
 import { cacheSetCovers } from "../lib/offline";
 import { SetSheet } from "../components/print/SetSheet";
 import type { PrintOpts } from "../components/print/types";
@@ -484,6 +485,7 @@ export default function SetEditor() {
             {offline && offline.total > 0 && (
               <p className="set-offline mono">{offline.ready >= offline.total ? `Ohne Netz bereit · ${offline.total} Cover gesichert` : navigator.onLine ? `Cover für ohne Netz: ${offline.ready} von ${offline.total}` : `Ohne Netz: ${offline.ready} von ${offline.total} Covern gesichert`}</p>
             )}
+            {set.date && set.date >= new Date().toISOString().slice(0, 10) && <GuideTip slug="tasche" label="Was außer Platten in die Tasche gehört" />}
           </div>
         )}
 

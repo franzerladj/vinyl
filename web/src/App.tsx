@@ -80,6 +80,7 @@ const Friends = page(() => import("./pages/Friends"));
 const Dig = page(() => import("./pages/Dig"));
 const GetApp = page(() => import("./pages/GetApp"));
 const DjPage = page(() => import("./pages/DjPage"));
+const Guide = page(() => import("./pages/Guide"));
 const Impressum = page(() => import("./pages/Legal").then((m) => ({ default: m.Impressum })));
 const Datenschutz = page(() => import("./pages/Legal").then((m) => ({ default: m.Datenschutz })));
 
@@ -100,6 +101,8 @@ export const routes: RouteObject[] = [
   { path: "labels", element: <LabelsIndex /> },
   { path: "year", element: <YearPage /> },
   { path: "dj", element: <DjPage /> },
+  { path: "guide", element: <Guide /> },
+  { path: "guide/:slug", element: <Guide /> },
   { path: "year/:year", element: <YearPage /> },
   { path: "sets", element: <Sets /> },
   { path: "sets/shared", element: <SharedSetPage /> },

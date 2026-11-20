@@ -14,7 +14,7 @@ import { toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, markHero, useRootClass } from "../components/bits";
 import { DjOverview } from "../components/DjOverview";
 import { computeStylus, hoursText } from "../lib/stylus";
-import { IconCamera, IconCart, IconList, IconPlay, IconSearch, IconTag, IconUser } from "../components/icons";
+import { IconCamera, IconCart, IconInfo, IconList, IconPlay, IconSearch, IconTag, IconUser } from "../components/icons";
 
 /** Begrüßung mit DJ-Bezug je nach Tageszeit. Wechselt täglich, damit sie nicht jeden Tag gleich ist. */
 export function greeting(name: string, opts: { setToday?: boolean; now?: Date } = {}) {
@@ -290,6 +290,16 @@ export default function Home() {
                 <span className="sub">Aus deiner Kiste</span>
               </Link>
             </div>
+            <Link to="/guide" viewTransition className="guide-entry press">
+              <span className="guide-tip-ico">
+                <IconInfo />
+              </span>
+              <span className="guide-tip-main">
+                <b>Gut zu wissen</b>
+                <span className="sub">Platten pflegen, Nadel, Boxen, Mixer und worauf Einsteiger achten</span>
+              </span>
+              <span className="chev">›</span>
+            </Link>
           </>
         )}
         {stats?.lastSync ? <p className="tiny" style={{ textAlign: "center", marginTop: 24 }}>Zuletzt synchronisiert {new Date(stats.lastSync).toLocaleString("de-DE", { dateStyle: "medium", timeStyle: "short" })}</p> : null}
