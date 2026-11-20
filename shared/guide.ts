@@ -5,13 +5,16 @@
 // an jeder Karte. Karten aus reiner Praxis (Packliste) tragen `practice` und sagen das auch.
 // Gelesen am 20. November 2026: Library of Congress, Canadian Conservation Institute, Ortofon, Audio-Technica,
 // Genelec, WHO. Was dort nicht steht, steht auch hier nicht als Tatsache.
+// Für das Auflegen selbst (Bereich „Mixen“, Set packen, Warm-up, Aufnehmen) ist Digital DJ Tips die Grundlage
+// (Franz: viel gutes, fundiertes Wissen). Die Karten fassen in eigenen Worten zusammen und verweisen auf den
+// jeweiligen Artikel, sie übernehmen keinen Text.
 
 export interface GuideSource {
   label: string;
   url: string;
 }
 
-export type GuideArea = "start" | "platten" | "nadel" | "anlage" | "auflegen";
+export type GuideArea = "start" | "platten" | "nadel" | "anlage" | "mixen" | "auflegen";
 
 export interface GuideCard {
   slug: string;
@@ -37,7 +40,8 @@ export const GUIDE_AREAS: { id: GuideArea; title: string; sub: string }[] = [
   { id: "platten", title: "Platten", sub: "Anfassen, reinigen, lagern, verschicken" },
   { id: "nadel", title: "Nadel und System", sub: "Reinigen, einstellen, rechtzeitig wechseln" },
   { id: "anlage", title: "Anlage", sub: "Boxen, Mixer, Pegel" },
-  { id: "auflegen", title: "Auflegen", sub: "Tasche, Soundcheck, Gehör" },
+  { id: "mixen", title: "Mixen", sub: "Tempo, Takte, Übergänge, Tonart" },
+  { id: "auflegen", title: "Auflegen", sub: "Kiste, Warm-up, Soundcheck, Gehör" },
 ];
 
 const LOC: GuideSource = { label: "Library of Congress: Care, Handling and Storage of Audio Visual Materials", url: "https://www.loc.gov/preservation/care/record.html" };
@@ -60,6 +64,20 @@ const WHO_VENUES: GuideSource = { label: "WHO: Global standard for safe listenin
 const WHO_DEVICES: GuideSource = { label: "WHO und ITU: Safe listening devices and systems", url: "https://www.who.int/publications/i/item/9789241515276" };
 const SHIPSTATION: GuideSource = { label: "ShipStation: How to ship vinyl records", url: "https://www.shipstation.com/blog/how-to-ship-vinyl-records/" };
 const EASYSHIP: GuideSource = { label: "Easyship: Guide to packing and shipping vinyl records", url: "https://www.easyship.com/blog/shipping-vinyl-records" };
+
+const DDJT = (label: string, path: string): GuideSource => ({ label: `Digital DJ Tips: ${label}`, url: `https://www.digitaldjtips.com/${path}/` });
+const DDJT_ELEMENTS = DDJT("The three elements of a good beatmix", "rock-the-dancefloor/beatmixing-part-2-the-three-elements-of-a-good-beatmix");
+const DDJT_BEATMATCH = DDJT("Learn to beatmatch", "learn-to-beatmatch");
+const DDJT_TIMING = DDJT("Beatmixing, part 1: Timing", "rock-the-dancefloor/beatmixing-part-1-timing");
+const DDJT_TRANSITIONS = DDJT("Five basic DJ transitions", "rock-the-dancefloor/five-basic-dj-transitions");
+const DDJT_EQ = DDJT("Adding EQ, filters and effects", "rock-the-dancefloor/adding-eq-filters-and-effects");
+const DDJT_KEY = DDJT("The ultimate guide to keymixing for DJs", "the-ultimate-guide-to-keymixing-for-djs");
+const DDJT_VOLUME = DDJT("Getting the volume right", "a-practical-guide-to-volume-settings-for-djs");
+const DDJT_PACK = DDJT("How to pack the perfect DJ set", "rock-the-dancefloor/how-to-pack-the-perfect-dj-set");
+const DDJT_WARMUP = DDJT("How to DJ warm-up sets", "how-to-dj-warm-up-sets");
+const DDJT_WARMUP_TIPS = DDJT("5 essential tips for playing a great warm-up set", "5-essential-tips-for-playing-a-great-warm-up-set");
+const DDJT_RECORD = DDJT("How to record and critique your sets", "rock-the-dancefloor/how-to-record-and-critique-your-sets");
+const MIK: GuideSource = { label: "Mixed In Key: How to use the Camelot wheel", url: "https://mixedinkey.com/workflows/how-to-use-the-camelot-wheel/" };
 
 export const GUIDE: GuideCard[] = [
   // ---------- Neu dabei ----------
@@ -314,14 +332,18 @@ export const GUIDE: GuideCard[] = [
     title: "Gain, Pegel und der rote Bereich",
     lead: "Rot am Mixer heißt: das Signal wird abgeschnitten. Es klingt schlechter und wird nicht lauter.",
     todo: [
-      "Den Gain je Kanal so einstellen, dass die Anzeige an lauten Stellen unter Rot bleibt.",
-      "Beide Kanäle auf denselben Pegel bringen, bevor du überblendest.",
+      "Alle EQ-Regler in die Mitte stellen. Dann den Gain so, dass die Anzeige im Schnitt bei 0 dB liegt (die letzte grüne Leuchte). Laute Schläge dürfen ins Gelbe, nie ins Rote.",
+      "Kanalfader ganz auf. Den Master genauso einstellen: im Schnitt 0 dB.",
+      "Danach je Platte nur noch den Gain nachstellen, damit alle gleich laut sind.",
       "Leuchtet es rot: Gain, EQ oder Fader zurücknehmen.",
-      "Reicht die Lautstärke nicht, an der Endstufe oder an den Boxen aufdrehen, nicht am Mixer.",
+      "Reicht die Lautstärke nicht, an der Endstufe oder an den Boxen aufdrehen. Ist dort Schluss, braucht es mehr Anlage, nicht mehr Gain.",
     ],
-    avoid: ["Im Roten fahren. Im schlimmsten Fall beschädigt das die Lautsprecher.", "Die Bässe am EQ weit aufdrehen. Das treibt den Pegel hoch und fördert Dröhnen."],
-    see: ["brummen-und-droehnen", "vor-dem-ersten-track"],
-    sources: [DJTT, XONE, BONEDO],
+    avoid: [
+      "Im Roten fahren. Im schlimmsten Fall beschädigt das die Lautsprecher.",
+      "Im Club mehr Gain geben, damit es lauter wird. Dort sitzt oft ein Limiter in der Anlage: es wird nur schlechter und ermüdet die Leute.",
+    ],
+    see: ["bass-tauschen", "brummen-und-droehnen", "vor-dem-ersten-track"],
+    sources: [DDJT_VOLUME, DJTT, XONE, BONEDO],
   },
   {
     slug: "brummen-und-droehnen",
@@ -339,7 +361,115 @@ export const GUIDE: GuideCard[] = [
     sources: [UTURN, PSW],
   },
 
+  // ---------- Mixen ----------
+  {
+    slug: "tempo-angleichen",
+    area: "mixen",
+    title: "Zwei Platten auf ein Tempo bringen",
+    lead: "Drei Dinge müssen stimmen: gleiches Tempo, Schläge übereinander, Phrasen übereinander. Das Ohr lernt das nur durch Wiederholen.",
+    todo: [
+      "Die neue Platte auf der Eins einer Phrase bereitlegen, am besten dort, wo der Beat eine Weile ohne Pause läuft.",
+      "Ein Ohr hört die Boxen, das andere den Kopfhörer.",
+      "Die neue Platte starten, wenn die laufende auf ihrer Eins ist. Dann hinhören: zieht sie davon oder fällt sie zurück?",
+      "Erst mit der Hand an Teller oder Platte kurz anschieben oder bremsen, dann den Pitch ein kleines Stück nachstellen. Immer in dieser Reihenfolge.",
+      "Wiederholen, bis beide lange beieinander bleiben. Dann stimmt das Tempo.",
+      "Zum Üben: zwei Exemplare derselben Platte oder schlichter House mit klarem Beat.",
+    ],
+    avoid: [
+      "Den Kopfhörer immer lauter drehen. Kleine Unterschiede hörst du dann schlechter.",
+      "Platten zusammenbringen, die im Tempo weit auseinanderliegen. Als Faustregel gelten rund 4 %, bei House etwa 5 BPM.",
+    ],
+    see: ["takte-und-phrasen", "uebergaenge"],
+    sources: [DDJT_ELEMENTS, DDJT_BEATMATCH],
+  },
+  {
+    slug: "takte-und-phrasen",
+    area: "mixen",
+    title: "Takte und Phrasen zählen",
+    lead: "Fast alle Tanzmusik läuft in Takten zu vier Schlägen, und die Takte bilden Gruppen von vier oder acht. An deren Anfang ändert sich die Musik.",
+    todo: [
+      "Auf die Bassdrum mitzählen: eins, zwei, drei, vier. Die Eins betonen.",
+      "Phrasen zählst du, indem du auf jeder Eins die Nummer des Takts sagst: 1-2-3-4, 2-2-3-4, 3-2-3-4, 4-2-3-4.",
+      "Auf die Eins einer neuen Phrase achten: dort setzt etwas ein oder fällt weg, zum Beispiel Gesang, Bassline oder Hi-Hat.",
+      "Die neue Platte so starten, dass ihre Phrasen auf den Phrasen der laufenden liegen.",
+      "Zum Üben ein paar Platten aufzeichnen: ein Kästchen je vier oder acht Takte, dazu was dort passiert.",
+    ],
+    avoid: ["Nur die Schläge übereinanderlegen und die Takte übergehen. Das klingt schief, auch wenn das Tempo stimmt."],
+    see: ["tempo-angleichen", "uebergaenge"],
+    sources: [DDJT_TIMING, DDJT_ELEMENTS],
+  },
+  {
+    slug: "uebergaenge",
+    area: "mixen",
+    title: "Fünf Übergänge, die reichen",
+    lead: "Nicht jeder Übergang muss ein langer Mix sein. Mit diesen fünf kommst du durch jeden Abend.",
+    todo: [
+      "Ausblenden: die laufende Platte erst zügig, dann langsam über 10 bis 15 Sekunden leiser machen und die neue auf einer Eins starten. Hilft immer, wenn etwas nicht passt.",
+      "Ende an Anfang: die Platte ausspielen lassen, mitzählen, die nächste auf der Eins starten. Gut bei Stücken mit klarem Schluss.",
+      "Schnitt: auf einer Eins die eine stoppen und die andere starten. Lebt vom Zeitpunkt und von der Wahl der Platte.",
+      "Kurzer Mix: beide laufen eine Phrase lang zusammen (vier oder acht Takte), dann geht die alte raus. Am besten dort, wo fast nur Schlagzeug spielt.",
+      "Mix mit Bass-Tausch: länger überblenden und dabei die Bässe tauschen. Für House, Techno und Disco.",
+    ],
+    avoid: ["Lange übereinanderlegen, ohne die Bässe zu trennen. Zwei Bassdrums und zwei Basslines klingen matschig."],
+    see: ["bass-tauschen", "takte-und-phrasen"],
+    sources: [DDJT_TRANSITIONS],
+  },
+  {
+    slug: "bass-tauschen",
+    area: "mixen",
+    title: "Mit dem EQ mixen: Bässe tauschen",
+    lead: "Zwei Bassdrums und zwei Basslines gleichzeitig klingen schlechter, nicht fetter. Deshalb spielt immer nur ein Bass.",
+    todo: [
+      "Bei der neuen Platte den Bass ganz herausdrehen, bevor du sie dazunimmst.",
+      "Die neue Platte hereinholen. Auf der Eins einer Phrase tauschen: Bass bei der neuen rein, bei der alten raus.",
+      "Danach die alte Platte ausblenden.",
+      "Sonst stehen die EQ-Regler in der Mitte. Gedreht wird nur, wenn es einen Grund gibt.",
+      "Lieber Frequenzen wegnehmen als anheben und den Pegel mit dem Gain ausgleichen.",
+    ],
+    avoid: ["Bässe anheben, damit es mehr drückt. Das verbraucht den Spielraum des Mixers am schnellsten."],
+    see: ["uebergaenge", "pegel"],
+    sources: [DDJT_TRANSITIONS, DDJT_EQ, DDJT_VOLUME],
+  },
+  {
+    slug: "harmonisch-mixen",
+    area: "mixen",
+    title: "Harmonisch mixen mit dem Camelot-Rad",
+    lead: "Laufen zwei Platten mit Melodie oder Bassline zusammen, sollten ihre Tonarten zueinander passen. Das Camelot-Rad macht daraus eine Zahl und einen Buchstaben.",
+    todo: [
+      "Jede Tonart hat eine Zahl von 1 bis 12 und einen Buchstaben: A steht für Moll, B für Dur.",
+      "Es passt: dieselbe Tonart (8A auf 8A), eine Zahl hoch oder runter (8A auf 7A oder 9A) oder dieselbe Zahl mit dem anderen Buchstaben (8A auf 8B).",
+      "Das zählt nur, wo beide Platten wirklich Töne spielen. Läuft an der Stelle nur Schlagzeug, ist die Tonart egal.",
+      "Am sichersten: von jeder Sorte nur eins. Eine Bassline gegen eine Melodie, nicht Melodie gegen Melodie.",
+      "Am Ende entscheidet dein Ohr. Die Tonart ist ein Werkzeug, keine Regel.",
+    ],
+    avoid: [
+      "Der Angabe blind vertrauen. Keine Erkennung liegt immer richtig. In Crate steht bei unsicheren Tonarten deshalb ein Fragezeichen.",
+      "Die richtige Platte für den Moment liegen lassen, nur weil die Tonart nicht passt.",
+    ],
+    more: [{ label: "Nächster Track: Platten, die nach Tonart und Tempo passen", to: "/sets" }],
+    see: ["uebergaenge", "set-packen"],
+    sources: [DDJT_KEY, MIK],
+  },
+
   // ---------- Auflegen ----------
+  {
+    slug: "set-packen",
+    area: "auflegen",
+    title: "Wie viele Platten du einpackst",
+    lead: "Nimm ungefähr doppelt so viel Musik mit, wie du spielen wirst. Mit weniger hängst du an einer festen Reihenfolge, mit viel mehr fällt die Wahl schwer.",
+    todo: [
+      "Ausrechnen, wie viele Stücke du in deiner Zeit spielst, und das Doppelte einpacken.",
+      "Bei jeder Platte drei Fragen: Passt sie zum Abend? Mag das Publikum sie? Willst du sie selbst spielen?",
+      "Kleine Gruppen aus zwei bis vier Platten bilden, die gut aufeinander folgen.",
+      "Die Kiste grob in der Reihenfolge des Abends sortieren, die ruhigen Platten nach vorn.",
+      "Bewährtes von früheren Gigs mitnehmen, dazu ein paar neue und ein paar sichere Platten.",
+      "Vorher klären, was Veranstalter und Laden erwarten. Kennst du den Ort nicht: hingehen und zuhören.",
+    ],
+    avoid: ["Eine feste Liste abspielen. Die Kiste ist ein Plan, kein Drehbuch."],
+    more: [{ label: "Kiste für ein Set packen", to: "/sets" }],
+    see: ["tasche", "warm-up"],
+    sources: [DDJT_PACK],
+  },
   {
     slug: "tasche",
     area: "auflegen",
@@ -373,6 +503,38 @@ export const GUIDE: GuideCard[] = [
     see: ["auflagekraft", "pegel", "gehoer"],
     sources: [ORTOFON_DJ],
     practice: true,
+  },
+  {
+    slug: "warm-up",
+    area: "auflegen",
+    title: "Ein Warm-up spielen",
+    lead: "Wer anfängt, baut die Stimmung langsam auf und überlässt den Höhepunkt dem, der danach kommt. Ein Freibrief für langweilige Musik ist das nicht.",
+    todo: [
+      "Leiser anfangen, als der Abend wird, und mit niedrigerem Tempo.",
+      "Die Energie langsam steigern. Die Tanzfläche soll einladend wirken für alle, die gerade hereinkommen.",
+      "Dubs und Instrumentals statt der großen Versionen: andeuten, nicht ausspielen.",
+      "Für die spielen, die schon tanzen, auch wenn es wenige sind.",
+      "Die eigene Zeit einhalten.",
+    ],
+    avoid: ["Die großen Platten des Abends verheizen und früh laut machen.", "Stücke spielen, die von den DJs nach dir stammen."],
+    see: ["set-packen", "vor-dem-ersten-track"],
+    sources: [DDJT_WARMUP, DDJT_WARMUP_TIPS],
+  },
+  {
+    slug: "aufnehmen",
+    area: "auflegen",
+    title: "Dein Set aufnehmen und anhören",
+    lead: "Beim Auflegen kannst du dich nicht selbst beurteilen. Erst die Aufnahme zeigt, was die Leute wirklich gehört haben.",
+    todo: [
+      "Jede Übungsrunde mitschneiden, von Anfang bis Ende. Bei Fehlern einfach weiterspielen.",
+      "Aus dem Mixer aufnehmen, mit Kabel in einen Recorder oder ins Handy, nicht über das Mikrofon des Handys.",
+      "Mit Abstand anhören: am besten erst am nächsten Tag und nicht am Pult.",
+      "Einmal nebenbei laufen lassen für den Gesamteindruck, einmal konzentriert für die Einzelheiten.",
+      "Achte auf Auswahl und Reihenfolge, ob die Schläge saßen und ob die Lautstärke über das Set gleich bleibt.",
+    ],
+    avoid: ["Die Aufnahme für ein fertiges Mixtape halten. Sie ist zum Lernen da."],
+    see: ["tempo-angleichen", "pegel"],
+    sources: [DDJT_RECORD],
   },
   {
     slug: "gehoer",

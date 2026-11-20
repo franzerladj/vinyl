@@ -31,6 +31,8 @@ describe("Gut zu wissen", () => {
       }
     }
     expect(GUIDE.filter((c) => c.practice).length).toBeLessThanOrEqual(3);
+    // Das Auflegen selbst stützt sich auf Digital DJ Tips: jede Karte im Bereich „Mixen“ nennt den Artikel
+    for (const c of GUIDE.filter((x) => x.area === "mixen")) expect(c.sources.some((x) => x.url.startsWith("https://www.digitaldjtips.com/")), c.slug).toBe(true);
   });
 
   it("Verweise zeigen auf Karten und Seiten, die es gibt", () => {
@@ -59,6 +61,8 @@ describe("Gut zu wissen", () => {
     expect(find("antiskating")).toContain("auflagekraft");
     expect(find("erdungskabel")).toEqual(expect.arrayContaining(["phono-oder-line", "brummen-und-droehnen"]));
     expect(find("gehörschutz")).toContain("gehoer");
+    expect(find("camelot")).toContain("harmonisch-mixen");
+    expect(find("bassdrum")).toEqual(expect.arrayContaining(["takte-und-phrasen", "bass-tauschen"]));
     expect(find("xyzzy")).toEqual([]);
   });
 });
