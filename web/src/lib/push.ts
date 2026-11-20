@@ -68,6 +68,12 @@ export const apkName = (v: number) => APK_NAMES[v] ?? (v ? `Stand ${v}` : "älte
  * („App installieren“ im Chrome-Menü). Das ist eine zweite, eigene App mit eigenem Icon, das Google nur
  * langsam erneuert: wer dort das alte Logo sieht, hat nicht die Crate-App aus der APK vor sich.
  */
+/** Eingebaute Browser von Instagram, Facebook, WhatsApp-Vorschau, Line, TikTok und Co.: Anmelden und Installieren klappen dort oft nicht */
+export const inAppBrowser = () => /Instagram|FBAN|FBAV|FB_IAB|Line\/|TikTok|musical_ly|Snapchat|Pinterest|LinkedInApp|GSA\/|; wv\)/i.test(navigator.userAgent);
+/** Adresse, die auf Android dieselbe Seite im richtigen Chrome öffnet (aus der App oder einem eingebauten Browser heraus) */
+export const openInChromeUrl = (path = "/") =>
+  `intent://${location.host}${path}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(location.origin + path)};end`;
+
 export function runningAs(): string {
   const a = appInfo();
   if (a.android) return `Android-App ${apkName(a.v)}`;

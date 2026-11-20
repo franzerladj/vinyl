@@ -1932,3 +1932,4 @@ html.ios-app[data-theme="light"] body::after { content: ""; position: fixed; z-i
 .ios input[type="search"]::-webkit-search-decoration { display: none; }
 .getapp-warn { margin: 0; padding: 12px 14px; border-radius: var(--r-sm); background: var(--surface-2); font-size: 14.5px; line-height: 1.4; }
 .connect-text { margin: 0; font-size: 15.5px; line-height: 1.45; -webkit-hyphens: manual; hyphens: manual; }
+.getapp-warn a, .login-help a { color: var(--text); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }

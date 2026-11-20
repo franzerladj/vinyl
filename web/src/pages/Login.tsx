@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Me } from "../lib/api";
 import { completeLogin, startLogin } from "../lib/auth";
 import { LogoMark, Wordmark } from "../components/Logo";
+import { inAppBrowser, openInChromeUrl, runningAs } from "../lib/push";
 
 // Wie eine Tracklist auf dem Label: Seite A, Seite B
 const SIDES: [string, string, string][] = [
@@ -14,6 +15,8 @@ const SIDES: [string, string, string][] = [
 export default function Login({ me }: { me: Me | null }) {
   const status = new URLSearchParams(location.search).get("login");
   const [busyText, setBusyText] = useState<string | null>(null);
+  const android = /Android/i.test(navigator.userAgent);
+  const inApp = runningAs().startsWith("Android-App");
   useEffect(() => {
     const back = (e: PageTransitionEvent) => e.persisted && setBusyText(null);
     window.addEventListener("pageshow", back);
@@ -42,6 +45,17 @@ export default function Login({ me }: { me: Me | null }) {
           {status === "failed" && !busyText && <p style={{ color: "var(--bad)" }}>Die Anmeldung hat nicht geklappt. Bitte noch einmal versuchen.</p>}
           {status === "busy" && !busyText && <p style={{ color: "var(--warn)" }}>Discogs war gerade ausgelastet. Einfach noch einmal tippen, meistens klappt es beim zweiten Mal.</p>}
           {busyText && <p className="sub" aria-live="polite">{busyText}</p>}
+          {inAppBrowser() && (
+            <p className="getapp-warn" style={{ marginBottom: 12 }}>
+              Du bist im Browser einer anderen App (Instagram, WhatsApp …). Dort klappt die Anmeldung oft nicht, zum Beispiel öffnet sich die Tastatur nicht. Tipp auf die drei Punkte und öffne die Seite in Chrome oder Safari.
+              {android && (
+                <>
+                  {" "}
+                  <a href={openInChromeUrl("/")}>In Chrome öffnen</a>
+                </>
+              )}
+            </p>
+          )}
           {me?.features.oauth === false ? (
             <p className="sub">Auf dem Server fehlt der Discogs-Consumer-Key. Siehe README, Abschnitt Einrichtung.</p>
           ) : (
@@ -57,6 +71,13 @@ export default function Login({ me }: { me: Me | null }) {
             </button>
           )}
           <p className="tiny" style={{ marginTop: 12 }}>Du meldest dich direkt bei Discogs an. Crate sieht dein Passwort nie.</p>
+          {/* Rückmeldung: bei einem Freund öffnete sich in der App die Tastatur auf der Discogs-Seite nicht. Ausweg: im
+              richtigen Chrome anmelden. Die App läuft in Chrome und ist danach ebenfalls angemeldet. */}
+          {android && inApp && !inAppBrowser() && (
+            <p className="tiny login-help" style={{ marginTop: 8 }}>
+              Tastatur öffnet sich bei Discogs nicht? <a href={openInChromeUrl("/")}>In Chrome anmelden</a>, danach bist du auch hier angemeldet.
+            </p>
+          )}
           <p className="tiny" style={{ marginTop: 18 }}>
             Daten von{" "}
             <a href="https://www.discogs.com" target="_blank" rel="noreferrer">Discogs</a>,{" "}

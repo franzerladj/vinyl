@@ -2,7 +2,7 @@
 // Ohne Anmeldung erreichbar (/app).
 import { Link } from "react-router-dom";
 import { LogoMark, Wordmark } from "../components/Logo";
-import { apkName, LATEST_APK } from "../lib/push";
+import { apkName, inAppBrowser, LATEST_APK } from "../lib/push";
 
 const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
 const isAndroid = /Android/i.test(ua);
@@ -29,9 +29,6 @@ function Android({ lead }: { lead: boolean }) {
     </section>
   );
 }
-
-/** Eingebaute Browser von Instagram, Facebook, Line, TikTok und Co.: dort lässt sich nichts auf den Home-Bildschirm legen */
-const inAppBrowser = () => /Instagram|FBAN|FBAV|FB_IAB|Line\/|TikTok|musical_ly|Snapchat|Pinterest|LinkedInApp|GSA\//i.test(navigator.userAgent);
 
 function IPhone({ lead }: { lead: boolean }) {
   return (
