@@ -212,6 +212,8 @@ Gesetzte Secrets in Cloudflare (nur Namen): `DISCOGS_CONSUMER_KEY`, `DISCOGS_CON
 
 ## Offen
 
+- Name und Domain (Recherche vom 20.11.2026, Franz entscheidet noch): „Crate“ ist bei Domains fast überall vergeben und im App Store in der Kategorie Musik mehrfach belegt („Crate.“, „Crate: Vinyl Collection“, „Crate - Music Discovery“ und andere). Frei nach Registry-Abfrage: `pressung.com/.app/.fm`, `kiste.fm/.io`, `rille.fm`, `needletime.app/.de/.fm`, `catno.app/.fm`, und mit Crate nur Zusätze wie `crate12.com/.app/.de/.fm`, `getcrate.de`, `crateapp.de`. Schon verworfen (vergeben oder gleichnamige App): Deadwax, Runout, Tonarm, Slipcue, Phono, Dubplate, Gatefold, Spindle, Repress, Headshell, Nadel, Presswerk, Vinylhead, Kallax. Nicht geprüft: Markenregister (DPMA, EUIPO), Premium-Preise beim Registrar; `.dj` lässt sich nur über DNS prüfen.
+
 - Feed: Filter Format, Position merken.
 - Kamera auf echtem iPhone testen lassen. Nativer Scanner erst mit Capacitor.
 - Store-Screenshots mit echter Sammlung, eigene Domain, Discogs-App umbenennen (siehe `docs/app-store.md`).
