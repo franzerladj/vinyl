@@ -4,7 +4,7 @@ const { chromium, devices } = require("playwright");
 const install = require("./mock.cjs");
 const ROUTES = ["/", "/collection", "/wants", "/search", "/dig", "/release/5", "/release/9", "/scan", "/shop", "/sets", "/stickers", "/settings",
   "/settings/sync", "/settings/prices", "/settings/sources", "/settings/sheets", "/settings/data", "/settings/about", "/settings/help", "/settings/notifications", "/settings/profile",
-  "/friends", "/friends/kumpel", "/impressum", "/datenschutz", "/guide", "/guide/auflagekraft", "/guide/lagern", "/guide/tasche", "/guide/harmonisch-mixen", "/guide/uebergaenge", "/guide/pegel", "/settings/stylus", "/settings/about"];
+  "/friends", "/friends/kumpel", "/impressum", "/datenschutz", "/guide", "/guide/auflagekraft", "/guide/lagern", "/guide/tasche", "/guide/erste-fehler", "/guide/anfassen", "/guide/harmonisch-mixen", "/guide/uebergaenge", "/guide/pegel", "/settings/stylus", "/settings/about"];
 const widths = (process.env.W ?? "320,375,390").split(",").map(Number);
 const shots = process.env.SHOTS === "1";
 (async () => {
@@ -38,6 +38,14 @@ const shots = process.env.SHOTS === "1";
           // Text abgeschnitten ohne Ellipse
           const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim());
           if (hasText && el.scrollWidth > el.clientWidth + 2 && /(hidden|clip)/.test(st.overflowX) && st.textOverflow !== "ellipsis" && !st.webkitLineClamp?.match?.(/\d/)) out.push(`Text abgeschnitten: ${label(el)}`);
+          // Einzeiliger Text, der sichtbar aus dem Bild läuft (z. B. ein langer Seitentitel, der nicht umbricht).
+          // Der Kasten selbst endet am Rand, deshalb den Text messen.
+          if (hasText && st.whiteSpace === "nowrap" && st.overflowX === "visible" && !scrollers(el)) {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const tr = range.getBoundingClientRect();
+            if (tr.width && (tr.right > vw + 1 || tr.left < -1)) out.push(`Text läuft aus dem Bild: ${label(el)} (${Math.round(tr.left)}–${Math.round(tr.right)})`);
+          }
           // Ein einzelnes Wort ragt aus seinem Kasten
           if (hasText && el.scrollWidth > el.clientWidth + 2 && st.overflowX === "visible" && st.whiteSpace !== "nowrap" && el.clientWidth > 0) out.push(`Wort zu lang für Kasten: ${label(el)} (${el.scrollWidth}>${el.clientWidth})`);
         }

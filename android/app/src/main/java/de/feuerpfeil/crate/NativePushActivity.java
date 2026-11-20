@@ -10,19 +10,27 @@ import android.provider.Settings;
 import android.widget.Toast;
 
 /**
- * crate://push?t=<Kennwort>: Mitteilungen in der App einschalten (aufgerufen vom Schalter in den Crate-Einstellungen).
+ * crate://push?t=<Kennwort>: Mitteilungen in der App selbst einschalten (aufgerufen vom Schalter in den Crate-Einstellungen).
  * 1. Kennwort merken, mit dem die App beim Server abholt.
  * 2. Erlaubnis von Android holen: Dialog, und wenn Android nicht mehr fragt, die Mitteilungs-Einstellungen der App.
- * 3. Regelmäßiges Abholen einplanen und gleich einmal abholen. Dabei erfährt der Server, ob Android es erlaubt,
+ * 3. Einmal fragen, ob Crate vom Akku-Sparen ausgenommen wird. Ohne das schiebt Android das Abholen stundenlang auf,
+ *    weil Crate sichtbar in Chrome läuft und die App selbst als unbenutzt gilt.
+ * 4. Wecker stellen und gleich einmal abholen. Dabei erfährt der Server, ob Android es erlaubt,
  *    und die Webseite zeigt den Schalter entsprechend.
- * crate://push?poll=1: nur sofort abholen (Test-Mitteilung).
+ * crate://push?poll=1: nur sofort abholen (Test-Mitteilung), mit Rückmeldung, falls es nicht klappt.
+ *
+ * Abgeholt wird, solange diese Aktivität offen ist: einem Prozess ohne sichtbare Aktivität sperrt Android
+ * unter Umständen sofort das Netz, dann käme der Abruf nie an.
  */
 public class NativePushActivity extends Activity {
     private static final String PERMISSION = "android.permission.POST_NOTIFICATIONS";
-    private static final String STATE_SETTINGS = "inSettings";
-    private boolean inSettings;
+    private static final String STATE_STEP = "step";
+    private static final int STEP_START = 0, STEP_SETTINGS = 1, STEP_BATTERY = 2;
+    private static final int REQUEST_BATTERY = 3;
+    private int step = STEP_START;
     private boolean leftForSettings;
     private boolean done;
+    private boolean pollOnly;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -31,9 +39,8 @@ public class NativePushActivity extends Activity {
         String token = data == null ? null : data.getQueryParameter("t");
         if (token == null) {
             // Nur abholen
-            Poller.pollAsync(this);
-            done = true;
-            finish();
+            pollOnly = true;
+            finishUp();
             return;
         }
         if (!token.matches("[a-f0-9]{64}")) {
@@ -43,14 +50,15 @@ public class NativePushActivity extends Activity {
         }
         Poller.setToken(this, token);
         Poller.ensureChannel(this);
-        inSettings = state != null && state.getBoolean(STATE_SETTINGS);
-        if (inSettings) {
-            // Android hat die Aktivität zwischendurch neu aufgebaut: beim Zurückkommen fertig machen
+        step = state == null ? STEP_START : state.getInt(STATE_STEP, STEP_START);
+        if (step == STEP_SETTINGS) {
+            // Android hat die Aktivität zwischendurch neu aufgebaut: beim Zurückkommen weitermachen
             leftForSettings = true;
             return;
         }
+        if (step == STEP_BATTERY) return; // die Antwort kommt über onActivityResult
         if (Poller.allowed(this)) {
-            finishUp();
+            askBattery();
             return;
         }
         boolean granted = Build.VERSION.SDK_INT < 33 || checkSelfPermission(PERMISSION) == PackageManager.PERMISSION_GRANTED;
@@ -61,7 +69,7 @@ public class NativePushActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
         if (Poller.allowed(this)) {
-            finishUp();
+            askBattery();
             return;
         }
         // Zum ersten Mal abgelehnt: so melden. Fragt Android gar nicht mehr, führen die Einstellungen weiter.
@@ -70,7 +78,7 @@ public class NativePushActivity extends Activity {
     }
 
     private void openSettings() {
-        inSettings = true;
+        step = STEP_SETTINGS;
         Toast.makeText(this, "Bitte Mitteilungen für Crate einschalten, dann zurück.", Toast.LENGTH_LONG).show();
         Intent intent;
         if (Build.VERSION.SDK_INT >= 26) {
@@ -87,40 +95,65 @@ public class NativePushActivity extends Activity {
         }
     }
 
+    /** Einmal fragen, ob Crate im Hintergrund laufen darf (Ausnahme vom Akku-Sparen). Danach geht es in jedem Fall weiter. */
+    private void askBattery() {
+        if (Poller.exempt(this) || Build.VERSION.SDK_INT < 23) {
+            finishUp();
+            return;
+        }
+        step = STEP_BATTERY;
+        try {
+            startActivityForResult(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + getPackageName())), REQUEST_BATTERY);
+        } catch (Exception e) {
+            finishUp();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request == REQUEST_BATTERY) finishUp();
+    }
+
     @Override
     protected void onPause() {
         super.onPause();
-        if (inSettings) leftForSettings = true;
+        if (step == STEP_SETTINGS) leftForSettings = true;
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (inSettings && leftForSettings) finishUp();
+        if (step == STEP_SETTINGS && leftForSettings) {
+            leftForSettings = false;
+            if (Poller.allowed(this)) askBattery();
+            else finishUp();
+        }
     }
 
     @Override
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
-        out.putBoolean(STATE_SETTINGS, inSettings);
+        out.putInt(STATE_STEP, step);
     }
 
+    /** Wecker stellen, abholen und erst dann schließen */
     private void finishUp() {
         if (done) return;
         done = true;
         Poller.schedule(this);
-        // Meldet dem Server den Stand und zeigt die Begrüßung, wenn erlaubt
-        Poller.pollAsync(this);
-        finish();
-    }
-
-    @Override
-    protected void onDestroy() {
-        // Geschlossen, ohne fertig zu werden (z. B. Zurück im Dialog): Stand trotzdem melden
-        if (isFinishing() && !done && Poller.token(this) != null) {
-            Poller.schedule(this);
-            Poller.pollAsync(this);
-        }
-        super.onDestroy();
+        final String src = pollOnly ? "now" : "link";
+        new Thread(() -> {
+            final int r = Poller.poll(getApplicationContext(), src);
+            runOnUiThread(() -> {
+                String msg = null;
+                if (r == Poller.NO_TOKEN) msg = "Crate ist hier noch nicht verbunden. Bitte den Schalter für Mitteilungen einmal aus- und wieder einschalten.";
+                else if (r == Poller.GONE) msg = "Dieses Gerät wurde abgemeldet. Bitte Mitteilungen in Crate neu einschalten.";
+                else if (r == Poller.FAILED) msg = "Crate hat den Server gerade nicht erreicht. Bitte gleich nochmal.";
+                else if (r == Poller.NOT_ALLOWED && pollOnly) msg = "Android lässt Crate gerade keine Mitteilungen zeigen.";
+                if (msg != null) Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
+                finish();
+            });
+        }).start();
     }
 }

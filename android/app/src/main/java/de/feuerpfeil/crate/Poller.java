@@ -1,5 +1,6 @@
 package de.feuerpfeil.crate;
 
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -12,6 +13,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Build;
+import android.os.PowerManager;
+import android.os.SystemClock;
 
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
@@ -30,8 +33,14 @@ import java.net.URLEncoder;
  * Android-Mitteilungen. Chrome und seine Erlaubnis spielen dabei keine Rolle mehr.
  *
  * Ablauf: Die Webseite lässt sich vom Server ein Kennwort für dieses Gerät geben und reicht es über
- * crate://push?t=... an die App (NativePushActivity). Ab dann fragt die App etwa alle 15 Minuten
- * (JobScheduler, überlebt Neustarts) und bei jedem Öffnen unter /api/push/native/poll nach.
+ * crate://push?t=... an die App (NativePushActivity). Ab dann fragt die App etwa alle 15 Minuten unter
+ * /api/push/native/poll nach.
+ *
+ * Zwei Wecker, weil einer allein nicht reicht: Crate läuft sichtbar in Chrome, deshalb hält Android die App
+ * selbst für unbenutzt und schiebt ihre Aufgaben (JobScheduler) stundenlang auf. Ein Wecker über den
+ * AlarmManager kommt auch im Ruhezustand durch, und mit der Ausnahme vom Akku-Sparen (fragt
+ * NativePushActivity einmal) laufen beide pünktlich. Jeder Abruf meldet dem Server, wodurch er ausgelöst
+ * wurde, damit man in den Einstellungen sieht, ob und wann die App zuletzt abgeholt hat.
  */
 final class Poller {
     static final String HOST = "https://crate-8vf.pages.dev";
@@ -41,6 +50,9 @@ final class Poller {
     private static final String KEY_TOKEN = "token";
     private static final String KEY_UPDATE_TOLD = "updateTold";
     private static final long PERIOD_MS = 15 * 60 * 1000L;
+    static final int ALARM_ID = 4713;
+    /** Ergebnis eines Abrufs (für die Rückmeldung nach „Test-Mitteilung“) */
+    static final int OK = 0, NO_TOKEN = 1, GONE = 2, NOT_ALLOWED = 3, FAILED = 4;
     private static final Object LOCK = new Object();
 
     private Poller() {}
@@ -81,6 +93,7 @@ final class Poller {
 
     /** Regelmäßiges Abholen einplanen (nur wenn es nicht schon läuft, sonst begänne die Frist jedes Mal neu) */
     static void schedule(Context c) {
+        armAlarm(c);
         JobScheduler js = (JobScheduler) c.getSystemService(Context.JOB_SCHEDULER_SERVICE);
         if (js == null) return;
         for (JobInfo j : js.getAllPendingJobs()) if (j.getId() == JOB_ID) return;
@@ -100,41 +113,76 @@ final class Poller {
         }
     }
 
+    private static PendingIntent alarmIntent(Context c) {
+        Intent i = new Intent(c, AlarmReceiver.class).setAction(AlarmReceiver.ACTION_POLL);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
+        return PendingIntent.getBroadcast(c, ALARM_ID, i, flags);
+    }
+
+    /** Den nächsten Wecker stellen (kommt auch im Ruhezustand des Handys durch) */
+    static void armAlarm(Context c) {
+        if (token(c) == null) return;
+        AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
+        if (am == null) return;
+        long at = SystemClock.elapsedRealtime() + PERIOD_MS;
+        try {
+            if (Build.VERSION.SDK_INT >= 23) am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, alarmIntent(c));
+            else am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, alarmIntent(c));
+        } catch (Exception e) {
+            // dann bleibt der JobScheduler
+        }
+    }
+
     static void cancel(Context c) {
         JobScheduler js = (JobScheduler) c.getSystemService(Context.JOB_SCHEDULER_SERVICE);
         if (js != null) js.cancel(JOB_ID);
+        AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
+        if (am != null) am.cancel(alarmIntent(c));
     }
 
-    static void pollAsync(final Context context) {
+    /** Ist Crate vom Akku-Sparen ausgenommen? Dann laufen die Wecker pünktlich. */
+    static boolean exempt(Context c) {
+        if (Build.VERSION.SDK_INT < 23) return true;
+        PowerManager pm = (PowerManager) c.getSystemService(Context.POWER_SERVICE);
+        return pm != null && pm.isIgnoringBatteryOptimizations(c.getPackageName());
+    }
+
+    static void pollAsync(final Context context, final String src) {
         final Context c = context.getApplicationContext();
-        new Thread(() -> poll(c)).start();
+        new Thread(() -> poll(c, src)).start();
     }
 
-    /** Neue Mitteilungen abholen und zeigen. false = hat nicht geklappt (später nochmal). */
-    static boolean poll(Context c) {
+    /**
+     * Neue Mitteilungen abholen und zeigen. src sagt dem Server, was den Abruf ausgelöst hat
+     * (link, now, open, alarm, job). Rückgabe: OK, NO_TOKEN, GONE, NOT_ALLOWED oder FAILED.
+     */
+    static int poll(Context c, String src) {
         synchronized (LOCK) {
             String token = token(c);
             if (token == null) {
                 cancel(c);
-                return true;
+                return NO_TOKEN;
             }
             ensureChannel(c);
             boolean ok = allowed(c);
             HttpURLConnection conn = null;
             try {
-                String url = HOST + "/api/push/native/poll?t=" + URLEncoder.encode(token, "UTF-8") + "&ok=" + (ok ? "1" : "0") + "&v=" + versionCode(c);
+                String url = HOST + "/api/push/native/poll?t=" + URLEncoder.encode(token, "UTF-8") + "&ok=" + (ok ? "1" : "0") + "&v=" + versionCode(c)
+                        + "&src=" + src + "&ex=" + (exempt(c) ? "1" : "0");
                 conn = (HttpURLConnection) new URL(url).openConnection();
-                conn.setConnectTimeout(15000);
-                conn.setReadTimeout(20000);
+                // Kurz halten: ein Wecker im Ruhezustand hat nur wenige Sekunden
+                conn.setConnectTimeout(6000);
+                conn.setReadTimeout(6000);
+                conn.setUseCaches(false);
                 conn.setRequestProperty("Accept", "application/json");
                 int status = conn.getResponseCode();
                 if (status == 410) {
                     // Auf der Webseite ausgeschaltet oder Konto gelöscht: aufhören
                     setToken(c, null);
                     cancel(c);
-                    return true;
+                    return GONE;
                 }
-                if (status != 200) return false;
+                if (status != 200) return FAILED;
                 JSONObject json = new JSONObject(read(conn.getInputStream()));
                 JSONArray list = json.optJSONArray("messages");
                 if (list != null && ok) for (int i = 0; i < list.length(); i++) show(c, list.getJSONObject(i));
@@ -144,9 +192,9 @@ final class Poller {
                     prefs(c).edit().putInt(KEY_UPDATE_TOLD, latest).apply();
                     showUpdate(c, json.optString("apkName", ""));
                 }
-                return true;
+                return ok ? OK : NOT_ALLOWED;
             } catch (Exception e) {
-                return false;
+                return FAILED;
             } finally {
                 if (conn != null) conn.disconnect();
             }

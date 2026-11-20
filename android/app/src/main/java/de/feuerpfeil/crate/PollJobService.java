@@ -8,9 +8,9 @@ public class PollJobService extends JobService {
     @Override
     public boolean onStartJob(final JobParameters params) {
         new Thread(() -> {
-            boolean ok = Poller.poll(getApplicationContext());
+            int r = Poller.poll(getApplicationContext(), "job");
             // Kein Netz oder Server nicht erreichbar: Android versucht es früher nochmal
-            jobFinished(params, !ok);
+            jobFinished(params, r == Poller.FAILED);
         }).start();
         return true;
     }

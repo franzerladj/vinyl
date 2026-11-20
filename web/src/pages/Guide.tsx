@@ -70,8 +70,9 @@ function Article({ card }: { card: GuideCard }) {
   const see = (card.see ?? []).map(guideCard).filter(Boolean) as GuideCard[];
   return (
     <>
-      <NavBar title={card.title} titleOnScroll backTo="/guide" backLabel="Übersicht" />
-      <div className="page-head" style={{ paddingTop: 0 }}>
+      {/* Kurzer Titel in der Leiste: ein langer Kartentitel nähme dem Zurück-Knopf den Platz (er würde abgeschnitten) */}
+      <NavBar title="Gut zu wissen" titleOnScroll backTo="/guide" backLabel="Zurück" />
+      <div className="page-head guide-head" style={{ paddingTop: 0 }}>
         <div>
           <div className="tiny guide-kicker">{area.title.replace("?", "")}</div>
           <h1>{card.title}</h1>
@@ -160,7 +161,7 @@ export default function Guide() {
   if (slug && !card)
     return (
       <>
-        <NavBar title="Gut zu wissen" backTo="/guide" backLabel="Übersicht" />
+        <NavBar title="Gut zu wissen" backTo="/guide" backLabel="Zurück" />
         <div className="page">
           <p className="sub">Diese Karte gibt es nicht (mehr).</p>
           <Link to="/guide" viewTransition className="btn tinted">

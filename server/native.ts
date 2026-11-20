@@ -11,12 +11,26 @@ export interface NativeDevice {
   seen: number | null;
   /** Erlaubt Android der App gerade Mitteilungen? */
   ok: boolean;
+  /** Was den letzten Abruf ausgelöst hat: link, now, open, alarm, job, boot */
+  src?: string | null;
+  /** Version der App (versionCode) beim letzten Abruf */
+  v?: number | null;
+  /** Ist die App vom Akku-Sparen ausgenommen? Sonst schiebt Android das Abholen auf. */
+  exempt?: boolean | null;
+}
+
+export interface PollInfo {
+  src?: string;
+  v?: number;
+  exempt?: boolean;
 }
 
 export interface NativeStore {
   link(token: string, user: string, ts: number): Promise<void>;
   device(token: string): Promise<NativeDevice | null>;
-  touch(token: string, ok: boolean, ts: number): Promise<void>;
+  touch(token: string, ok: boolean, ts: number, info?: PollInfo): Promise<void>;
+  /** Wie viele Mitteilungen warten noch auf dieses Gerät? */
+  waiting(token: string): Promise<number>;
   enqueue(tokens: string[], msg: Message, ts?: number): Promise<void>;
   /** Wartende Mitteilungen holen und entfernen (älteste zuerst) */
   take(token: string): Promise<Message[]>;
@@ -26,7 +40,7 @@ export interface NativeStore {
 }
 
 export const NATIVE_SCHEMA = [
-  "CREATE TABLE IF NOT EXISTS native_devices (token TEXT PRIMARY KEY, user TEXT NOT NULL, created INTEGER NOT NULL, seen INTEGER, ok INTEGER NOT NULL DEFAULT 0)",
+  "CREATE TABLE IF NOT EXISTS native_devices (token TEXT PRIMARY KEY, user TEXT NOT NULL, created INTEGER NOT NULL, seen INTEGER, ok INTEGER NOT NULL DEFAULT 0, src TEXT, v INTEGER, exempt INTEGER)",
   "CREATE INDEX IF NOT EXISTS native_devices_user ON native_devices (user)",
   "CREATE TABLE IF NOT EXISTS native_queue (id INTEGER PRIMARY KEY AUTOINCREMENT, token TEXT NOT NULL, ts INTEGER NOT NULL, msg TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS native_queue_token ON native_queue (token, id)",
@@ -45,11 +59,17 @@ export function d1Native(db: D1Like): NativeStore {
       await db.prepare("INSERT INTO native_devices (token, user, created) VALUES (?, ?, ?) ON CONFLICT(token) DO NOTHING").bind(token, user, ts).run();
     },
     async device(token) {
-      const r = await db.prepare("SELECT user, seen, ok FROM native_devices WHERE token = ?").bind(token).first<{ user: string; seen: number | null; ok: number }>();
-      return r ? { user: r.user, seen: r.seen, ok: Boolean(r.ok) } : null;
+      const r = await db.prepare("SELECT user, seen, ok, src, v, exempt FROM native_devices WHERE token = ?").bind(token).first<{ user: string; seen: number | null; ok: number; src: string | null; v: number | null; exempt: number | null }>();
+      return r ? { user: r.user, seen: r.seen, ok: Boolean(r.ok), src: r.src, v: r.v, exempt: r.exempt == null ? null : Boolean(r.exempt) } : null;
     },
-    async touch(token, ok, ts) {
-      await db.prepare("UPDATE native_devices SET seen = ?, ok = ? WHERE token = ?").bind(ts, ok ? 1 : 0, token).run();
+    async touch(token, ok, ts, info = {}) {
+      await db
+        .prepare("UPDATE native_devices SET seen = ?, ok = ?, src = ?, v = ?, exempt = ? WHERE token = ?")
+        .bind(ts, ok ? 1 : 0, info.src ?? null, info.v ?? null, info.exempt == null ? null : info.exempt ? 1 : 0, token)
+        .run();
+    },
+    async waiting(token) {
+      return (await db.prepare("SELECT COUNT(*) AS n FROM native_queue WHERE token = ?").bind(token).first<{ n: number }>())?.n ?? 0;
     },
     async enqueue(tokens, msg, ts = Date.now()) {
       if (!tokens.length) return;
@@ -95,9 +115,12 @@ export function memoryNative(): NativeStore {
       const d = devices.get(token);
       return d ? { ...d } : null;
     },
-    async touch(token, ok, ts) {
+    async touch(token, ok, ts, info = {}) {
       const d = devices.get(token);
-      if (d) devices.set(token, { ...d, seen: ts, ok });
+      if (d) devices.set(token, { ...d, seen: ts, ok, src: info.src ?? null, v: info.v ?? null, exempt: info.exempt ?? null });
+    },
+    async waiting(token) {
+      return queue.filter((q) => q.token === token).length;
     },
     async enqueue(tokens, msg, ts = Date.now()) {
       for (const token of tokens) queue.push({ token, ts, msg: slim(msg) });

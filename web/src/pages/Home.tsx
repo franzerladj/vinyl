@@ -140,7 +140,7 @@ export default function Home() {
         )}
         {apkOutdated() && (
           <Hint id={`apk-${LATEST_APK}`}>
-            <b>Neue Version der Android-App.</b>{" "}
+            <b>Neue Version der Android-App.</b> Sie holt Mitteilungen zuverlässig im Hintergrund ab.{" "}
             {canSelfUpdate() ? (
               <>
                 Ein Tipp genügt, deine Daten bleiben.{" "}

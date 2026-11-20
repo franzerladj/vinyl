@@ -22,7 +22,7 @@ public class CrateLauncherActivity extends LauncherActivity {
         try {
             if (Poller.token(this) != null) {
                 Poller.schedule(this);
-                Poller.pollAsync(this);
+                Poller.pollAsync(this, "open");
             }
         } catch (Exception e) {
             // darf den Start nie aufhalten

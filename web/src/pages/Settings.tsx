@@ -22,7 +22,7 @@ import { renderProfileCard } from "../lib/shareCard";
 import { inviteLink } from "../lib/friends";
 import { loadMyProfile, saveMyProfile } from "../lib/profile";
 import { GEAR, linkText, LINK_LABEL, parseLink, PLAY_LABEL, sanitizeProfile, type CrateProfile, type GearSlot, type PlayMode } from "../../../shared/profile";
-import { apkName, apkOutdated, appInfo, canSelfUpdate, updateApp, DEFAULT_PREFS, fullPrefs, syncPushData, disablePush, enablePush, isIOS, LATEST_APK, nativePush, PushBlocked, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs, runningAs } from "../lib/push";
+import { apkName, apkOutdated, appInfo, canSelfUpdate, updateApp, DEFAULT_PREFS, fullPrefs, syncPushData, myNativeStatus, askBatteryExemption, type NativeStatus, disablePush, enablePush, isIOS, LATEST_APK, nativePush, PushBlocked, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs, runningAs } from "../lib/push";
 import { DEFAULT_SHIP, type ShipConfig } from "../../../shared/shipping";
 import {
   IconBell,
@@ -715,6 +715,13 @@ function HelpPage() {
   );
 }
 
+/** Wodurch die App zuletzt abgeholt hat, in Worten */
+const FETCH_SRC: Record<string, string> = { link: "beim Einschalten", now: "auf Wunsch", open: "beim Start", alarm: "Wecker", job: "Zeitplan", boot: "nach Neustart" };
+const fetchedAgo = (t: number) => {
+  const m = Math.round((Date.now() - t) / 60_000);
+  return m < 1 ? "gerade eben" : m < 60 ? `vor ${m} Min.` : m < 48 * 60 ? `vor ${Math.round(m / 60)} Std.` : `vor ${Math.round(m / 1440)} Tagen`;
+};
+
 const PUSH_KINDS: [PushKind, string, string][] = [
   ["friends", "Freunde", "Anfragen, Likes, Kommentare, Empfehlungen und wenn jemand ein Set gespielt hat"],
   ["wants", "Wantlist", "Wieder verfügbar, Preis gefallen, unter deinem Wunschpreis, neu gepresst"],
@@ -790,6 +797,15 @@ function NotificationsPage() {
       if (st?.prefs) setPrefs(fullPrefs(st.prefs));
     })();
   }, []);
+  // Läuft es über die Android-App: wann hat sie zuletzt abgeholt, und darf sie im Hintergrund laufen?
+  const [native, setNative] = useState<NativeStatus | null>(null);
+  useEffect(() => {
+    if (!on) return setNative(null);
+    const load = () => void myNativeStatus().then(setNative);
+    load();
+    window.addEventListener("focus", load);
+    return () => window.removeEventListener("focus", load);
+  }, [on]);
   const toggle = (v: boolean) => void set(v);
   const setPref = async (k: PushKind, v: boolean) => {
     const p = { ...prefs, [k]: v };
@@ -848,11 +864,35 @@ function NotificationsPage() {
                   label="Test-Mitteilung senden"
                   onClick={() =>
                     sendTestPush().then(
-                      (r) => toast(r.sent ? "Gesendet. Sie sollte gleich erscheinen." : "Konnte nicht zugestellt werden. Bitte Mitteilungen aus- und wieder einschalten."),
+                      (r) => {
+                        toast(!r.sent ? "Konnte nicht zugestellt werden. Bitte Mitteilungen aus- und wieder einschalten." : r.fetched === false ? "Die App hat sie noch nicht abgeholt. Sieh unten bei „Zuletzt abgeholt“ nach." : "Gesendet. Sie sollte gleich erscheinen.");
+                        void myNativeStatus().then(setNative);
+                      },
                       (e) => toast(e.message),
                     )
                   }
                 />
+              </Group>
+            )}
+            {on && native?.known && (
+              <Group
+                title="Die App"
+                foot={
+                  native.exempt === false
+                    ? "Android bremst Apps, die es für unbenutzt hält, und Crate läuft sichtbar in Chrome. Ohne die Ausnahme vom Akku-Sparen kommen Mitteilungen oft erst nach Stunden."
+                    : "Die App holt Neues etwa alle 15 Minuten ab und bei jedem Start."
+                }
+              >
+                <Row label="Zuletzt abgeholt" value={native.seen ? `${fetchedAgo(native.seen)}${native.src && FETCH_SRC[native.src] ? ` · ${FETCH_SRC[native.src]}` : ""}` : "noch nie"} />
+                {(native.waiting ?? 0) > 0 && <Row label="Warten auf dem Server" value={String(native.waiting)} />}
+                {apkOutdated() && (
+                  <Row
+                    label={`App auf ${apkName(LATEST_APK)} aktualisieren`}
+                    sub="Die neue Version holt Mitteilungen zuverlässig im Hintergrund ab."
+                    onClick={() => (canSelfUpdate() ? updateApp() : (location.href = `/download/crate.apk?v=${LATEST_APK}`))}
+                  />
+                )}
+                {native.exempt === false ? <Row label="Im Hintergrund erlauben" sub="Nimmt Crate vom Akku-Sparen aus. Android fragt einmal nach." onClick={askBatteryExemption} /> : native.exempt ? <Row label="Im Hintergrund" value="erlaubt" /> : null}
               </Group>
             )}
             {isIOS() && <p className="tiny" style={{ textAlign: "center" }}>Auf dem iPhone kommen Mitteilungen nur, solange Crate auf dem Home-Bildschirm liegt.</p>}

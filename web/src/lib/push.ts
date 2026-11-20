@@ -123,7 +123,29 @@ const openApp = (query: string) => {
 };
 /** Die App soll jetzt abholen (z. B. die Test-Mitteilung), nicht erst beim nächsten Durchlauf */
 export const nativePollNow = () => openApp("poll=1");
-export const nativeStatus = (t: string) => json<{ known: boolean; linked: boolean; ok: boolean }>(`/api/push/native/status?t=${t}`);
+export interface NativeStatus {
+  known: boolean;
+  linked: boolean;
+  ok: boolean;
+  /** Wann die App zuletzt abgeholt hat und wodurch (link, now, open, alarm, job, boot) */
+  seen?: number | null;
+  src?: string | null;
+  /** Ist die App vom Akku-Sparen ausgenommen? Sonst schiebt Android das Abholen auf. */
+  exempt?: boolean | null;
+  /** Mitteilungen, die noch auf dem Server liegen */
+  waiting?: number;
+}
+export const nativeStatus = (t: string) => json<NativeStatus>(`/api/push/native/status?t=${t}`);
+/** Stand dieses Geräts, wenn die Mitteilungen über die App laufen (sonst null) */
+export const myNativeStatus = async (): Promise<NativeStatus | null> => {
+  const t = nativeToken();
+  return nativePush() && t ? nativeStatus(t).catch(() => null) : null;
+};
+/** Die Akku-Ausnahme nachholen: derselbe Weg wie beim Einschalten, das Kennwort bleibt */
+export function askBatteryExemption() {
+  const t = nativeToken();
+  if (t) openApp(`t=${t}`);
+}
 
 /** Warten, bis die App das Kennwort übernommen und dem Server gemeldet hat, ob Android Mitteilungen erlaubt */
 async function waitForApp(token: string, ms: number): Promise<"ok" | "blocked" | "silent"> {
@@ -237,11 +259,18 @@ export async function disablePush() {
 
 export const pushStatus = () => json<{ available: boolean; devices: number; prefs: PushPrefs | null }>("/api/push/status");
 export const savePushPrefs = (p: Partial<PushPrefs>) => json<{ prefs: PushPrefs }>("/api/push/prefs", p);
-export async function sendTestPush() {
+export async function sendTestPush(): Promise<{ sent: number; devices: number; fetched?: boolean }> {
   const r = await json<{ sent: number; devices: number }>("/api/push/test", {});
-  // Die App soll sie gleich abholen statt beim nächsten Durchlauf
-  if (nativePush() && nativeToken()) nativePollNow();
-  return r;
+  const t = nativeToken();
+  if (!nativePush() || !t) return r;
+  // Die App soll sie gleich abholen statt beim nächsten Durchlauf. Danach nachsehen, ob sie es getan hat.
+  nativePollNow();
+  for (let i = 0; i < 6; i++) {
+    await new Promise((res) => setTimeout(res, 1500));
+    const st = await nativeStatus(t).catch(() => null);
+    if (st && st.waiting === 0) return { ...r, fetched: true };
+  }
+  return { ...r, fetched: false };
 }
 
 const dayOf = (t: number) => {

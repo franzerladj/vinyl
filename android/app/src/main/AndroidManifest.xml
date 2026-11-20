@@ -7,6 +7,10 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Das regelmäßige Abholen der Mitteilungen soll einen Neustart des Handys überleben -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Abholen der Mitteilungen im Hintergrund: Wecker auch im Ruhezustand, und die Frage nach der Ausnahme
+         vom Akku-Sparen (sonst schiebt Android das Abholen stundenlang auf) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Die App aktualisiert sich selbst (UpdateActivity): Android fragt beim ersten Mal nach -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
@@ -83,6 +87,15 @@
                 <data android:scheme="crate" android:host="push" />
             </intent-filter>
         </activity>
+        <!-- Wecker fürs Abholen, außerdem neu stellen nach Neustart des Handys und nach einem Update der App -->
+        <receiver
+            android:name=".AlarmReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
         <service
             android:name=".PollJobService"
             android:exported="true"

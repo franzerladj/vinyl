@@ -696,7 +696,8 @@ app.get("/api/push/native/status", async (c) => {
   const t = c.req.query("t") ?? "";
   const d = NATIVE_TOKEN.test(t) ? await nativeStore(c.env ?? {}).device(t) : null;
   if (!d || d.user !== s.username.toLowerCase()) return c.json({ known: false, linked: false, ok: false });
-  return c.json({ known: true, linked: d.seen != null, ok: d.ok });
+  // seen, src, exempt und waiting zeigen in den Einstellungen, ob und wann die App zuletzt abgeholt hat
+  return c.json({ known: true, linked: d.seen != null, ok: d.ok, seen: d.seen, src: d.src ?? null, v: d.v ?? null, exempt: d.exempt ?? null, waiting: await nativeStore(c.env ?? {}).waiting(t) });
 });
 
 app.post("/api/push/native/stop", async (c) => {
@@ -743,8 +744,10 @@ app.get("/api/push/native/poll", async (c) => {
   if (!d) return c.json({ message: "abgemeldet" }, 410);
   const ok = c.req.query("ok") === "1";
   const now = Date.now();
-  // Nur schreiben, wenn sich etwas geändert hat oder der Stand alt ist (schont das Schreib-Kontingent)
-  if (d.seen == null || d.ok !== ok || now - d.seen > 6 * 3600_000) await store.touch(t, ok, now);
+  // Jeden Abruf festhalten (rund hundert Schreibvorgänge am Tag je Gerät): so sieht man, ob die App wirklich abholt
+  const src = (c.req.query("src") ?? "").replace(/[^a-z]/g, "").slice(0, 8) || undefined;
+  const ex = c.req.query("ex");
+  await store.touch(t, ok, now, { src, v: Number(c.req.query("v")) || undefined, exempt: ex === "1" ? true : ex === "0" ? false : undefined });
   // Solange Android nichts zeigen lässt, bleibt alles liegen
   const messages = ok ? await store.take(t) : [];
   // Die App erfährt hier auch, ob es eine neuere Version von ihr gibt, und bietet dann das Update an

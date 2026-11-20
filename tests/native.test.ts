@@ -33,15 +33,20 @@ const B = "b".repeat(64);
 async function exercise(store: NativeStore) {
   await store.link(A, "franz", 1);
   await store.link(B, "franz", 2);
-  expect(await store.device(A)).toEqual({ user: "franz", seen: null, ok: false });
+  expect(await store.device(A)).toMatchObject({ user: "franz", seen: null, ok: false });
   expect(await store.device("c".repeat(64))).toBeNull();
   await store.touch(A, true, 50);
-  expect(await store.device(A)).toEqual({ user: "franz", seen: 50, ok: true });
+  expect(await store.device(A)).toMatchObject({ user: "franz", seen: 50, ok: true });
+  // Jeder Abruf hält fest, wodurch er kam, mit welcher App-Version und ob die App im Hintergrund laufen darf
+  await store.touch(A, true, 60, { src: "alarm", v: 12, exempt: false });
+  expect(await store.device(A)).toEqual({ user: "franz", seen: 60, ok: true, src: "alarm", v: 12, exempt: false });
+  expect(await store.waiting(A)).toBe(0);
   // Erneutes Verbinden desselben Kennworts ändert nichts (kein Überschreiben des Besitzers)
   await store.link(A, "jemand", 60);
   expect((await store.device(A))?.user).toBe("franz");
   await store.enqueue([A, B], { title: "Neue Angebote", body: "3 Wants", url: "/wants", tag: "wants" });
   await store.enqueue([A], { title: "Anfrage", body: "kumpel", url: "/friends", tag: "friend-kumpel", urgent: true });
+  expect(await store.waiting(A)).toBe(2);
   const got = await store.take(A);
   expect(got.map((m) => m.title)).toEqual(["Neue Angebote", "Anfrage"]);
   // „urgent“ ist Sache des Browser-Wegs und wandert nicht mit
@@ -101,16 +106,16 @@ describe("Mitteilungen der Android-App: Routen", () => {
     const start = (await (await post("NativeAnna", "/api/push/native/start", {})).json()) as { token: string };
     expect(start.token).toMatch(/^[a-f0-9]{64}$/);
     // Noch hat die App nicht abgeholt
-    expect(await (await get("NativeAnna", `/api/push/native/status?t=${start.token}`)).json()).toEqual({ known: true, linked: false, ok: false });
+    expect(await (await get("NativeAnna", `/api/push/native/status?t=${start.token}`)).json()).toMatchObject({ known: true, linked: false, ok: false });
     // Fremde sehen den Stand nicht
     expect(await (await get("NativeBob", `/api/push/native/status?t=${start.token}`)).json()).toEqual({ known: false, linked: false, ok: false });
     // Android erlaubt (noch) nichts: verbunden, aber nichts wird ausgeliefert und nichts geht verloren
     expect((await poll(start.token, false)).body.messages).toEqual([]);
-    expect(await (await get("NativeAnna", `/api/push/native/status?t=${start.token}`)).json()).toEqual({ known: true, linked: true, ok: false });
+    expect(await (await get("NativeAnna", `/api/push/native/status?t=${start.token}`)).json()).toMatchObject({ known: true, linked: true, ok: false });
     // Erlaubt: die Begrüßung kommt
     const first = await poll(start.token, true);
     expect(first.body.messages?.map((m) => m.tag)).toEqual(["welcome"]);
-    expect(await (await get("NativeAnna", `/api/push/native/status?t=${start.token}`)).json()).toEqual({ known: true, linked: true, ok: true });
+    expect(await (await get("NativeAnna", `/api/push/native/status?t=${start.token}`)).json()).toMatchObject({ known: true, linked: true, ok: true });
     expect(((await (await get("NativeAnna", "/api/push/status")).json()) as { devices: number }).devices).toBe(1);
     // Test-Mitteilung und Mitteilung vom eigenen Gerät
     expect(((await (await post("NativeAnna", "/api/push/test", {})).json()) as { sent: number }).sent).toBe(1);
@@ -123,6 +128,14 @@ describe("Mitteilungen der Android-App: Routen", () => {
     expect(next.body.messages?.map((m) => m.title)).toEqual(["Crate", "Neue Pressung", "Freundschaftsanfrage"]);
     expect(next.body.messages?.[2].url).toBe("/friends");
     expect((await poll(start.token, true)).body.messages).toEqual([]);
+    // Der Stand zeigt, wann und wodurch zuletzt abgeholt wurde und ob noch etwas wartet
+    await post("NativeAnna", "/api/push/test", {});
+    const before = (await (await get("NativeAnna", `/api/push/native/status?t=${start.token}`)).json()) as { waiting: number; seen: number };
+    expect(before.waiting).toBe(1);
+    await app.request(`${ORIGIN}/api/push/native/poll?t=${start.token}&ok=1&v=12&src=alarm&ex=0`, {}, env);
+    const after = (await (await get("NativeAnna", `/api/push/native/status?t=${start.token}`)).json()) as { waiting: number; seen: number; src: string; v: number; exempt: boolean };
+    expect(after).toMatchObject({ waiting: 0, src: "alarm", v: 12, exempt: false });
+    expect(after.seen).toBeGreaterThanOrEqual(before.seen);
     // Schalter erneut angetippt: neues Kennwort, das alte gilt nicht mehr
     const again = (await (await post("NativeAnna", "/api/push/native/start", { replace: start.token })).json()) as { token: string };
     expect(again.token).not.toBe(start.token);

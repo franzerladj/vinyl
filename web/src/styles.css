@@ -1799,7 +1799,9 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .guide-row-main span { color: var(--text-2); font-size: 13.5px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .guide-row .chev { color: var(--text-3); flex: none; }
 .guide-foot { margin: 22px 2px 0; line-height: 1.45; }
-.guide-kicker { margin-bottom: 2px; }
+.guide-kicker { margin-bottom: 4px; }
+/* Titel der Karten sind ganze Sätze: sie brechen um (sonst gilt für Seitentitel „eine Zeile“) und sind etwas kleiner */
+.guide-head h1 { white-space: normal; font-size: clamp(30px, 9.4vw, 40px); line-height: 0.96; overflow-wrap: break-word; }
 .guide-lead { font-size: 17px; line-height: 1.45; margin: 4px 0 0; }
 .guide h2 { font-size: 19px; margin: 24px 0 10px; }
 .guide-area h2 { font-size: 22px; }
