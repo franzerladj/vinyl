@@ -5,9 +5,9 @@
 // an jeder Karte. Karten aus reiner Praxis (Packliste) tragen `practice` und sagen das auch.
 // Gelesen am 20. November 2026: Library of Congress, Canadian Conservation Institute, Ortofon, Audio-Technica,
 // Genelec, WHO. Was dort nicht steht, steht auch hier nicht als Tatsache.
-// Für das Auflegen selbst (Bereich „Mixen“, Set packen, Warm-up, Aufnehmen) ist Digital DJ Tips die Grundlage
-// (Franz: viel gutes, fundiertes Wissen). Die Karten fassen in eigenen Worten zusammen und verweisen auf den
-// jeweiligen Artikel, sie übernehmen keinen Text.
+// Digital DJ Tips ist eine Quelle unter mehreren (ein Tipp von Franz, keine Vorgabe): gut für das Auflegen selbst,
+// aber keine Karte muss sich darauf stützen. Jede andere seriöse Quelle ist genauso recht. Die Karten fassen in
+// eigenen Worten zusammen und verweisen auf den jeweiligen Artikel, sie übernehmen keinen Text.
 
 export interface GuideSource {
   label: string;

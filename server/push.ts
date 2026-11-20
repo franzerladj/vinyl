@@ -2,6 +2,8 @@
 // Gespeichert wird nur für Nutzer, die Mitteilungen einschalten: Push-Adressen, Wants mit
 // Wunschpreisen, Erinnerungen und der Discogs-Zugang (verschlüsselt wie im Session-Cookie).
 
+import { REVIEW_DAY } from "../shared/year";
+
 export interface KV {
   get(key: string): Promise<string | null>;
   put(key: string, value: string, opts?: { expirationTtl?: number }): Promise<void>;
@@ -65,6 +67,8 @@ export interface UserRec {
   cursor: number;
   /** schon erinnert (Schlüssel → Zeitpunkt) */
   sent: Record<string, number>;
+  /** Erinnerung ans Profil: Zeitpunkt, ab dem sie fällig ist. 0 = erledigt (Profil da oder schon erinnert), fehlt = noch nie geprüft */
+  profileNudge?: number;
   /** Zuletzt zugestellte Update-Mitteilung (shared/announce.ts) */
   announce?: string;
   updatedAt: number;
@@ -234,7 +238,8 @@ const isoDay = (t: number) => new Date(t).toISOString().slice(0, 10);
  * (rec.tz), sonst käme „Heute ist dein Set“ in anderen Zeitzonen mitten in der Nacht.
  *  - verliehene Platten nach 3, 6 und 10 Wochen
  *  - Set: am Vorabend (Kiste, Nadel), am Tag selbst, am Tag danach (was lief?)
- *  - Jahresrückblick im Dezember, einmal
+ *  - Jahresrückblick ab dem 15. Dezember, einmal
+ *  - Profil noch leer: ein einziges Mal, drei Tage nach dem Einschalten
  *  - Platte des Tages am Vormittag (nur wer sie eingeschaltet hat)
  */
 export function dueReminders(rec: UserRec, now = Date.now()): { key: string; kind: PushKind; msg: Message }[] {
@@ -266,9 +271,13 @@ export function dueReminders(rec: UserRec, now = Date.now()): { key: string; kin
     // Am Tag danach: festhalten, was lief (zählt für Verlauf und Nadel-Stunden)
     if (s.date === yesterday && hour >= 11) add(`setpost-${s.id}-${s.date}`, "sets", { title: `Wie lief ${s.name}?`, body: "Hak ab, was du gespielt hast. Das zählt für deinen Verlauf und die Nadel-Stunden.", url, tag });
   }
-  // Jahresrückblick: im Dezember, einmal im Jahr
+  // Jahresrückblick: erscheint am 15. Dezember (REVIEW_DAY), einmal im Jahr
   const year = today.slice(0, 4);
-  if (today.slice(5, 7) === "12" && hour >= 10) add(`year-${year}`, "tips", { title: `Dein Plattenjahr ${year}`, body: "Neuzugänge, Lieblings-Label, gespielte Sets: dein Rückblick ist fertig.", url: "/year", tag: "year" });
+  if (today.slice(5, 7) === "12" && Number(today.slice(8, 10)) >= REVIEW_DAY && hour >= 10)
+    add(`year-${year}`, "tips", { title: `Dein Jahr auf Platte ist da`, body: `Rückblick ${year}: was dazukam, was am meisten lief, wo du aufgelegt hast. Einmal durchblättern?`, url: "/year", tag: "year" });
+  // Profil noch leer: einmal, ein paar Tage nach dem Einschalten, am frühen Abend. Kein zweites Mal (profileNudge wird dann 0).
+  if (rec.profileNudge && now >= rec.profileNudge && hour >= 17)
+    add("profile", "tips", { title: "Dein Profil ist noch leer", body: "DJ-Name, Styles, Setup: in einer Minute gemacht. Dann sehen deine Freunde, wer du bist.", url: "/settings/profile", tag: "profile" });
   // Platte des Tages am Vormittag
   const pick = (rec.daily ?? []).find((d) => d.d === today);
   if (pick && hour >= 9) add(`daily-${today}`, "daily", { title: "Platte des Tages", body: `${pick.a} – ${pick.t}${pick.why ? `. ${pick.why}` : ""}`, url: `/release/${pick.id}`, tag: "daily" });

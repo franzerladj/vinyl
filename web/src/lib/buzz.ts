@@ -39,8 +39,10 @@ export interface Buzz {
   posts: OwnPost[];
   inbox: InboxItem[];
   unread: number;
+  /** Ungelesene Nachrichten von Freunden (siehe lib/dm.ts) */
+  dm?: number;
 }
-const EMPTY: Buzz = { reactions: [], comments: [], posts: [], inbox: [], unread: 0 };
+const EMPTY: Buzz = { reactions: [], comments: [], posts: [], inbox: [], unread: 0, dm: 0 };
 const KEY = "buzz";
 
 /** Beitrag im Feed heißt „freund|art|tag“, der Server kennt Besitzer und „art|tag“ getrennt */

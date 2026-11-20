@@ -10,6 +10,22 @@ export interface YearInput {
   trackSeconds?: (trackId: string) => number | null;
 }
 
+/** Der Rückblick eines Jahres erscheint erst am 15. Dezember: bis dahin wird mitgezählt, dann ist er eine kleine Überraschung. */
+export const REVIEW_DAY = 15;
+export const reviewOpensAt = (year: number) => new Date(year, 11, REVIEW_DAY);
+export const reviewIsOpen = (year: number, now = new Date()) => now.getTime() >= reviewOpensAt(year).getTime();
+/** Tage bis zur Freischaltung (0 = heute oder schon offen) */
+export const daysUntilReview = (year: number, now = new Date()) =>
+  Math.max(0, Math.ceil((reviewOpensAt(year).getTime() - new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) / 86_400_000));
+/** Auf Start: "soon" in den ersten Dezember-Tagen (Vorfreude), "open" vom 15.12. bis Ende Januar */
+export function reviewSeason(now = new Date()): { state: "soon" | "open"; year: number; days: number } | null {
+  const m = now.getMonth();
+  const y = now.getFullYear();
+  if (m === 0) return { state: "open", year: y - 1, days: 0 };
+  if (m !== 11) return null;
+  return reviewIsOpen(y, now) ? { state: "open", year: y, days: 0 } : { state: "soon", year: y, days: daysUntilReview(y, now) };
+}
+
 const top = <T,>(m: Map<T, number>, n: number) => [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
 const bump = <T,>(m: Map<T, number>, k: T) => m.set(k, (m.get(k) ?? 0) + 1);
 const cleanLabel = (s: string) => s.replace(/\s\(\d+\)$/, "");

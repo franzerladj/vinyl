@@ -11,13 +11,37 @@ import { db } from "../lib/db";
 import { toast, useStore } from "../lib/store";
 import { renderYearCard, shareToStory } from "../lib/shareCard";
 import { durationSeconds } from "../../../shared/stylus";
-import { yearReview } from "../../../shared/year";
+import { daysUntilReview, reviewIsOpen, yearReview } from "../../../shared/year";
 
 /** Im Januar zeigt der Rückblick noch das Vorjahr */
 export const reviewYear = (d = new Date()) => (d.getMonth() === 0 ? d.getFullYear() - 1 : d.getFullYear());
 
+/** Vor dem 15. Dezember bleibt der Rückblick des laufenden Jahres zu: Vorfreude statt Zahlen */
 export default function YearPage() {
   const year = Number(useParams().year) || reviewYear();
+  if (reviewIsOpen(year)) return <YearOpen year={year} />;
+  const days = daysUntilReview(year);
+  return (
+    <>
+      <NavBar title={`Rückblick ${year}`} titleOnScroll />
+      <div className="page stack year">
+        <div>
+          <span className="eyebrow">Dein Jahr auf Platte</span>
+          <h1 className="year-big">{year}</h1>
+        </div>
+        <div className="year-soon">
+          <b>Kommt am 15. Dezember</b>
+          <span>{days === 1 ? "Noch 1 Tag." : `Noch ${days} Tage.`} Bis dahin zählt alles mit: jede neue Platte, jedes gespielte Set.</span>
+        </div>
+        <Link to={`/year/${year - 1}`} viewTransition className="btn ghost block">
+          Rückblick {year - 1} ansehen
+        </Link>
+      </div>
+    </>
+  );
+}
+
+function YearOpen({ year }: { year: number }) {
   const me = useStore((s) => s.me);
   const [sharing, setSharing] = useState(false);
   const [story, setStory] = useState(false);

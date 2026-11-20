@@ -723,12 +723,12 @@ const fetchedAgo = (t: number) => {
 };
 
 const PUSH_KINDS: [PushKind, string, string][] = [
-  ["friends", "Freunde", "Anfragen, Likes, Kommentare, Empfehlungen und wenn jemand ein Set gespielt hat"],
+  ["friends", "Freunde", "Nachrichten, Leihanfragen, Freundschaftsanfragen, Likes, Kommentare und wenn jemand ein Set gespielt hat"],
   ["wants", "Wantlist", "Wieder verfügbar, Preis gefallen, unter deinem Wunschpreis, neu gepresst"],
   ["sellers", "Lieblingshändler", "Neue Angebote für deine Wants nach dem Sync"],
   ["sets", "Deine Gigs", "Am Vorabend, am Tag selbst und am Tag danach: was lief?"],
   ["lent", "Verliehene Platten", "Erinnerung nach 3, 6 und 10 Wochen"],
-  ["tips", "Rückblick", "Dein Plattenjahr im Dezember"],
+  ["tips", "Rückblick und Tipps", "Dein Jahr auf Platte am 15. Dezember, einmal ein Hinweis aufs Profil"],
   ["daily", "Platte des Tages", "Jeden Vormittag eine Platte aus deiner Sammlung"],
 ];
 

@@ -10,8 +10,8 @@ export interface Announce {
 }
 
 export const ANNOUNCE: Announce | null = {
-  id: "2026-11-18",
+  id: "2026-11-20",
   title: "Crate hat ein Update",
-  body: "Freunde-Feed mit Likes und Kommentaren, Wischen zwischen allen Bereichen, schnellerer Abgleich. Antippen lädt die neue Version.",
+  body: "Nachrichten an Freunde, Platten zum Leihen anfragen, Werkzeug gleich auf Start, Gut zu wissen. Antippen lädt die neue Version.",
   url: "/?update=1",
 };

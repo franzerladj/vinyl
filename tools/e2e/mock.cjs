@@ -20,6 +20,15 @@ for (let id = 1; id <= 100; id++) {
 const basic = (r) => ({ id: r.id, title: r.title, year: r.year, thumb: r.thumb, cover_image: r.cover_image, artists: r.artists, labels: r.labels, formats: r.formats, genres: r.genres, styles: r.styles });
 const COLL = Array.from({ length: 45 }, (_, i) => i + 1);
 const WANTS = Array.from({ length: 25 }, (_, i) => i + 46);
+// Nachrichten unter Freunden: mit DM=1 liegt schon eine Unterhaltung mit „kumpel“ vor
+const dmAll = () => (globalThis.__dm ??= process.env.DM
+  ? [
+            { id: 1, from: "kumpel", to: "franzerladj", kind: "text", text: "Na, warst du am Samstag noch lange da?", ts: Date.now() - 26 * 3600e3, read: true },
+            { id: 2, from: "franzerladj", to: "kumpel", kind: "text", text: "Bis zum Schluss. Dein Set war stark.", ts: Date.now() - 25 * 3600e3, read: true },
+            { id: 3, from: "kumpel", to: "franzerladj", kind: "borrow", releaseId: 3, title: "Larry Heard – Bar A Thym", thumb: null, text: "Fürs Glashaus am Freitag?", ts: Date.now() - 40 * 60e3, read: false },
+            { id: 4, from: "kumpel", to: "franzerladj", kind: "text", text: "Bring ich Montag zurück, versprochen.", ts: Date.now() - 39 * 60e3, read: false },
+    ]
+  : []);
 module.exports = async function install(page) {
   // Begrüßung nur zeigen, wenn ein Test sie ausdrücklich will (WELCOME=1)
   if (!process.env.WELCOME) await page.addInitScript(() => { try { localStorage.setItem("crate:welcome:franzerladj", "1"); } catch {} });
@@ -46,7 +55,7 @@ module.exports = async function install(page) {
         : { reactions: [], comments: [], posts: [], inbox: [] });
       const b = route.request().method() === "POST" ? JSON.parse(route.request().postData() || "{}") : {};
       (globalThis.__buzzCalls ??= []).push(p + " " + JSON.stringify(b));
-      if (p === "/api/buzz") return json({ ...bz, unread: bz.inbox.filter((i) => !i.read).length });
+      if (p === "/api/buzz") return json({ ...bz, unread: bz.inbox.filter((i) => !i.read).length, dm: dmAll().filter((m) => m.to === "franzerladj" && !m.read).length });
       if (p === "/api/buzz/react") { bz.reactions = bz.reactions.filter((r) => !(r.owner === b.owner && r.post === b.post && r.from === "franzerladj")); if (b.on !== false) bz.reactions.push({ owner: b.owner, post: b.post, from: "franzerladj", ts: Date.now() }); return json({ ok: true }); }
       if (p === "/api/buzz/comment") { const c = { id: Date.now(), owner: b.owner, post: b.post, from: "franzerladj", text: b.text, ts: Date.now() }; bz.comments.push(c); return json(c); }
       if (p.startsWith("/api/buzz/comment/")) { bz.comments = bz.comments.filter((c) => String(c.id) !== p.split("/").pop()); return json({ ok: true }); }
@@ -54,8 +63,30 @@ module.exports = async function install(page) {
       if (p === "/api/buzz/read") { bz.inbox.forEach((i) => (i.read = true)); return json({ ok: true }); }
       return json({ ok: true });
     }
+    // Nachrichten unter Freunden: DM=1 legt eine Leihanfrage und eine Nachricht von „kumpel“ an (und die Freundschaft dazu)
+    if (p.startsWith("/api/dm")) {
+      const dm = dmAll();
+      (globalThis.__dmCalls ??= []).push(route.request().method() + " " + p + " " + (route.request().postData() || ""));
+      const b = route.request().method() === "POST" ? JSON.parse(route.request().postData() || "{}") : {};
+      const other = (m) => (m.from === "franzerladj" ? m.to : m.from);
+      if (p === "/api/dm") {
+        const by = new Map();
+        for (const m of dm) by.set(other(m), m);
+        const threads = [...by.entries()].map(([w, last]) => ({ with: w, last, unread: dm.filter((m) => m.from === w && !m.read).length })).sort((x, y) => y.last.id - x.last.id);
+        return json({ threads, unread: threads.reduce((n, t) => n + t.unread, 0) });
+      }
+      if (p.startsWith("/api/dm/msg/")) { const id = Number(p.split("/").pop()); dm.splice(0, dm.length, ...dm.filter((m) => m.id !== id)); return json({ ok: true }); }
+      const u = decodeURIComponent(p.split("/")[3]).toLowerCase();
+      if (p.endsWith("/read")) { dm.forEach((m) => { if (m.from === u) m.read = true; }); return json({ ok: true }); }
+      if (route.request().method() === "POST") {
+        const m = { id: Math.max(0, ...dm.map((x) => x.id)) + 1, from: "franzerladj", to: u, kind: b.kind || "text", text: b.text || null, releaseId: b.releaseId || null, title: b.title || null, thumb: b.thumb || null, ts: Date.now(), read: false };
+        dm.push(m);
+        return json({ ok: true, message: m });
+      }
+      return json({ messages: dm.filter((m) => other(m) === u), friends: true });
+    }
     if (p.startsWith("/api/friends")) {
-      const soc = (page.__social ??= { friends: [], in: process.env.FRIENDS ? [{ from: "kumpel", at: Date.now() }] : [], out: [] });
+      const soc = (page.__social ??= { friends: process.env.DM ? ["kumpel"] : [], in: process.env.FRIENDS ? [{ from: "kumpel", at: Date.now() }] : [], out: [] });
       const b = route.request().postDataJSON?.() ?? {};
       if (p === "/api/friends") return json(soc);
       if (p === "/api/friends/request") { if (!soc.out.includes(b.to)) soc.out.push(b.to); return json({ status: "angefragt" }); }

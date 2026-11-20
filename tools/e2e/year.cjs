@@ -6,6 +6,8 @@ const install = require("./mock.cjs");
   for (const scheme of ["dark", "light"]) {
     const ctx = await b.newContext({ ...devices["iPhone 13"], colorScheme: scheme });
     const page = await ctx.newPage();
+    // Der Rückblick erscheint erst am 15. Dezember: die Uhr des Browsers steht deshalb auf dem 20.12.
+    await page.clock.setFixedTime(new Date("2026-12-20T12:00:00"));
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     await install(page);

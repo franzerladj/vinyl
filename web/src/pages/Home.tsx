@@ -14,7 +14,9 @@ import { toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, markHero, useRootClass } from "../components/bits";
 import { DjOverview } from "../components/DjOverview";
 import { computeStylus, hoursText } from "../lib/stylus";
-import { IconCamera, IconCart, IconInfo, IconList, IconPlay, IconSearch, IconTag, IconUser } from "../components/icons";
+import { IconCamera, IconCart, IconChat, IconInfo, IconList, IconPlay, IconRecord, IconSearch, IconSleeves, IconTag, IconUser, IconWave } from "../components/icons";
+import { reviewSeason } from "../../../shared/year";
+import type { ReactNode } from "react";
 
 /** Begrüßung mit DJ-Bezug je nach Tageszeit. Wechselt täglich, damit sie nicht jeden Tag gleich ist. */
 export function greeting(name: string, opts: { setToday?: boolean; now?: Date } = {}) {
@@ -35,7 +37,20 @@ export function greeting(name: string, opts: { setToday?: boolean; now?: Date } 
   return lines[day % lines.length];
 }
 
+/** Werkzeug auf Start: kurze Namen, damit vier nebeneinander auch auf 320 px passen */
+const TOOLS: { to: string; label: string; icon: ReactNode }[] = [
+  { to: "/scan", label: "Scannen", icon: <IconCamera /> },
+  { to: "/stickers", label: "Beschriften", icon: <IconTag /> },
+  { to: "/sets/new", label: "Neues Set", icon: <IconList /> },
+  { to: "/shop", label: "Shop", icon: <IconCart /> },
+  { to: "/labels", label: "Labels", icon: <IconSleeves /> },
+  { to: "/settings/stylus", label: "Nadel", icon: <IconRecord /> },
+  { to: "/dj", label: "Übersicht", icon: <IconWave /> },
+  { to: "/guide", label: "Wissen", icon: <IconInfo /> },
+];
+
 export default function Home() {
+  const season = reviewSeason();
   const stylus = useLiveQuery(() => computeStylus(), []);
   const me = useStore((s) => s.me);
   const jobs = useStore((s) => s.jobs);
@@ -202,6 +217,16 @@ export default function Home() {
                 <span className="chev">›</span>
               </Link>
             )}
+            {(buzz.dm ?? 0) > 0 && (
+              <Link to="/friends" viewTransition className="card row press friend-nudge">
+                <IconChat />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <b>{buzz.dm === 1 ? "Eine neue Nachricht" : `${buzz.dm} neue Nachrichten`}</b>
+                  <span className="sub" style={{ display: "block" }}>Von deinen Freunden</span>
+                </span>
+                <span className="chev">›</span>
+              </Link>
+            )}
             <Link to="/dig" viewTransition className="dig-entry press rise" onClick={() => haptic(10)}>
               <span className="covers">
                 {(stats?.recent ?? []).filter(Boolean).slice(0, 4).map((r) => r && (
@@ -216,6 +241,18 @@ export default function Home() {
                 <IconPlay />
               </span>
             </Link>
+            {/* Werkzeug: gleich unter dem Diggen, damit es nicht untergeht (Franz: „gehen etwas unter“) */}
+            <nav className="tools" aria-label="Werkzeug">
+              {TOOLS.map((t) => (
+                <Link key={t.to} to={t.to} viewTransition className="tool press" onClick={() => haptic(8)}>
+                  <span className="tool-ico">
+                    {t.icon}
+                    {t.to === "/stickers" && stats?.noSticker ? <span className="tool-count">{stats.noSticker > 99 ? "99+" : stats.noSticker}</span> : null}
+                  </span>
+                  <span className="tool-label">{t.label}</span>
+                </Link>
+              ))}
+            </nav>
             <DailyRecord />
             {stats?.recent.length ? (
               <>
@@ -260,11 +297,11 @@ export default function Home() {
           <>
             {/* Nächster Gig: so präsent wie ein Flyer an der Wand */}
             {stats?.nextSet && !gigSoon && <GigCard set={stats.nextSet} covers={stats.gigCovers} records={stats.gigRecords} />}
-            {/* Ab November bis Januar: Jahresrückblick anbieten */}
-            {[10, 11, 0].includes(new Date().getMonth()) && (
-              <Link to="/year" viewTransition className="year-entry press">
+            {/* Jahresrückblick: ab 1. Dezember Vorfreude, ab dem 15. offen, bis Ende Januar */}
+            {season && (
+              <Link to="/year" viewTransition className={`year-entry press${season.state === "soon" ? " soon" : ""}`}>
                 <span className="eyebrow">Dein Jahr auf Platte</span>
-                <b>Rückblick {new Date().getMonth() === 0 ? new Date().getFullYear() - 1 : new Date().getFullYear()}</b>
+                <b>{season.state === "soon" ? (season.days === 1 ? "Morgen ist es da" : `Noch ${season.days} Tage`) : `Rückblick ${season.year}`}</b>
                 <span className="chev">›</span>
               </Link>
             )}
@@ -272,38 +309,6 @@ export default function Home() {
 
             <DjOverview compact />
 
-            <h2 style={{ marginTop: 28 }}>Werkzeug</h2>
-            <div className="grid2" >
-              <Link to="/scan" viewTransition className="widget">
-                <div className="ico">
-                  <IconCamera />
-                </div>
-                <b>Platte scannen</b>
-                <span className="sub">Foto, Barcode oder Katalognr.</span>
-              </Link>
-              <Link to="/shop" viewTransition className="widget">
-                <div className="ico">
-                  <IconCart />
-                </div>
-                <b>Versand sparen</b>
-                <span className="sub">{stats?.listings ? `${stats.listings} Angebote geladen` : "Händler-Optimierer"}</span>
-              </Link>
-              <Link to="/stickers" viewTransition className="widget">
-                <div className="ico">
-                  <IconTag />
-                </div>
-                {stats?.noSticker ? <span className="badge accent count">{stats.noSticker} neu</span> : null}
-                <b>Sticker & Einleger</b>
-                <span className="sub">{stats?.noSticker ? `${stats.noSticker} Platten warten` : "Alles beschriftet"}</span>
-              </Link>
-              <Link to="/sets/new" viewTransition className="widget">
-                <div className="ico">
-                  <IconList />
-                </div>
-                <b>Neues Set</b>
-                <span className="sub">Aus deiner Kiste</span>
-              </Link>
-            </div>
             <Link to="/guide" viewTransition className="guide-entry press">
               <span className="guide-tip-ico">
                 <IconInfo />

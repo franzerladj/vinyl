@@ -1,5 +1,6 @@
 import { SwipeArea } from "../components/Pager";
 import { Activity, ShareSetsSwitch } from "../components/Buzz";
+import { Messages } from "../components/Messages";
 import { refreshBuzz } from "../lib/buzz";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -13,13 +14,14 @@ import { renderProfileCard } from "../lib/shareCard";
 import { getKV } from "../lib/db";
 import type { MyProfile } from "../lib/friends";
 import { loadMyProfile, loadProfile } from "../lib/profile";
-import type { CrateProfile } from "../../../shared/profile";
+import { profileEmpty, type CrateProfile } from "../../../shared/profile";
+import { Hint } from "../components/Welcome";
 import { FriendsHome } from "../components/FriendsHome";
 import { cachedSocial, refreshSocial, requestFriend, respondFriend, unfriend } from "../lib/social";
 import { addFriend, collectionUrl, friendMatches, inviteLink, lentRecords, messageUrl, profileUrl, removeFriend, syncFriend, tasteMatch, type FriendMatch } from "../lib/friends";
 import { ask, toast, useStore } from "../lib/store";
 import { Avatar, Cover, Empty, haptic, RecordRow, Seg, SkeletonRows, useDebounced, DiscogsCredit } from "../components/bits";
-import { IconMore, IconPlus, IconSearch, IconShare, IconSync, IconTrash, IconUser } from "../components/icons";
+import { IconChat, IconMore, IconPlus, IconSearch, IconShare, IconSync, IconTrash, IconUser } from "../components/icons";
 import { matchesQuery } from "../../../shared/textSearch";
 import { MenuSheet, NavBar } from "../components/ui";
 
@@ -74,9 +76,12 @@ function FriendList() {
 
   // Freundschaften: offene Anfragen an dich und von dir
   const social = useLiveQuery(() => cachedSocial(), []);
+  // Eigenes Profil: „?“ = noch nicht geladen (dann keinen Hinweis zeigen)
+  const myProfile = useLiveQuery(() => getKV<CrateProfile | null | "?">("crateProfile:me", "?"), [], "?" as const);
   useEffect(() => {
     void refreshSocial();
     void refreshBuzz();
+    void loadMyProfile();
   }, []);
   const [answering, setAnswering] = useState<string | null>(null);
   const answer = async (from: string, accept: boolean) => {
@@ -146,6 +151,15 @@ function FriendList() {
             </button>
           </div>
         )}
+
+        {myProfile !== "?" && (!myProfile || profileEmpty(myProfile)) && (
+          <Hint id="profile-empty">
+            <b>Dein Profil ist noch leer.</b> DJ-Name, Styles, Setup: in einer Minute gemacht, dann sehen deine Freunde, wer du bist.{" "}
+            <Link to="/settings/profile" viewTransition>Profil machen</Link>
+          </Hint>
+        )}
+
+        <Messages />
 
         <Activity />
 
@@ -331,6 +345,8 @@ type Tab = "hasYourWants" | "wantsYours" | "coll" | "want" | "shared";
 
 function FriendDetail({ u }: { u: string }) {
   const nav = useNavigate();
+  // Nachrichten gehen nur unter Freunden, die sich auf Crate gegenseitig bestätigt haben
+  const onCrate = useLiveQuery(async () => (await cachedSocial()).friends.some((x) => x.toLowerCase() === u.toLowerCase()), [u], false);
   const jobs = useStore((s) => s.jobs);
   // Reiter und Suche bleiben, wenn man eine Platte öffnet und zurückkommt (sonst landet man wieder ganz oben)
   const memo = `crate:friend:${u}`;
@@ -425,9 +441,15 @@ function FriendDetail({ u }: { u: string }) {
           )}
         </ProfileHeader>
         <div className="row" style={{ gap: 8 }}>
-          <a className="btn small primary" href={messageUrl(u)} target="_blank" rel="noreferrer">
-            Nachricht
-          </a>
+          {onCrate ? (
+            <Link className="btn small primary" to={`/chat/${encodeURIComponent(u)}`} viewTransition>
+              <IconChat /> Nachricht
+            </Link>
+          ) : (
+            <a className="btn small primary" href={messageUrl(u)} target="_blank" rel="noreferrer">
+              Nachricht auf Discogs
+            </a>
+          )}
           <a className="btn small" href={collectionUrl(u)} target="_blank" rel="noreferrer">
             Auf Discogs ↗
           </a>

@@ -31,8 +31,8 @@ describe("Gut zu wissen", () => {
       }
     }
     expect(GUIDE.filter((c) => c.practice).length).toBeLessThanOrEqual(3);
-    // Das Auflegen selbst stützt sich auf Digital DJ Tips: jede Karte im Bereich „Mixen“ nennt den Artikel
-    for (const c of GUIDE.filter((x) => x.area === "mixen")) expect(c.sources.some((x) => x.url.startsWith("https://www.digitaldjtips.com/")), c.slug).toBe(true);
+    // Keine Quelle ist Pflicht (auch Digital DJ Tips nicht): jede Karte im Bereich „Mixen“ braucht nur irgendeinen Beleg
+    for (const c of GUIDE.filter((x) => x.area === "mixen")) expect(c.sources.length, c.slug).toBeGreaterThan(0);
   });
 
   it("Verweise zeigen auf Karten und Seiten, die es gibt", () => {

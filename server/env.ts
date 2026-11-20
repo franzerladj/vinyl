@@ -5,6 +5,7 @@ import { memoryKV, type KV, type PushConfig } from "./push";
 import { VAPID_PUBLIC_KEY } from "../shared/pushKey";
 import { d1Store, memoryStore, type D1Like, type SyncStore } from "./devsync";
 import { d1Native, memoryNative, type NativeStore } from "./native";
+import { d1Dm, memoryDm, type DmStore } from "./dm";
 
 /** Minimaler Typ für das Workers-AI-Binding (Cloudflare) */
 export interface AiBinding {
@@ -40,6 +41,10 @@ export const buzzStore = (env: Env): BuzzStore => (env.SYNC ? d1Buzz(env.SYNC) :
 let localNative: NativeStore | null = null;
 /** Mitteilungen für Android-Apps, die selbst abholen: dieselbe D1-Datenbank, sonst Arbeitsspeicher */
 export const nativeStore = (env: Env): NativeStore => (env.SYNC ? d1Native(env.SYNC) : (localNative ??= memoryNative()));
+
+let localDm: DmStore | null = null;
+/** Nachrichten unter Freunden: dieselbe D1-Datenbank, sonst Arbeitsspeicher */
+export const dmStore = (env: Env): DmStore => (env.SYNC ? d1Dm(env.SYNC) : (localDm ??= memoryDm()));
 
 export interface Config {
   appUrl: string;

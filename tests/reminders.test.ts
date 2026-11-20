@@ -62,14 +62,31 @@ describe("Ortszeit des Geräts", () => {
 });
 
 describe("Rückblick und Platte des Tages", () => {
-  it("Jahresrückblick im Dezember, einmal", () => {
+  it("Jahresrückblick erst am 15. Dezember, einmal", () => {
     const rec = base();
     expect(keys(rec, "2026-11-30T12:00:00Z")).toEqual([]);
-    const due = dueReminders(rec, at("2026-12-01T09:30:00Z"));
+    // Vor dem 15. bleibt er eine Überraschung
+    expect(keys(rec, "2026-12-14T12:00:00Z")).toEqual([]);
+    expect(keys(rec, "2026-12-15T08:00:00Z")).toEqual([]);
+    const due = dueReminders(rec, at("2026-12-15T09:30:00Z"));
     expect(due.map((d) => [d.key, d.kind, d.msg.url])).toEqual([["year-2026", "tips", "/year"]]);
-    expect(keys({ ...rec, sent: { "year-2026": 1 } }, "2026-12-05T12:00:00Z")).toEqual([]);
+    expect(due[0].msg.title).toBe("Dein Jahr auf Platte ist da");
+    expect(keys({ ...rec, sent: { "year-2026": 1 } }, "2026-12-20T12:00:00Z")).toEqual([]);
+    // Wer Mitteilungen erst später einschaltet, bekommt ihn im Dezember noch
+    expect(keys(rec, "2026-12-28T12:00:00Z")).toEqual(["year-2026"]);
     // Im nächsten Jahr wieder
-    expect(keys({ ...rec, sent: { "year-2026": 1 } }, "2027-12-02T12:00:00Z")).toEqual(["year-2027"]);
+    expect(keys({ ...rec, sent: { "year-2026": 1 } }, "2027-12-16T12:00:00Z")).toEqual(["year-2027"]);
+  });
+  it("Profil noch leer: erst nach der Frist, am Abend, und nur solange vorgemerkt", () => {
+    const due = at("2026-11-20T00:00:00Z");
+    const rec = base({ profileNudge: due });
+    expect(keys({ ...rec, profileNudge: at("2026-11-25T00:00:00Z") }, "2026-11-22T18:00:00Z")).toEqual([]);
+    expect(keys(rec, "2026-11-22T10:00:00Z")).toEqual([]);
+    const d = dueReminders(rec, at("2026-11-22T17:30:00Z"));
+    expect(d.map((x) => [x.key, x.kind, x.msg.url])).toEqual([["profile", "tips", "/settings/profile"]]);
+    // Erledigt (Profil angelegt oder schon erinnert) oder nie geprüft: nichts
+    expect(keys({ ...rec, profileNudge: 0 }, "2026-11-22T18:00:00Z")).toEqual([]);
+    expect(keys(base(), "2026-11-22T18:00:00Z")).toEqual([]);
   });
   it("Platte des Tages nur für den, der sie eingeschaltet hat, am Vormittag", () => {
     const daily = [{ d: "2026-11-21", id: 5, t: "Sound Sculptures", a: "Theo Parrish", why: "Heute vor 3 Jahren gekauft" }];

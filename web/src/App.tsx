@@ -76,6 +76,7 @@ const SetEditor = page(() => import("./pages/SetEditor"));
 const SharedSetPage = page(() => import("./pages/SharedSetPage"));
 const Stickers = page(() => import("./pages/Stickers"));
 const Settings = page(() => import("./pages/Settings"));
+const Chat = page(() => import("./pages/Chat"));
 const Friends = page(() => import("./pages/Friends"));
 const Dig = page(() => import("./pages/Dig"));
 const GetApp = page(() => import("./pages/GetApp"));
@@ -112,6 +113,7 @@ export const routes: RouteObject[] = [
   { path: "settings/:section", element: <Settings /> },
   { path: "friends", element: <Friends /> },
   { path: "friends/:username", element: <Friends /> },
+  { path: "chat/:username", element: <Chat /> },
   { path: "app", element: <GetApp /> },
   { path: "impressum", element: <Impressum /> },
   { path: "datenschutz", element: <Datenschutz /> },
@@ -315,6 +317,7 @@ async function startupSync() {
     if ((e.data as { type?: string } | null)?.type !== "crate-push") return;
     void import("./lib/social").then((m) => m.refreshSocial()).catch(() => undefined);
     void import("./lib/buzz").then((m) => m.refreshBuzz()).catch(() => undefined);
+    void import("./lib/dm").then((m) => m.refreshThreads()).catch(() => undefined);
   });
   // Versehentliches Neuladen während eines Syncs: Browser fragt nach
   window.addEventListener("beforeunload", (e) => {
@@ -620,7 +623,7 @@ export default function App() {
             <a
               key={id}
               href={root}
-              className={[activeTab === id ? "active" : "", id === "friends" && (social?.in.length || buzz.unread) ? "has-dot" : ""].filter(Boolean).join(" ") || undefined}
+              className={[activeTab === id ? "active" : "", id === "friends" && (social?.in.length || buzz.unread || buzz.dm) ? "has-dot" : ""].filter(Boolean).join(" ") || undefined}
               aria-current={activeTab === id ? "page" : undefined}
               onClick={(e) => {
                 e.preventDefault();

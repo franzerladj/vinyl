@@ -12,7 +12,9 @@ import { lastfmTags } from "./lastfm";
 import { profileEmpty, sanitizeProfile, type CrateProfile } from "../shared/profile";
 import { buildIcs } from "../shared/ics";
 import { pushOps } from "./devsync";
-import { buzzStore, nativeStore, syncStore } from "./env";
+import { buzzStore, dmStore, nativeStore, syncStore } from "./env";
+import { DM_KINDS, dmNotice, type DmKind } from "./dm";
+import { discogsImage } from "../shared/ownPost";
 import { APK } from "../shared/appVersion";
 import { cleanText, validPost } from "./buzz";
 import { cleanOwnPost, validRef } from "../shared/ownPost";
@@ -524,6 +526,12 @@ app.post("/api/push/sync", async (c) => {
       .filter((x) => x && /^\d{4}-\d\d-\d\d$/.test(String(x.d)) && Number(x.id) > 0)
       .map((x) => ({ d: String(x.d), id: Number(x.id), t: cleanText(String(x.t ?? ""), 120), a: cleanText(String(x.a ?? ""), 80), ...(x.why ? { why: cleanText(String(x.why), 80) } : {}) }));
   if (body.currency) rec.currency = body.currency.slice(0, 3);
+  // Erinnerung ans Profil: einmal vormerken (drei Tage Frist), erledigt, sobald es ein Profil gibt
+  if (rec.profileNudge !== 0) {
+    const has = Boolean(await cfg.kv.get(`prof:${s.username.toLowerCase()}`));
+    if (has) rec.profileNudge = 0;
+    else rec.profileNudge ??= Date.now() + 3 * 86_400_000;
+  }
   await saveUser(cfg.kv, s.username, rec);
   return c.json({ ok: true, wants: rec.wants.length });
 });
@@ -790,6 +798,7 @@ async function runUser(cfg: Config, u: string, budget: number) {
     budget -= rec.subs.length;
     await notifyUser(cfg.kv, cfg.push, u, rec, d.kind, d.msg);
     rec.sent[d.key] = Date.now();
+    if (d.key === "profile") rec.profileNudge = 0;
     changed = true;
   }
   // Update-Mitteilung: jeder bekommt sie genau einmal, unabhängig von den gewählten Arten
@@ -964,8 +973,8 @@ app.get("/api/buzz", async (c) => {
   if (!b) return c.json({ message: "nicht angemeldet" }, 401);
   c.header("Cache-Control", "no-store");
   const since = Date.now() - BUZZ_DAYS * 86_400_000;
-  const [posts, inbox] = await Promise.all([b.store.forOwners([b.me, ...b.friends].slice(0, 400), since), b.store.inbox(b.me, 60)]);
-  return c.json({ ...posts, inbox, unread: inbox.filter((i) => !i.read).length });
+  const [posts, inbox, dm] = await Promise.all([b.store.forOwners([b.me, ...b.friends].slice(0, 400), since), b.store.inbox(b.me, 60), dmStore(c.env ?? {}).unread(b.me).catch(() => 0)]);
+  return c.json({ ...posts, inbox, unread: inbox.filter((i) => !i.read).length, dm });
 });
 
 app.post("/api/buzz/react", async (c) => {
@@ -1030,6 +1039,70 @@ app.post("/api/buzz/recommend", async (c) => {
   return c.json({ ok: true });
 });
 
+// ---------- Nachrichten unter Freunden, Leihanfrage ----------
+// Wie alles Soziale: nur bestätigte Sitzung, nur unter Freunden. Lesen darf man alte Unterhaltungen auch,
+// wenn die Freundschaft endet; schreiben nicht mehr.
+const DM_PER_HOUR = 120;
+app.get("/api/dm", async (c) => {
+  const b = await buzzContext(c);
+  if (!b) return c.json({ message: "nicht angemeldet" }, 401);
+  c.header("Cache-Control", "no-store");
+  const threads = await dmStore(c.env ?? {}).threads(b.me);
+  return c.json({ threads, unread: threads.reduce((n, t) => n + t.unread, 0) });
+});
+app.get("/api/dm/:u", async (c) => {
+  const b = await buzzContext(c);
+  if (!b) return c.json({ message: "nicht angemeldet" }, 401);
+  const u = c.req.param("u");
+  if (!validName(u)) return c.json({ message: "ungültig" }, 400);
+  c.header("Cache-Control", "no-store");
+  const before = Number(c.req.query("before")) || undefined;
+  const messages = await dmStore(c.env ?? {}).thread(b.me, low(u), 80, before);
+  return c.json({ messages, friends: b.friends.includes(low(u)) });
+});
+app.post("/api/dm/:u/read", async (c) => {
+  const b = await buzzContext(c);
+  if (!b) return c.json({ message: "nicht angemeldet" }, 401);
+  const u = c.req.param("u");
+  if (!validName(u)) return c.json({ message: "ungültig" }, 400);
+  await dmStore(c.env ?? {}).markRead(b.me, low(u));
+  return c.json({ ok: true });
+});
+app.post("/api/dm/:u", async (c) => {
+  const b = await buzzContext(c);
+  if (!b) return c.json({ message: "nicht angemeldet" }, 401);
+  const u = c.req.param("u");
+  if (!validName(u)) return c.json({ message: "ungültig" }, 400);
+  const to = low(u);
+  if (to === b.me) return c.json({ message: "ungültig" }, 400);
+  if (!b.friends.includes(to)) return c.json({ message: "Nur unter Freunden" }, 403);
+  const j = ((await c.req.json().catch(() => null)) ?? {}) as { kind?: unknown; text?: unknown; releaseId?: unknown; title?: unknown; thumb?: unknown };
+  const kind: DmKind = DM_KINDS.includes(j.kind as DmKind) ? (j.kind as DmKind) : "text";
+  const text = cleanText(j.text, 600) || null;
+  const releaseId = Number.isInteger(Number(j.releaseId)) && Number(j.releaseId) > 0 ? Number(j.releaseId) : null;
+  const title = cleanText(j.title, 140) || null;
+  // Leihanfrage und Antwort brauchen die Platte, eine einfache Nachricht braucht Text oder eine Platte
+  if (kind !== "text" && (!releaseId || !title)) return c.json({ message: "ungültig" }, 400);
+  if (kind === "text" && !text && !releaseId) return c.json({ message: "ungültig" }, 400);
+  const store = dmStore(c.env ?? {});
+  if ((await store.sentSince(b.me, Date.now() - 3_600_000)) >= DM_PER_HOUR) return c.json({ message: "Kurz durchatmen: zu viele Nachrichten in einer Stunde." }, 429);
+  const m = { from: b.me, to, kind, text, releaseId, title: releaseId ? title : null, thumb: releaseId ? (discogsImage(j.thumb) ?? null) : null, ts: Date.now() };
+  const id = await store.send(m);
+  const n = dmNotice(b.name, m);
+  await tellFriend(c.var.cfg, to, { ...n, url: `/chat/${encodeURIComponent(b.name)}`, tag: `dm-${b.me}` });
+  return c.json({ ok: true, message: { ...m, id, read: false } });
+});
+app.delete("/api/dm/msg/:id", async (c) => {
+  const b = await buzzContext(c);
+  if (!b) return c.json({ message: "nicht angemeldet" }, 401);
+  const store = dmStore(c.env ?? {});
+  const m = await store.get(Number(c.req.param("id")));
+  // Nur die eigene Nachricht
+  if (!m || m.from !== b.me) return c.json({ message: "nicht gefunden" }, 404);
+  await store.remove(m.id);
+  return c.json({ ok: true });
+});
+
 // Eigener Beitrag im Feed der Freunde: Set gespielt, Platte des Moments
 app.post("/api/buzz/post", async (c) => {
   const b = await buzzContext(c);
@@ -1090,6 +1163,7 @@ app.delete("/api/me", async (c) => {
   await cfg.kv.delete(socKey(u));
   await syncStore(c.env ?? {}).clear(u);
   await buzzStore(c.env ?? {}).clear(u);
+  await dmStore(c.env ?? {}).clear(u.toLowerCase());
   await nativeStore(c.env ?? {}).clear(u);
   deleteCookie(c, SESSION, { path: "/" });
   return c.json({ ok: true });
