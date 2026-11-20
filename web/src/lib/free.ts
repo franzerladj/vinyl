@@ -88,11 +88,18 @@ export function analyzeOffThread(samples: Float32Array, sr: number, hints: Analy
 export const previewUrl = (artist: string, title: string, duration?: number | null) =>
   `/api/audio/preview?artist=${encodeURIComponent(artist)}&title=${encodeURIComponent(title)}${duration ? `&duration=${duration}` : ""}`;
 
+/** Der Server kommt gerade nicht an die Hörproben (Deezer ausgelastet) */
+export class PreviewBusy extends Error {}
+/** Bis dahin ruht das Messen, statt Track für Track gegen die Wand zu laufen */
+let busyUntil = 0;
+
 export async function analyzePreview(artist: string, title: string, duration?: number | null, deezerId?: number | null, hints: AnalysisHints = {}): Promise<AudioAnalysis | null> {
   // Mit Zeitlimit: eine hängende Hörprobe hielte sonst die ganze Messung an
   const res = await fetchWithTimeout(deezerId ? `/api/audio/preview/${deezerId}` : previewUrl(artist, title, duration), { credentials: "include" }, 30_000);
   // 404 = keine passende Hörprobe (endgültig); andere Fehler = später nochmal versuchen
   if (res.status === 404) return null;
+  // 503/429 = Deezer bremst gerade: kein Fehlversuch für diesen Track, die Messung macht eine Pause
+  if (res.status === 503 || res.status === 429) throw new PreviewBusy();
   if (!res.ok) throw new Error(`Hörprobe ${res.status}`);
   const buf = await res.arrayBuffer();
   const sr = 22050;
@@ -143,6 +150,8 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
   // Gibt es zu einem Track keine Hörprobe, ist das gemerkt (noPreviewAt): sonst wurde er bei jedem Öffnen der App
   // erneut gesucht, und das trifft mehr als die Hälfte aller Tracks. Nach einem Vierteljahr darf er nochmal.
   const wantsMeasure = (t: TrackMeta) => opts.audio && (t.analyzeTries ?? 0) < 3 && !noPreview(t) && (!t.analyzedAt || (t.measuredBpm === undefined && !isManualTempo(t)));
+  // Deezer hat eben gebremst: diese Runde auslassen (die nächste kommt von selbst), außer man hat es selbst angestoßen
+  if (!trackIds && Date.now() < busyUntil) return 0;
   const todo = all
     .filter((t) => (trackIds || collIds.has(t.releaseId)) && (opts.measureOnly ? wantsMeasure(t) : opts.refresh || t.energy == null || wantsMeasure(t)))
     // Unsichere zuerst, dann die mit nur einer Quelle
@@ -158,6 +167,8 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
     let done = 0;
     // Zwei Tracks gleichzeitig: Download und Analyse überlappen sich
     await pool(todo, 2, async (t) => {
+      // Deezer bremst: den Rest dieser Runde stehen lassen, nichts als „keine Hörprobe“ oder Fehlversuch merken
+      if (Date.now() < busyUntil) return;
       const patch: Partial<TrackMeta> = {};
       let analysis: AudioAnalysis | null = null;
       if (wantsMeasure(t)) {
@@ -169,6 +180,10 @@ export async function enrichFree(trackIds: string[] | undefined, opts: FreeOptio
           const expectedBpm = rangeCenter(styles) ?? estimateBpm(styles, siblings);
           analysis = await analyzePreview(t.artist, t.title, durationOf(t), t.deezerId, { expectedBpm });
         } catch (e) {
+          if (e instanceof PreviewBusy) {
+            busyUntil = Date.now() + 60_000;
+            return;
+          }
           failed = true;
           console.warn("Analyse", t.id, e);
         }

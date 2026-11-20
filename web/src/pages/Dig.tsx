@@ -254,9 +254,35 @@ export default function Dig() {
       stop();
       setAudioState((s) => (s === "none" ? s : "paused"));
     };
+    // Fehler beim Laden: einmal kurz warten und nochmal (der Server meldet „gerade ausgelastet“ genauso wie
+    // „gibt es nicht“, das Audio-Element sieht den Unterschied nicht). Erst der zweite Fehler heißt „keine Hörprobe“.
+    let retried = "";
+    let tries = 0;
+    let again: ReturnType<typeof setTimeout> | undefined;
     const err = () => {
       stop();
-      setAudioState("none");
+      const src = a.src;
+      if (retried !== src) tries = 0;
+      // Zwei weitere Anläufe je Hörprobe, dann gilt sie als nicht ladbar
+      if (!src || ++tries > 2) return setAudioState("none");
+      retried = src;
+      setAudioState("loading");
+      // Beim Server nachfragen, was los ist: 404 = gibt es nicht, 503 = Deezer bremst gerade, 204 = liegt jetzt bereit
+      void fetch(`${src}&warm=1`)
+        .then((r) => r.status, () => 0)
+        .then((status) => {
+          if (a.src !== src) return;
+          if (status === 404) return setAudioState("none");
+          clearTimeout(again);
+          again = setTimeout(
+            () => {
+              if (a.src !== src) return;
+              a.load();
+              a.play().catch(() => setAudioState((s) => (s === "loading" ? "paused" : s)));
+            },
+            status === 204 ? 0 : 1500,
+          );
+        });
     };
     a.addEventListener("playing", on);
     a.addEventListener("pause", off);
@@ -265,6 +291,7 @@ export default function Dig() {
       a.removeEventListener("playing", on);
       a.removeEventListener("pause", off);
       a.removeEventListener("error", err);
+      clearTimeout(again);
       a.pause();
     };
   }, []);

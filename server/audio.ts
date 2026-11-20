@@ -13,23 +13,54 @@ export interface AudioInfo {
 
 const clean = (s: string) => s.replace(/\(.*?\)|\[.*?\]/g, "").replace(/\s+/g, " ").trim();
 
+/** Deezer war gerade nicht zu erreichen oder hat „zu viele Anfragen“ gemeldet: später nochmal, nichts merken */
+export class DeezerBusy extends Error {
+  constructor() {
+    super("Deezer ist gerade ausgelastet");
+  }
+}
+
+/**
+ * Eine Anfrage an Deezer. Wichtig: „zu viele Anfragen“ meldet Deezer mit Status 200 und einem error-Objekt
+ * (Code 4, höchstens 50 Anfragen in 5 Sekunden je Adresse, und Cloudflare teilt sich Adressen mit anderen).
+ * Das darf nie als „nichts gefunden“ gelten: sonst hieß es bei schnellem Wischen „keine Hörprobe“, und das
+ * wurde auch noch eine Stunde lang gemerkt. Deshalb kurz warten und nochmal, sonst DeezerBusy.
+ * Code 800 heißt wirklich „gibt es nicht“.
+ */
+async function dz<T>(url: string, tries = 3): Promise<T | null> {
+  for (let i = 0; ; i++) {
+    try {
+      const r = await fetch(url);
+      if (r.ok) {
+        const j = (await r.json()) as T & { error?: { code?: number } };
+        if (!j?.error) return j;
+        if (j.error.code === 800) return null;
+      }
+    } catch {
+      /* Netzfehler: wie ausgelastet behandeln */
+    }
+    if (i >= tries - 1) throw new DeezerBusy();
+    await new Promise((res) => setTimeout(res, 300 * (i + 1) + Math.random() * 200));
+  }
+}
+
 export async function deezer(artist: string, title: string, duration?: number | null, opts: { light?: boolean } = {}): Promise<(Partial<AudioInfo> & { id?: number; matchedTitle?: string; score?: number }) | null> {
   type Hit = { id: number; title: string; title_version?: string; duration?: number; preview?: string; artist?: { name: string } };
-  const search = async (q: string) => {
-    const res = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=10`);
-    return res.ok ? (((await res.json()) as { data?: Hit[] }).data ?? []) : [];
-  };
+  const search = async (q: string) => (await dz<{ data?: Hit[] }>(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=10`))?.data ?? [];
   // Treffer aus exakter und freier Suche sammeln, dann den Mix wählen, der wirklich passt
   // (Titel inkl. Mix-Name in Klammern, Artist und Länge laut Discogs)
   const seen = new Map<number, Hit>();
   const titles = searchTitles(title);
   const queries = [`artist:"${clean(artist)}" track:"${clean(title)}"`, `${artist} ${title}`, `${clean(artist)} ${titles.at(-1) ?? title}`];
   const tried = new Set<string>();
+  // Ist eine Suche ausgefallen, ist „nichts gefunden“ keine sichere Aussage
+  let failed = false;
   // Alle Suchen einer Runde gleichzeitig (vorher nacheinander: das kostete je Hörprobe über eine Sekunde)
   const run = async (qs: string[]) => {
     const fresh = [...new Set(qs)].filter((q) => !tried.has(q) && q.trim().length >= 3);
     fresh.forEach((q) => tried.add(q));
-    for (const hits of await Promise.all(fresh.map((q) => search(q).catch(() => [] as Hit[])))) for (const h of hits) seen.set(h.id, h);
+    const res = await Promise.all(fresh.map((q) => search(q).catch(() => ((failed = true), [] as Hit[]))));
+    for (const hits of res) for (const h of hits) seen.set(h.id, h);
   };
   const pick = () => {
     let b: { h: Hit; s: number } | null = null;
@@ -40,8 +71,13 @@ export async function deezer(artist: string, title: string, duration?: number | 
     }
     return b;
   };
-  await run(queries);
+  // Erst die beiden treffsichersten Suchen. Passt schon etwas gut, spart das die dritte (Deezer zählt jede Anfrage).
+  await run(queries.slice(0, 2));
   let best = pick();
+  if (!best || best.s < 0.8) {
+    await run(queries.slice(2));
+    best = pick();
+  }
   if (!best || best.s < 0.55) {
     // Nichts Passendes: bei mehreren Artists („A & B“, „A feat. B“) führt Deezer oft nur einen. Dann je Artist
     // mit dem bloßen Titel suchen (ohne Klammern und ohne „feat. …“). Nur in diesem Fall, das spart Anfragen.
@@ -50,10 +86,13 @@ export async function deezer(artist: string, title: string, duration?: number | 
     await run([...names.slice(0, 2).map((n) => `${n} ${bare}`), `${clean(artist)} ${bare}`]);
     best = pick();
   }
-  if (!best || best.s < 0.55) return null;
+  if (!best || best.s < 0.55) {
+    if (failed) throw new DeezerBusy();
+    return null;
+  }
   const hit = best.h;
   // Nur für die Hörprobe (light) reicht der Suchtreffer: das Tempo steht erst in den Track-Details
-  const track = opts.light && hit.preview ? ({ preview: hit.preview } as { bpm?: number; preview?: string }) : ((await (await fetch(`https://api.deezer.com/track/${hit.id}`)).json()) as { bpm?: number; preview?: string });
+  const track = opts.light && hit.preview ? ({ preview: hit.preview } as { bpm?: number; preview?: string }) : ((await dz<{ bpm?: number; preview?: string }>(`https://api.deezer.com/track/${hit.id}`)) ?? {});
   return {
     id: hit.id,
     bpm: track.bpm && track.bpm > 0 ? Math.round(track.bpm) : null,
@@ -64,7 +103,8 @@ export async function deezer(artist: string, title: string, duration?: number | 
 }
 
 export async function lookupAudio(_config: Config, artist: string, title: string, duration?: number | null): Promise<AudioInfo> {
-  const ds = await deezer(artist, title, duration).catch(() => null);
+  // DeezerBusy geht durch bis zur Route (503): „kein Tempo“ darf nur gemerkt werden, wenn wirklich gesucht wurde
+  const ds = await deezer(artist, title, duration);
   return { bpm: ds?.bpm ?? null, key: null, source: ds?.bpm ? ["Deezer"] : [], previewUrl: ds?.previewUrl ?? null, matched: ds?.matchedTitle ?? null };
 }
 
@@ -81,7 +121,8 @@ const edgeCache = (): Cache | null => {
   const c = (globalThis as { caches?: { default?: Cache } }).caches?.default;
   return c ?? null;
 };
-const memoUrl = (key: string) => `https://memo.crate.invalid/dz/${encodeURIComponent(key)}`;
+// „dz2“: frühere Einträge konnten falsche Fehlanzeigen enthalten (Deezer ausgelastet = „keine Hörprobe“)
+const memoUrl = (key: string) => `https://memo.crate.invalid/dz2/${encodeURIComponent(key)}`;
 async function memoGet(key: string): Promise<number | undefined> {
   const m = memo.get(key);
   if (m && m.until > Date.now()) return m.id;
@@ -108,27 +149,63 @@ async function memoSet(key: string, id: number) {
   }
 }
 
-async function streamPreview(url: string | null | undefined): Promise<Response> {
-  if (!url || !/^https:\/\/[a-z0-9-]+\.dzcdn\.net\//.test(url)) return new Response("Keine Hörprobe", { status: 404 });
-  const r = await fetch(url);
-  if (!r.ok || !r.body) return new Response("Hörprobe nicht ladbar", { status: 502 });
-  return new Response(r.body, { headers: { "Content-Type": r.headers.get("Content-Type") ?? "audio/mpeg", "Cache-Control": "private, max-age=3600" } });
+const busy = () => new Response("Deezer ist gerade ausgelastet", { status: 503, headers: { "Retry-After": "3", "Cache-Control": "no-store" } });
+const none = () => new Response("Keine Hörprobe", { status: 404 });
+const audioKey = (id: number) => `https://memo.crate.invalid/dzaudio/${id}`;
+const audioOut = (body: BodyInit | null, type: string | null) => new Response(body, { headers: { "Content-Type": type ?? "audio/mpeg", "Cache-Control": "private, max-age=3600" } });
+
+/** Liegt die Hörprobe noch im Zwischenspeicher (10 Minuten)? Dann braucht es Deezer gar nicht. */
+async function cachedAudio(id: number): Promise<Response | null> {
+  try {
+    const hit = await edgeCache()?.match(audioKey(id));
+    return hit ? audioOut(hit.body, hit.headers.get("Content-Type")) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Hörprobe von Deezers Auslieferung holen und kurz zwischenspeichern. Der Browser fragt dieselbe Hörprobe oft
+ * mehrmals an (Anfang, dann Abschnitte), und beim Diggen wird sie für die nächste Karte vorbereitet: ohne
+ * Zwischenspeicher kostete jede dieser Anfragen wieder eine Anfrage bei Deezer.
+ */
+async function loadAudio(id: number | undefined, url: string | null | undefined): Promise<Response> {
+  if (!url || !/^https:\/\/[a-z0-9-]+\.dzcdn\.net\//.test(url)) return none();
+  const r = await fetch(url).catch(() => null);
+  if (!r?.ok) return new Response("Hörprobe nicht ladbar", { status: 502, headers: { "Cache-Control": "no-store" } });
+  const type = r.headers.get("Content-Type");
+  const buf = await r.arrayBuffer();
+  if (id) {
+    try {
+      await edgeCache()?.put(audioKey(id), new Response(buf, { headers: { "Content-Type": type ?? "audio/mpeg", "Cache-Control": "public, max-age=600" } }));
+    } catch {
+      /* ohne Zwischenspeicher geht es auch */
+    }
+  }
+  return audioOut(buf, type);
 }
 
 /**
  * Hörprobe von Deezer durchreichen (für die Analyse im Browser, dort fehlen CORS-Header).
- * warm: nur suchen und merken, nichts ausliefern (bereitet die nächste Karte beim Diggen vor).
+ * warm: suchen, merken und die Hörprobe bereitlegen, aber nichts ausliefern (nächste Karte beim Diggen).
+ * 404 = es gibt keine (darf gemerkt werden). 503 = Deezer war ausgelastet (gleich nochmal versuchen, nichts merken).
  */
 export async function fetchPreview(artist: string, title: string, duration?: number | null, warm = false): Promise<Response> {
   const key = `${artist}|${title}|${duration ? Math.round(duration / 5) : ""}`.toLowerCase();
+  const done = (r: Response) => (warm ? new Response(null, { status: r.ok ? 204 : r.status, headers: { "Cache-Control": "no-store" } }) : r);
   const known = await memoGet(key);
-  if (known === 0) return new Response("Keine Hörprobe", { status: 404 });
-  if (known) return warm ? new Response(null, { status: 204 }) : fetchPreviewById(known);
-  const d = await deezer(artist, title, duration, { light: true });
+  if (known === 0) return none();
+  if (known) return done(await fetchPreviewById(known));
+  let d: Awaited<ReturnType<typeof deezer>>;
+  try {
+    d = await deezer(artist, title, duration, { light: true });
+  } catch {
+    return busy();
+  }
   const ok = Boolean(d?.id && d.previewUrl);
   await memoSet(key, ok ? d!.id! : 0);
-  if (!ok) return new Response("Keine Hörprobe", { status: 404 });
-  return warm ? new Response(null, { status: 204 }) : streamPreview(d!.previewUrl);
+  if (!ok) return none();
+  return done(await loadAudio(d!.id, d!.previewUrl));
 }
 
 // ---------------------------------------------------------------------------
@@ -152,10 +229,8 @@ type DzAlbum = { id: number; title: string; artist?: { name: string }; nb_tracks
 type DzTrack = { id: number; title: string; title_version?: string; duration?: number; artist?: { name: string } };
 
 export async function matchRelease(artist: string, title: string, tracks: ReleaseTrackIn[]): Promise<{ album: string | null; matches: Record<string, ReleaseTrackOut> }> {
-  const get = async <T>(url: string): Promise<T | null> => {
-    const r = await fetch(url);
-    return r.ok ? ((await r.json()) as T) : null;
-  };
+  // Ausgelastet (DeezerBusy) geht durch bis zur Route: sonst gälte die Platte als „nicht bei Deezer“
+  const get = <T>(url: string): Promise<T | null> => dz<T>(url);
   const q = async (s: string) => (await get<{ data?: DzAlbum[] }>(`https://api.deezer.com/search/album?q=${encodeURIComponent(s)}&limit=6`))?.data ?? [];
   const titles = searchTitles(title);
   const cleanTitle = titles[0] ?? title;
@@ -200,7 +275,8 @@ export async function matchRelease(artist: string, title: string, tracks: Releas
     chosen.push(p);
   }
   // BPM steht nur in den Track-Details (Cloudflare erlaubt ~50 Unteranfragen, daher begrenzt)
-  const details = await Promise.all(chosen.slice(0, 40).map((p) => get<{ bpm?: number }>(`https://api.deezer.com/track/${p.t.id}`)));
+  // Fehlt nur ein Tempo, weil Deezer gerade bremst, bleibt die Zuordnung trotzdem gültig
+  const details = await Promise.all(chosen.slice(0, 40).map((p) => get<{ bpm?: number }>(`https://api.deezer.com/track/${p.t.id}`).catch(() => null)));
   const matches: Record<string, ReleaseTrackOut> = {};
   chosen.slice(0, 40).forEach((p, i) => {
     const bpm = details[i]?.bpm;
@@ -211,11 +287,14 @@ export async function matchRelease(artist: string, title: string, tracks: Releas
 
 /** Hörprobe zu einer bekannten Deezer-Track-ID (frische, signierte URL von Deezer) */
 export async function fetchPreviewById(id: number): Promise<Response> {
-  const r = await fetch(`https://api.deezer.com/track/${id}`);
-  const t = r.ok ? ((await r.json()) as { preview?: string }) : null;
-  const url = t?.preview;
-  if (!url || !/^https:\/\/[a-z0-9-]+\.dzcdn\.net\//.test(url)) return new Response("Keine Hörprobe", { status: 404 });
-  const a = await fetch(url);
-  if (!a.ok || !a.body) return new Response("Hörprobe nicht ladbar", { status: 502 });
-  return new Response(a.body, { headers: { "Content-Type": a.headers.get("Content-Type") ?? "audio/mpeg", "Cache-Control": "private, max-age=3600" } });
+  if (!Number.isInteger(id) || id <= 0) return none();
+  const cached = await cachedAudio(id);
+  if (cached) return cached;
+  let t: { preview?: string } | null;
+  try {
+    t = await dz<{ preview?: string }>(`https://api.deezer.com/track/${id}`);
+  } catch {
+    return busy();
+  }
+  return loadAudio(id, t?.preview);
 }

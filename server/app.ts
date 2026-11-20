@@ -7,7 +7,7 @@ import { authHeaders, authorizeUrl, discogsFetch, DiscogsBusy, getAccessToken, g
 import { ALL_KINDS, bundle, currentSlot, deviceCount, dueReminders, isPushEndpoint, loadUser, pickWants, notifyUser, saveUser, sendNative, sendPush, userKey, wantChange, type Message, type PushSub, type Stat, type UserRec, type WatchedWant } from "./push";
 import { oauthHmacHeader, oauthHmacParams } from "./oauthSign";
 import { recognizeRecordFree, tagVibesFree, type VibeInput } from "./ai";
-import { fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
+import { DeezerBusy, fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
 import { lastfmTags } from "./lastfm";
 import { profileEmpty, sanitizeProfile, type CrateProfile } from "../shared/profile";
 import { buildIcs } from "../shared/ics";
@@ -349,16 +349,32 @@ for (const p of ["/api/audio/lookup", "/api/audio/release", "/api/lastfm/*"]) {
   });
 }
 
+/** Deezer bremst gerade: 503, damit das Gerät nichts als „nicht gefunden“ merkt und es später nochmal versucht */
+const deezerBusy = (c: C) => {
+  c.header("Retry-After", "5");
+  return c.json({ message: "Deezer ist gerade ausgelastet" }, 503);
+};
+
 app.get("/api/audio/lookup", async (c) => {
   const title = c.req.query("title") ?? "";
   if (!title) return c.json({ message: "title fehlt" }, 400);
-  return c.json(await lookupAudio(c.var.cfg, c.req.query("artist") ?? "", title, Number(c.req.query("duration")) || null));
+  try {
+    return c.json(await lookupAudio(c.var.cfg, c.req.query("artist") ?? "", title, Number(c.req.query("duration")) || null));
+  } catch (e) {
+    if (e instanceof DeezerBusy) return deezerBusy(c);
+    throw e;
+  }
 });
 
 app.post("/api/audio/release", async (c) => {
   const { artist, title, tracks } = await c.req.json<{ artist: string; title: string; tracks: ReleaseTrackIn[] }>();
   if (!title || !Array.isArray(tracks)) return c.json({ message: "title und tracks nötig" }, 400);
-  return c.json(await matchRelease(artist ?? "", title, tracks.slice(0, 40)));
+  try {
+    return c.json(await matchRelease(artist ?? "", title, tracks.slice(0, 40)));
+  } catch (e) {
+    if (e instanceof DeezerBusy) return deezerBusy(c);
+    throw e;
+  }
 });
 
 app.get("/api/audio/preview/:id", (c) => fetchPreviewById(Number(c.req.param("id"))));

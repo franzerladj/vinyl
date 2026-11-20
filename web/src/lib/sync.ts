@@ -225,8 +225,12 @@ export async function lookupAudioFor(trackIds?: string[]) {
   jobUpdate(job, { label: "Tempo nachschlagen", done: 0, total: todo.length });
   let found = 0;
   let done = 0;
+  // Deezer bremst (503): Rest der Runde stehen lassen. Nichts als „nicht gefunden“ merken, kein Fehlversuch.
+  let busy = false;
+  const isBusy = (e: unknown) => e instanceof ApiError && (e.status === 503 || e.status === 429);
   try {
     await pool([...byRelease.entries()], 3, async ([rid, tracks]) => {
+      if (busy) return;
       const r = rels.get(rid);
       const rest: TrackMeta[] = [];
       // 1. Album-Zuordnung
@@ -255,6 +259,10 @@ export async function lookupAudioFor(trackIds?: string[]) {
             await autoUpdateTrack(t.id, patch);
           }
         } catch (e) {
+          if (isBusy(e)) {
+            busy = true;
+            return;
+          }
           console.warn("Album", rid, e);
           rest.push(...tracks);
         }
@@ -262,6 +270,7 @@ export async function lookupAudioFor(trackIds?: string[]) {
       jobUpdate(job, { done });
       // 2. Einzeln suchen
       for (const t of rest) {
+        if (busy) return;
         try {
           const dur = parseDuration(durations.get(t.id));
           const info = await api<AudioInfo>(`/api/audio/lookup?artist=${encodeURIComponent(t.artist)}&title=${encodeURIComponent(t.title)}${dur ? `&duration=${dur}` : ""}`);
@@ -281,6 +290,10 @@ export async function lookupAudioFor(trackIds?: string[]) {
         } catch (e) {
           // Netzfehler: nicht als erledigt markieren, beim nächsten Durchlauf erneut versuchen (ohne Netz zählt es nicht)
           console.warn("audio", t.id, e);
+          if (isBusy(e)) {
+            busy = true;
+            return;
+          }
           if (navigator.onLine !== false) await db.tracks.update(t.id, { lookupTries: (t.lookupTries ?? 0) + 1 });
         }
         jobUpdate(job, { done: ++done });
