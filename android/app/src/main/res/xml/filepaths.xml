@@ -2,4 +2,6 @@
 <paths>
     <files-path name="twa_splash" path="twa_splash/" />
     <cache-path name="share" path="share/" />
+    <!-- Die geladene neue App-Version, für den Installer von Android -->
+    <cache-path name="updates" path="updates/" />
 </paths>

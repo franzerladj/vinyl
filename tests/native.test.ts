@@ -134,6 +134,35 @@ describe("Mitteilungen der Android-App: Routen", () => {
     expect(((await (await get("NativeAnna", "/api/push/status")).json()) as { devices: number }).devices).toBe(0);
   });
 
+  it("Freund hat ein Set gespielt: Freunde erfahren es einmal, spätere Änderungen melden nichts", async () => {
+    const carla = (await (await post("PostCarla", "/api/push/native/start", {})).json()) as { token: string };
+    await poll(carla.token, true); // Begrüßung abholen
+    // Gegenseitige Anfrage = befreundet
+    await post("PostDave", "/api/friends/request", { to: "PostCarla" });
+    await post("PostCarla", "/api/friends/request", { to: "PostDave" });
+    await poll(carla.token, true);
+    const data = { name: "Freitag Klubraum", tracks: 20, records: 18, covers: [], picks: [] };
+    expect((await post("PostDave", "/api/buzz/post", { kind: "set", ref: "1700000000000", data })).status).toBe(200);
+    const got = await poll(carla.token, true);
+    expect(got.body.messages?.map((m) => m.title)).toEqual(["PostDave hat ein Set gespielt"]);
+    expect(got.body.messages?.[0].url).toBe("/friends/PostDave");
+    // Derselbe Beitrag nochmal (z. B. umbenannt): keine zweite Mitteilung
+    await post("PostDave", "/api/buzz/post", { kind: "set", ref: "1700000000000", data: { ...data, name: "Freitag" } });
+    expect((await poll(carla.token, true)).body.messages).toEqual([]);
+    // Hat Carla „Freunde“ abgeschaltet, kommt nichts
+    await post("PostCarla", "/api/push/prefs", { friends: false });
+    await post("PostDave", "/api/buzz/post", { kind: "set", ref: "1700000000001", data });
+    expect((await poll(carla.token, true)).body.messages).toEqual([]);
+  });
+
+  it("Die App erfährt beim Abholen, welche Version aktuell ist", async () => {
+    const eve = (await (await post("VersionEve", "/api/push/native/start", {})).json()) as { token: string };
+    const r = await app.request(`${ORIGIN}/api/push/native/poll?t=${eve.token}&ok=1&v=10`, {}, env);
+    const j = (await r.json()) as { apk: number; apkName: string };
+    expect(j.apk).toBeGreaterThanOrEqual(11);
+    expect(j.apkName).toMatch(/^\d+\.\d+$/);
+  });
+
   it("Unbekanntes oder kaputtes Kennwort: 410", async () => {
     expect((await poll("f".repeat(64), true)).status).toBe(410);
     expect((await poll("../x", true)).status).toBe(410);

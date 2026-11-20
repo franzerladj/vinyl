@@ -4,7 +4,7 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { readConfig, type Config, type Env } from "./env";
 import { seal, SESSION_DAYS, unseal, type Session } from "./session";
 import { authHeaders, authorizeUrl, discogsFetch, DiscogsBusy, getAccessToken, getRequestToken } from "./discogs";
-import { ALL_KINDS, bundle, currentSlot, deviceCount, dueReminders, isPushEndpoint, loadUser, pickWants, notifyUser, saveUser, sendNative, sendPush, userKey, wantChange, type Message, type PushSub, type Stat, type UserRec, type WatchedWant } from "./push";
+import { ALL_KINDS, KIND_DEFAULT, kindOn, bundle, currentSlot, deviceCount, dueReminders, isPushEndpoint, loadUser, pickWants, notifyUser, saveUser, sendNative, sendPush, userKey, wantChange, type Message, type PushSub, type Stat, type UserRec, type WatchedWant } from "./push";
 import { oauthHmacHeader, oauthHmacParams } from "./oauthSign";
 import { recognizeRecordFree, tagVibesFree, type VibeInput } from "./ai";
 import { DeezerBusy, fetchPreview, fetchPreviewById, lookupAudio, matchRelease, type ReleaseTrackIn } from "./audio";
@@ -13,6 +13,7 @@ import { profileEmpty, sanitizeProfile, type CrateProfile } from "../shared/prof
 import { buildIcs } from "../shared/ics";
 import { pushOps } from "./devsync";
 import { buzzStore, nativeStore, syncStore } from "./env";
+import { APK } from "../shared/appVersion";
 import { cleanText, validPost } from "./buzz";
 import { cleanOwnPost, validRef } from "../shared/ownPost";
 import { ANNOUNCE } from "../shared/announce";
@@ -428,7 +429,7 @@ const cleanPrefs = (p: unknown): Partial<UserRec["prefs"]> => {
   if (p && typeof p === "object") for (const k of ALL_KINDS) if (typeof (p as Record<string, unknown>)[k] === "boolean") out[k] = (p as Record<string, boolean>)[k];
   return out;
 };
-const emptyRec = (sess: string): UserRec => ({ subs: [], prefs: { friends: true, wants: true, lent: true, sets: true, sellers: true }, sess, wants: [], lent: [], sets: [], cursor: 0, sent: {}, updatedAt: Date.now() });
+const emptyRec = (sess: string): UserRec => ({ subs: [], prefs: { ...KIND_DEFAULT }, sess, wants: [], lent: [], sets: [], cursor: 0, sent: {}, updatedAt: Date.now() });
 
 /** Gerät für Mitteilungen anmelden. Merkt sich den Discogs-Zugang (versiegelt), damit der Zeitplan Wants prüfen kann. */
 app.post("/api/push/subscribe", async (c) => {
@@ -499,7 +500,7 @@ app.post("/api/push/sync", async (c) => {
   if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
   const rec = await loadUser(cfg.kv, s.username);
   if (!rec) return c.json({ ok: false });
-  const body = await c.req.json<{ wants?: WatchedWant[]; lent?: UserRec["lent"]; sets?: UserRec["sets"]; currency?: string }>();
+  const body = await c.req.json<{ wants?: WatchedWant[]; lent?: UserRec["lent"]; sets?: UserRec["sets"]; currency?: string; tz?: number; stylus?: UserRec["stylus"] | null; daily?: UserRec["daily"] }>();
   if (body.wants && !Array.isArray(body.wants)) return c.json({ message: "ungültig" }, 400);
   if (body.lent && !Array.isArray(body.lent)) return c.json({ message: "ungültig" }, 400);
   if (body.sets && !Array.isArray(body.sets)) return c.json({ message: "ungültig" }, 400);
@@ -508,7 +509,20 @@ app.post("/api/push/sync", async (c) => {
     rec.wants = body.wants.slice(0, 500).map((w) => ({ id: Number(w.id), t: String(w.t).slice(0, 120), a: String(w.a).slice(0, 80), target: Number.isFinite(Number(w.target)) && Number(w.target) > 0 ? Number(w.target) : null, n: old.get(Number(w.id))?.n ?? null, low: old.get(Number(w.id))?.low ?? null }));
   }
   if (body.lent) rec.lent = body.lent.slice(0, 200).map((l) => ({ id: Number(l.id), t: String(l.t).slice(0, 120), to: String(l.to).slice(0, 60), at: Number(l.at) }));
-  if (body.sets) rec.sets = body.sets.slice(0, 100).filter((x) => /^\d{4}-\d\d-\d\d$/.test(x.date)).map((x) => ({ id: Number(x.id), name: String(x.name).slice(0, 80), date: x.date }));
+  if (body.sets)
+    rec.sets = body.sets
+      .slice(0, 100)
+      .filter((x) => /^\d{4}-\d\d-\d\d$/.test(x.date))
+      .map((x) => ({ id: Number(x.id), name: cleanText(String(x.name), 80), date: x.date, ...(typeof x.start === "string" && /^\d\d:\d\d$/.test(x.start) ? { start: x.start } : {}), ...(Number(x.n) > 0 ? { n: Math.min(999, Math.round(Number(x.n))) } : {}) }));
+  // Zeitzone des Geräts (Minuten, wie getTimezoneOffset): Erinnerungen kommen zur Ortszeit
+  if (typeof body.tz === "number" && Number.isFinite(body.tz) && Math.abs(body.tz) <= 14 * 60) rec.tz = Math.round(body.tz);
+  if (body.stylus === null) delete rec.stylus;
+  else if (body.stylus && Number.isFinite(Number(body.stylus.pct))) rec.stylus = { pct: Math.max(0, Math.min(1, Number(body.stylus.pct))), ...(body.stylus.name ? { name: cleanText(String(body.stylus.name), 60) } : {}) };
+  if (Array.isArray(body.daily))
+    rec.daily = body.daily
+      .slice(0, 10)
+      .filter((x) => x && /^\d{4}-\d\d-\d\d$/.test(String(x.d)) && Number(x.id) > 0)
+      .map((x) => ({ d: String(x.d), id: Number(x.id), t: cleanText(String(x.t ?? ""), 120), a: cleanText(String(x.a ?? ""), 80), ...(x.why ? { why: cleanText(String(x.why), 80) } : {}) }));
   if (body.currency) rec.currency = body.currency.slice(0, 3);
   await saveUser(cfg.kv, s.username, rec);
   return c.json({ ok: true, wants: rec.wants.length });
@@ -733,7 +747,8 @@ app.get("/api/push/native/poll", async (c) => {
   if (d.seen == null || d.ok !== ok || now - d.seen > 6 * 3600_000) await store.touch(t, ok, now);
   // Solange Android nichts zeigen lässt, bleibt alles liegen
   const messages = ok ? await store.take(t) : [];
-  return c.json({ messages, every: 15 });
+  // Die App erfährt hier auch, ob es eine neuere Version von ihr gibt, und bietet dann das Update an
+  return c.json({ messages, every: 15, apk: APK.code, apkName: APK.name });
 });
 
 app.post("/api/push/test", async (c) => {
@@ -786,7 +801,7 @@ async function runUser(cfg: Config, u: string, budget: number) {
   }
   const msgs: Message[] = [];
   let checked = 0;
-  if (rec.prefs.wants && rec.wants.length) {
+  if (kindOn(rec, "wants") && rec.wants.length) {
     const sess = await unseal<Session>(cfg.sessionSecret, rec.sess);
     const picks = pickWants(rec.wants, currentSlot()).slice(0, Math.max(0, budget - rec.subs.length - 1));
     for (const idx of picks) {
@@ -1025,6 +1040,19 @@ app.post("/api/buzz/post", async (c) => {
   const data = cleanOwnPost(j.kind, j.data);
   if (!data) return c.json({ message: "ungültig" }, 400);
   await b.store.post({ owner: b.me, kind: j.kind, ref: j.ref, data, ts: Date.now() });
+  // Freunden Bescheid geben: einmal je Beitrag (spätere Änderungen daran melden nichts mehr)
+  const cfg = c.var.cfg;
+  const told = `fp:${b.me}:${j.kind}:${j.ref}`;
+  if (!(await cfg.kv.get(told))) {
+    await cfg.kv.put(told, "1", { expirationTtl: 60 * 86_400 });
+    const d = data as { name?: string; tracks?: number; title?: string; artist?: string };
+    const msg: Message =
+      j.kind === "set"
+        ? { title: `${b.name} hat ein Set gespielt`, body: `${d.name ?? "Set"}${d.tracks ? ` · ${d.tracks} Tracks` : ""}`, url: `/friends/${encodeURIComponent(b.name)}`, tag: `post-${b.me}` }
+        : { title: `${b.name}: Platte des Moments`, body: [d.artist, d.title].filter(Boolean).join(" – "), url: `/friends/${encodeURIComponent(b.name)}`, tag: `post-${b.me}` };
+    // Höchstens 20 Freunde je Beitrag (Cloudflare begrenzt die Unteranfragen je Aufruf)
+    await Promise.all(b.friends.slice(0, 20).map((f) => tellFriend(cfg, f, msg)));
+  }
   return c.json({ ok: true });
 });
 

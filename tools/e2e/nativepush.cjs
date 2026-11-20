@@ -50,7 +50,7 @@ const B = "http://localhost:8787";
       schalter: await sw.getAttribute("aria-checked").catch(() => null),
       blatt: await page.locator(".push-help-title").isVisible().catch(() => false),
       knopfAndroid: await page.locator("button:has-text('In Android erlauben')").isVisible().catch(() => false),
-      neueVersion: await page.locator("a:has-text('Version 1.9 laden')").isVisible().catch(() => false),
+      neueVersion: await page.locator(".push-help a:has-text('laden')").isVisible().catch(() => false),
       toast: await page.locator(".toast").first().textContent().catch(() => "-"),
       errors,
     };

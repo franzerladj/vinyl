@@ -1828,3 +1828,5 @@ button.transition .transition-note { flex: 1 1 auto; min-width: 0; text-align: r
 .guide-entry .guide-tip-main b { font: 700 17px/1.2 var(--font-display); letter-spacing: -0.02em; }
 .guide-entry .sub { font-size: 13px; line-height: 1.35; }
 .guide-tip .chev, .guide-entry .chev { color: var(--text-3); flex: none; }
+/* Knopf, der wie ein Link im Text aussieht (z. B. „Jetzt aktualisieren“ im Hinweis) */
+.link-btn { background: none; border: 0; padding: 0; margin: 0; font: inherit; font-weight: 700; color: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }

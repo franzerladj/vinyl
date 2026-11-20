@@ -1,5 +1,5 @@
 import { useBuzz } from "../lib/buzz";
-import { apkName, apkOutdated, LATEST_APK, nativePush, nativeToken } from "../lib/push";
+import { apkName, apkOutdated, canSelfUpdate, LATEST_APK, nativePush, nativeToken, updateApp } from "../lib/push";
 import { Hint } from "../components/Welcome";
 import { DailyRecord } from "../components/DailyRecord";
 import { Link } from "react-router-dom";
@@ -140,8 +140,22 @@ export default function Home() {
         )}
         {apkOutdated() && (
           <Hint id={`apk-${LATEST_APK}`}>
-            <b>Neue Version der Android-App.</b> Sie zeigt Mitteilungen jetzt selbst an, ohne Chrome.{" "}
-            <a href={`/download/crate.apk?v=${LATEST_APK}`} download={`crate-${apkName(LATEST_APK)}.apk`}>Version {apkName(LATEST_APK)} laden und installieren</a>
+            <b>Neue Version der Android-App.</b>{" "}
+            {canSelfUpdate() ? (
+              <>
+                Ein Tipp genügt, deine Daten bleiben.{" "}
+                <button className="link-btn" onClick={updateApp}>
+                  Jetzt aktualisieren
+                </button>
+              </>
+            ) : (
+              <>
+                Ab dieser Version aktualisiert sich die App künftig selbst, ein letztes Mal brauchst du die Datei.{" "}
+                <a href={`/download/crate.apk?v=${LATEST_APK}`} download={`crate-${apkName(LATEST_APK)}.apk`}>
+                  Version {apkName(LATEST_APK)} laden und installieren
+                </a>
+              </>
+            )}
           </Hint>
         )}
         {nativePush() && !nativeToken() && (

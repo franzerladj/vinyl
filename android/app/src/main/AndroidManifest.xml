@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Das regelmäßige Abholen der Mitteilungen soll einen Neustart des Handys überleben -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Die App aktualisiert sich selbst (UpdateActivity): Android fragt beim ersten Mal nach -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Chrome muss für CrateLauncherActivity sichtbar sein (Android 11+) -->
     <queries>
@@ -85,6 +87,21 @@
             android:name=".PollJobService"
             android:exported="true"
             android:permission="android.permission.BIND_JOB_SERVICE" />
+
+        <!-- crate://update: neue App-Version laden und den Installations-Dialog von Android öffnen -->
+        <activity
+            android:name=".UpdateActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="crate" android:host="update" />
+            </intent-filter>
+        </activity>
 
         <!-- crate://story?id=...: Bild von der Webseite direkt in die Instagram-Story -->
         <activity

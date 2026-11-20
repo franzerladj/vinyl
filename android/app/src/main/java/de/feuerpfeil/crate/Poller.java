@@ -39,6 +39,7 @@ final class Poller {
     static final int JOB_ID = 4711;
     private static final String PREFS = "crate_push";
     private static final String KEY_TOKEN = "token";
+    private static final String KEY_UPDATE_TOLD = "updateTold";
     private static final long PERIOD_MS = 15 * 60 * 1000L;
     private static final Object LOCK = new Object();
 
@@ -137,6 +138,12 @@ final class Poller {
                 JSONObject json = new JSONObject(read(conn.getInputStream()));
                 JSONArray list = json.optJSONArray("messages");
                 if (list != null && ok) for (int i = 0; i < list.length(); i++) show(c, list.getJSONObject(i));
+                // Gibt es eine neuere App? Einmal je Version Bescheid geben, Antippen startet das Update
+                int latest = json.optInt("apk", 0);
+                if (ok && latest > versionCode(c) && prefs(c).getInt(KEY_UPDATE_TOLD, 0) < latest) {
+                    prefs(c).edit().putInt(KEY_UPDATE_TOLD, latest).apply();
+                    showUpdate(c, json.optString("apkName", ""));
+                }
                 return true;
             } catch (Exception e) {
                 return false;
@@ -160,6 +167,30 @@ final class Poller {
             int n;
             while ((n = s.read(buf)) > 0) out.write(buf, 0, n);
             return out.toString("UTF-8");
+        }
+    }
+
+    private static void showUpdate(Context c, String name) {
+        Intent open = new Intent(c, UpdateActivity.class);
+        open.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 23 ? PendingIntent.FLAG_IMMUTABLE : 0);
+        PendingIntent tap = PendingIntent.getActivity(c, 4712, open, flags);
+        String body = (name.isEmpty() ? "Eine neue Version" : "Version " + name) + " ist da. Tippen zum Aktualisieren, deine Daten bleiben.";
+        Notification n = new NotificationCompat.Builder(c, CHANNEL)
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle("Crate aktualisieren")
+                .setContentText(body)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+                .setContentIntent(tap)
+                .setAutoCancel(true)
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .build();
+        NotificationManager nm = (NotificationManager) c.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null) return;
+        try {
+            nm.notify("update", 2, n);
+        } catch (SecurityException e) {
+            // Erlaubnis entzogen: der Hinweis steht dann nur in der App
         }
     }
 

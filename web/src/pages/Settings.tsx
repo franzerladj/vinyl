@@ -22,7 +22,7 @@ import { renderProfileCard } from "../lib/shareCard";
 import { inviteLink } from "../lib/friends";
 import { loadMyProfile, saveMyProfile } from "../lib/profile";
 import { GEAR, linkText, LINK_LABEL, parseLink, PLAY_LABEL, sanitizeProfile, type CrateProfile, type GearSlot, type PlayMode } from "../../../shared/profile";
-import { apkName, appInfo, DEFAULT_PREFS, disablePush, enablePush, isIOS, LATEST_APK, nativePush, PushBlocked, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs, runningAs } from "../lib/push";
+import { apkName, apkOutdated, appInfo, canSelfUpdate, updateApp, DEFAULT_PREFS, fullPrefs, syncPushData, disablePush, enablePush, isIOS, LATEST_APK, nativePush, PushBlocked, pushStatus, pushSupport, savePushPrefs, sendTestPush, type PushKind, type PushPrefs, runningAs } from "../lib/push";
 import { DEFAULT_SHIP, type ShipConfig } from "../../../shared/shipping";
 import {
   IconBell,
@@ -649,6 +649,16 @@ function AboutPage() {
         <Group title="Diese Installation" foot="Die Crate-App für Android kommt als Datei von crate-8vf.pages.dev/app. „Über Chrome installiert“ ist eine zweite, eigene App: dort erneuert Google das Icon nur langsam.">
           <Row label="Läuft als" value={runningAs()} />
           <Row label="Stand" value={`v${__APP_VERSION__}`} />
+          {appInfo().android &&
+            (apkOutdated() ? (
+              canSelfUpdate() ? (
+                <Row label={`App auf ${apkName(LATEST_APK)} aktualisieren`} sub="Lädt die neue Version und öffnet den Installer. Deine Daten bleiben." onClick={updateApp} />
+              ) : (
+                <Row label={`Version ${apkName(LATEST_APK)} laden`} sub="Datei antippen und installieren. Danach aktualisiert sich die App selbst." onClick={() => (location.href = `/download/crate.apk?v=${LATEST_APK}`)} />
+              )
+            ) : (
+              <Row label="Android-App" value="aktuell" />
+            ))}
         </Group>
         <Group title="Datenschutz" foot="Auf dem Server liegt nur, was du zwischen deinen Geräten abgleichst, dein Crate-Profil und, wenn eingeschaltet, Mitteilungen. Alles lässt sich in den Einstellungen löschen. Dein Discogs-Passwort sieht die App nie.">
           <Row label="Deine Daten" value="nur auf dem Gerät" />
@@ -706,11 +716,13 @@ function HelpPage() {
 }
 
 const PUSH_KINDS: [PushKind, string, string][] = [
-  ["friends", "Neue Freundschaften", "Wenn dich jemand in Crate als Freund hinzufügt"],
-  ["wants", "Wantlist", "Wieder verfügbar, Preis gefallen oder unter deinem Wunschpreis"],
+  ["friends", "Freunde", "Anfragen, Likes, Kommentare, Empfehlungen und wenn jemand ein Set gespielt hat"],
+  ["wants", "Wantlist", "Wieder verfügbar, Preis gefallen, unter deinem Wunschpreis, neu gepresst"],
   ["sellers", "Lieblingshändler", "Neue Angebote für deine Wants nach dem Sync"],
+  ["sets", "Deine Gigs", "Am Vorabend, am Tag selbst und am Tag danach: was lief?"],
   ["lent", "Verliehene Platten", "Erinnerung nach 3, 6 und 10 Wochen"],
-  ["sets", "Set-Termine", "Am Tag des Sets: Platten einpacken"],
+  ["tips", "Rückblick", "Dein Plattenjahr im Dezember"],
+  ["daily", "Platte des Tages", "Jeden Vormittag eine Platte aus deiner Sammlung"],
 ];
 
 /**
@@ -727,7 +739,7 @@ function usePushSwitch() {
     setBusy(true);
     try {
       if (v) {
-        const p = await enablePush((await getKV<PushPrefs | null>("pushPrefs", null)) ?? DEFAULT_PREFS);
+        const p = fullPrefs(await enablePush(fullPrefs(await getKV<PushPrefs | null>("pushPrefs", null))));
         await setKV("pushPrefs", p);
         setBlocked(false);
         toast("Mitteilungen sind an");
@@ -775,7 +787,7 @@ function NotificationsPage() {
     void (async () => {
       const st = await pushStatus().catch(() => null);
       setAvailable(st?.available ?? true);
-      if (st?.prefs) setPrefs(st.prefs);
+      if (st?.prefs) setPrefs(fullPrefs(st.prefs));
     })();
   }, []);
   const toggle = (v: boolean) => void set(v);
@@ -783,6 +795,8 @@ function NotificationsPage() {
     const p = { ...prefs, [k]: v };
     setPrefs(p);
     await setKV("pushPrefs", p);
+    // „Platte des Tages“ braucht die Auswahl der nächsten Tage auf dem Server: gleich mitschicken
+    if (k === "daily") void syncPushData();
     await savePushPrefs({ [k]: v }).catch((e) => toast(e.message));
   };
   return (
@@ -1333,9 +1347,15 @@ function PushBlockedHelp({ onRetry }: { onRetry?: () => void }) {
       ) : app.android ? (
         <>
           <p className="sub">Die neue Crate-App zeigt Mitteilungen selbst an und braucht dafür Chrome nicht mehr. Deine Version kann das noch nicht.</p>
-          <a className="btn primary block lg" href={`/download/crate.apk?v=${LATEST_APK}`} download={`crate-${apkName(LATEST_APK)}.apk`}>
-            Version {apkName(LATEST_APK)} laden
-          </a>
+          {canSelfUpdate() ? (
+            <button className="btn primary block lg" onClick={updateApp}>
+              Auf Version {apkName(LATEST_APK)} aktualisieren
+            </button>
+          ) : (
+            <a className="btn primary block lg" href={`/download/crate.apk?v=${LATEST_APK}`} download={`crate-${apkName(LATEST_APK)}.apk`}>
+              Version {apkName(LATEST_APK)} laden
+            </a>
+          )}
           <p className="tiny">Datei antippen und installieren (deine Daten bleiben), Crate öffnen und den Schalter hier einschalten. Die Datei heißt crate-{apkName(LATEST_APK)}.apk.</p>
         </>
       ) : /Android/i.test(ua) ? (

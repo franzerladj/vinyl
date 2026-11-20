@@ -2,10 +2,14 @@
 // Auf dem iPhone gehen Mitteilungen nur, wenn Crate zum Home-Bildschirm hinzugefügt ist (ab iOS 16.4).
 import { db, getKV, setKV } from "./db";
 import { VAPID_PUBLIC_KEY } from "../../../shared/pushKey";
+import { APK, APK_SELF_UPDATE_FROM } from "../../../shared/appVersion";
 
-export type PushKind = "friends" | "wants" | "lent" | "sets" | "sellers";
+export type PushKind = "friends" | "wants" | "lent" | "sets" | "sellers" | "tips" | "daily";
 export type PushPrefs = Record<PushKind, boolean>;
-export const DEFAULT_PREFS: PushPrefs = { friends: true, wants: true, lent: true, sets: true, sellers: true };
+/** „Platte des Tages“ kommt täglich und ist deshalb erst an, wenn man sie einschaltet (wie KIND_DEFAULT auf dem Server) */
+export const DEFAULT_PREFS: PushPrefs = { friends: true, wants: true, lent: true, sets: true, sellers: true, tips: true, daily: false };
+/** Gespeicherte Einstellungen kennen neuere Arten evtl. noch nicht: mit den Vorgaben auffüllen */
+export const fullPrefs = (p?: Partial<PushPrefs> | null): PushPrefs => ({ ...DEFAULT_PREFS, ...(p ?? {}) });
 
 const json = async <T,>(path: string, body?: unknown): Promise<T> => {
   const r = await fetch(path, { method: body === undefined ? "GET" : "POST", credentials: "include", headers: body === undefined ? undefined : { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
@@ -55,9 +59,9 @@ export function appInfo(): AppInfo {
   }
 }
 /** Aktuelle Android-App (versionCode). Ältere bekommen auf Start einen Hinweis zum Aktualisieren. */
-export const LATEST_APK = 10;
+export const LATEST_APK = APK.code;
 /** Versionsname je versionCode der Android-App (für die Anzeige) */
-export const APK_NAMES: Record<number, string> = { 10: "1.9", 9: "1.8", 8: "1.7", 7: "1.6", 6: "1.5" };
+export const APK_NAMES: Record<number, string> = { [APK.code]: APK.name, 10: "1.9", 9: "1.8", 8: "1.7", 7: "1.6", 6: "1.5" };
 export const apkName = (v: number) => APK_NAMES[v] ?? (v ? `Stand ${v}` : "ältere Version");
 /**
  * Wie Crate gerade läuft. Wichtig zum Auseinanderhalten: Chrome kann die Seite auch selbst installieren
@@ -72,6 +76,16 @@ export function runningAs(): string {
   return "im Browser";
 }
 export const apkOutdated = () => appInfo().android && appInfo().v > 0 && appInfo().v < LATEST_APK;
+
+/**
+ * Ab App 1.10 aktualisiert sich die App selbst: sie lädt die neue Version, prüft sie und öffnet den
+ * Installations-Dialog von Android (crate://update → UpdateActivity). Ältere Apps laden die Datei wie bisher.
+ * Gemeint ist nur die Hülle. Der Inhalt der App kommt wie eine Webseite und erneuert sich ohnehin von selbst.
+ */
+export const canSelfUpdate = () => appInfo().android && appInfo().v >= APK_SELF_UPDATE_FROM;
+export function updateApp() {
+  location.href = "intent://update#Intent;scheme=crate;package=de.feuerpfeil.crate;end";
+}
 
 /** Ab App-Version 1.7 fragt die App selbst (Dialog, sonst Einstellungen) und meldet Chrome nie mehr „gesperrt“ */
 export const appAsksItself = () => appInfo().android && appInfo().v >= 8;
@@ -200,7 +214,7 @@ export async function resumePushIfWanted(): Promise<boolean> {
   if (!(await getKV("pushWanted", false))) return false;
   if ((await getKV("pushOn", false)) && (await currentSubscription())) return false;
   try {
-    await enablePush((await getKV<PushPrefs | null>("pushPrefs", null)) ?? DEFAULT_PREFS);
+    await enablePush(fullPrefs(await getKV<PushPrefs | null>("pushPrefs", null)));
     await sendTestPush().catch(() => undefined);
     return true;
   } catch {
@@ -230,19 +244,52 @@ export async function sendTestPush() {
   return r;
 }
 
-/** Wants mit Wunschpreisen, verliehene Platten und Set-Termine an den Server geben (nur wenn Mitteilungen an sind) */
+const dayOf = (t: number) => {
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+/** Platte des Tages für die nächsten Tage: der Server kennt die Sammlung nicht, also rechnet das Gerät vor */
+async function upcomingDaily(days = 7): Promise<{ d: string; id: number; t: string; a: string; why?: string }[]> {
+  const { dailyPick } = await import("../../../shared/daily");
+  const coll = (await db.collection.toArray()).map((c) => ({ id: c.releaseId, dateAdded: c.dateAdded }));
+  if (!coll.length) return [];
+  const since = dayOf(Date.now() - 60 * 864e5);
+  const today = dayOf(Date.now());
+  const sets = (await db.sets.toArray()).filter((s) => s.date && s.date >= since && s.date <= today);
+  const played = new Set(((await db.tracks.bulkGet(sets.flatMap((s) => (s.played?.length ? s.played : s.trackIds)))).filter(Boolean) as { releaseId: number }[]).map((t) => t.releaseId));
+  const out: { d: string; id: number; t: string; a: string; why?: string }[] = [];
+  for (let i = 0; i < days; i++) {
+    const d = dayOf(Date.now() + i * 864e5);
+    const p = dailyPick(coll, d, played);
+    const rel = p && (await db.releases.get(p.id));
+    if (p && rel) out.push({ d, id: p.id, t: rel.title, a: rel.artist, why: p.reason || undefined });
+  }
+  return out;
+}
+
+/**
+ * Was der Zeitplan auf dem Server braucht (nur wenn Mitteilungen an sind): Wants mit Wunschpreisen, verliehene
+ * Platten, Sets von gestern bis in die Zukunft (Vorabend, Tag selbst, Tag danach), Zeitzone, Stand der Nadel
+ * und, wer sie eingeschaltet hat, die Platte des Tages für die nächsten Tage.
+ */
 export async function syncPushData() {
   if (!(await getKV("pushOn", false))) return;
-  const [wants, metas, recordMeta, sets, currency] = await Promise.all([db.wants.toArray(), db.wantMeta.toArray(), db.recordMeta.toArray(), db.sets.toArray(), getKV("currency", "EUR")]);
+  const [wants, metas, recordMeta, sets, currency, prefs] = await Promise.all([db.wants.toArray(), db.wantMeta.toArray(), db.recordMeta.toArray(), db.sets.toArray(), getKV("currency", "EUR"), getKV<Partial<PushPrefs> | null>("pushPrefs", null)]);
   const targets = new Map(metas.map((m) => [m.releaseId, m.targetPrice ?? null]));
   const ids = [...new Set([...wants.map((w) => w.releaseId), ...recordMeta.filter((m) => m.lentTo).map((m) => m.releaseId)])];
   const rels = new Map((await db.releases.bulkGet(ids)).filter(Boolean).map((r) => [r!.id, r!]));
-  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = dayOf(Date.now() - 864e5);
+  const stylus = await import("./stylus").then((m) => m.computeStylus()).catch(() => null);
+  const daily = fullPrefs(prefs).daily ? await upcomingDaily().catch(() => []) : [];
   await json("/api/push/sync", {
     currency,
+    tz: new Date().getTimezoneOffset(),
+    stylus: stylus?.wear != null ? { pct: stylus.wear, name: stylus.state.name } : null,
+    daily,
     wants: wants.map((w) => ({ id: w.releaseId, t: rels.get(w.releaseId)?.title ?? `Release ${w.releaseId}`, a: rels.get(w.releaseId)?.artist ?? "", target: targets.get(w.releaseId) ?? null })),
     lent: recordMeta.filter((m) => m.lentTo).map((m) => ({ id: m.releaseId, t: `${rels.get(m.releaseId)?.artist ?? ""} – ${rels.get(m.releaseId)?.title ?? m.releaseId}`, to: m.lentTo!, at: m.lentAt ?? Date.now() })),
-    sets: sets.filter((s) => s.date && s.date >= today && s.id).map((s) => ({ id: s.id!, name: s.name, date: s.date! })),
+    sets: sets.filter((s) => s.date && s.date >= yesterday && s.id).map((s) => ({ id: s.id!, name: s.name, date: s.date!, start: s.start, n: s.crateIds?.length || undefined })),
   }).catch((e) => console.warn("Push-Sync", e));
 }
 
@@ -261,13 +308,13 @@ export async function localNotify(kind: PushKind, title: string, body: string, u
     // In der Android-App: beim Server hinterlegen, die App zeigt es beim nächsten Abholen
     const t = nativeToken();
     if (!t || !(await getKV("pushOn", false))) return;
-    if (!(await getKV<PushPrefs>("pushPrefs", DEFAULT_PREFS))[kind]) return;
+    if (!fullPrefs(await getKV<Partial<PushPrefs> | null>("pushPrefs", null))[kind]) return;
     await json("/api/push/native/self", { token: t, title, body, url, tag: kind }).catch(() => undefined);
     return;
   }
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   if (!(await getKV("pushOn", false))) return;
-  const prefs = await getKV<PushPrefs>("pushPrefs", DEFAULT_PREFS);
+  const prefs = fullPrefs(await getKV<Partial<PushPrefs> | null>("pushPrefs", null));
   if (!prefs[kind]) return;
   const reg = await navigator.serviceWorker.getRegistration();
   await reg?.showNotification(title, { body, tag: kind, icon: "/icon-192.png", badge: "/badge-96.png", data: { url } });
