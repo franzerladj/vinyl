@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { Me } from "../lib/api";
 import { completeLogin, startLogin } from "../lib/auth";
 import { LogoMark, Wordmark } from "../components/Logo";
-import { inAppBrowser, openInChromeUrl, runningAs } from "../lib/push";
+import { inAppBrowser, isIOS, isStandalone, openInChromeUrl, runningAs } from "../lib/push";
 
 // Wie eine Tracklist auf dem Label: Seite A, Seite B
 const SIDES: [string, string, string][] = [
@@ -17,6 +17,7 @@ export default function Login({ me }: { me: Me | null }) {
   const [busyText, setBusyText] = useState<string | null>(null);
   const android = /Android/i.test(navigator.userAgent);
   const inApp = runningAs().startsWith("Android-App");
+  const iosApp = isIOS() && isStandalone();
   useEffect(() => {
     const back = (e: PageTransitionEvent) => e.persisted && setBusyText(null);
     window.addEventListener("pageshow", back);
@@ -73,6 +74,13 @@ export default function Login({ me }: { me: Me | null }) {
           <p className="tiny" style={{ marginTop: 12 }}>Du meldest dich direkt bei Discogs an. Crate sieht dein Passwort nie.</p>
           {/* Rückmeldung: bei einem Freund öffnete sich in der App die Tastatur auf der Discogs-Seite nicht. Ausweg: im
               richtigen Chrome anmelden. Die App läuft in Chrome und ist danach ebenfalls angemeldet. */}
+          {/* iPhone-App: bekannter Fehler in iOS, die Tastatur erscheint in Home-Bildschirm-Apps manchmal nicht
+              (WebKit-Fehler 279904 und 235243). Crate kann das nicht beheben, nur sagen, was hilft. */}
+          {iosApp && (
+            <p className="tiny login-help" style={{ marginTop: 8 }}>
+              Tastatur öffnet sich bei Discogs nicht? Das ist ein Fehler im iPhone bei Apps vom Home-Bildschirm. Crate ganz schließen und neu öffnen. Hilft das nicht: Symbol entfernen, iPhone neu starten und Crate in Safari neu hinzufügen. Solange läuft Crate auch <a href={location.origin} target="_blank" rel="noreferrer">in Safari</a>.
+            </p>
+          )}
           {android && inApp && !inAppBrowser() && (
             <p className="tiny login-help" style={{ marginTop: 8 }}>
               Tastatur öffnet sich bei Discogs nicht? <a href={openInChromeUrl("/")}>In Chrome anmelden</a>, danach bist du auch hier angemeldet.
