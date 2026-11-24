@@ -1940,3 +1940,59 @@ html.ios-app[data-theme="light"] body::after { content: ""; position: fixed; z-i
 .getapp-warn a, .login-help a { color: var(--text); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 /* Blatt und Dialog bekommen beim Öffnen selbst den Fokus (useFocusScope): kein Ring um das ganze Blatt */
 .sheet:focus, .ask:focus { outline: none; }
+
+/* ==========================================================================
+   „Die Kiste in Bildern“ (KisteCharts.tsx): Diagramme im Crate-Look.
+   Eine Farbe je Diagramm (Akzent), flache Flächen ohne Verlauf, dünne Linien, Werte am Fadenkreuz.
+   ========================================================================== */
+.kc-section { margin-top: 28px; }
+.kc-plot { position: relative; touch-action: pan-y; cursor: crosshair; outline-offset: 4px; border-radius: var(--r-xs); -webkit-user-select: none; user-select: none; }
+.kc-area { height: 120px; animation: kc-rise 0.5s var(--ease) both; }
+.kc-area svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.kc-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.kc-fill { fill: var(--accent); opacity: 0.14; }
+.kc-cross { position: absolute; top: 0; bottom: 0; width: 1px; margin-left: -0.5px; background: var(--text-3); pointer-events: none; }
+.kc-dot { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--surface); pointer-events: none; }
+.kc-tip { position: absolute; top: -6px; z-index: 2; display: flex; align-items: baseline; gap: 6px; padding: 5px 9px; border-radius: var(--r-xs); background: var(--toast-bg); color: var(--toast-fg); font-size: 12px; white-space: nowrap; pointer-events: none; transform: translate(-50%, -100%); }
+.kc-tip.left { transform: translate(-12px, -100%); }
+.kc-tip.right { transform: translate(calc(-100% + 12px), -100%); }
+.kc-tip b { font: 700 13px/1.2 var(--font-data); font-stretch: 112%; font-variation-settings: "wdth" 112; font-variant-numeric: tabular-nums; }
+.kc-tip span { opacity: 0.7; }
+.kc-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; margin-top: -4px; }
+/* Erscheinungsjahre: ein Balken je Jahr, das stärkste Jahr in voller Farbe */
+.kc-bars { display: flex; align-items: flex-end; gap: 2px; height: 104px; }
+.kc-bars > i { flex: 1; min-width: 1px; border-radius: 3px 3px 1px 1px; background: color-mix(in srgb, var(--accent) 38%, var(--surface-3)); transform-origin: 50% 100%; animation: kc-grow 0.55s var(--spring) both; pointer-events: none; }
+.kc-bars > i.top, .kc-bars > i.on { background: var(--accent); }
+.kc-ticks { position: relative; height: 14px; margin-top: -4px; font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.kc-ticks span { position: absolute; top: 0; transform: translateX(-50%); }
+/* Kauf-Kalender: Monate als Felder, eine Farbe in vier Stufen */
+.kc-cal { display: grid; gap: 4px; }
+.kc-cal-row { display: grid; grid-template-columns: 38px repeat(12, minmax(0, 1fr)) 34px; gap: 4px; align-items: center; }
+.kc-cal-row.head span { text-align: center; font-size: 10.5px; color: var(--text-3); }
+.kc-cal-year, .kc-cal-sum { font: 600 12px/1 var(--font-data); font-stretch: 112%; font-variation-settings: "wdth" 112; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.kc-cal-sum { text-align: right; color: var(--text-3); }
+.kc-cell { display: block; width: 100%; aspect-ratio: 1; padding: 0; border: 0; border-radius: 5px; background: var(--surface-2); cursor: pointer; animation: kc-pop 0.4s var(--ease) both; -webkit-tap-highlight-color: transparent; }
+.kc-cell.l1 { background: color-mix(in srgb, var(--accent) 24%, var(--surface-2)); }
+.kc-cell.l2 { background: color-mix(in srgb, var(--accent) 46%, var(--surface-2)); }
+.kc-cell.l3 { background: color-mix(in srgb, var(--accent) 70%, var(--surface-2)); }
+.kc-cell.l4 { background: var(--accent); }
+.kc-cell.future { background: none; box-shadow: inset 0 0 0 1px var(--hairline); cursor: default; }
+.kc-cell.on { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--text); }
+.kc-read b { color: var(--text); }
+.kc-scale { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-3); }
+.kc-scale i { width: 12px; height: 12px; aspect-ratio: auto; border-radius: 3px; animation: none; cursor: default; }
+.kc-scale span:first-child { margin-right: 2px; }
+.kc-scale span:last-child { margin-left: 2px; }
+/* Rangliste: Name, Zahl, darunter der Balken */
+.kc-rank { display: grid; gap: 10px; }
+.kc-rank-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; align-items: baseline; color: var(--text); text-decoration: none; }
+.kc-rank-name { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kc-rank-n { font: 600 13px/1 var(--font-data); font-stretch: 112%; font-variation-settings: "wdth" 112; font-variant-numeric: tabular-nums; color: var(--text-2); }
+.kc-rank-track { grid-column: 1 / -1; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.kc-rank-track i { display: block; height: 100%; border-radius: 4px; background: var(--accent); transform-origin: 0 50%; animation: kc-wide 0.6s var(--spring) both; }
+@keyframes kc-rise { from { opacity: 0; transform: translateY(8px); } }
+@keyframes kc-grow { from { transform: scaleY(0); } }
+@keyframes kc-pop { from { opacity: 0; transform: scale(0.6); } }
+@keyframes kc-wide { from { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .kc-area, .kc-bars > i, .kc-cell, .kc-rank-track i { animation: none; } }
+@media (min-width: 1024px) { .kc-section { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } .kc-section h2 { grid-column: 1 / -1; } }

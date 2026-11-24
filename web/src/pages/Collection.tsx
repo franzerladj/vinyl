@@ -143,7 +143,13 @@ export default function Collection() {
     const key = params.get("key");
     const noBpm = params.get("nobpm") === "1";
     const unsureBpm = params.get("tempo") === "1";
-    if (!bpm && !key && !noBpm && !unsureBpm) return;
+    // „?q=“ füllt die Suche (Sprung von einem Label in „Die Kiste in Bildern“)
+    const text = params.get("q");
+    if (text) setQ(text);
+    if (!bpm && !key && !noBpm && !unsureBpm) {
+      if (text) setParams({}, { replace: true });
+      return;
+    }
     setF({ ...NO_FILTERS, ...(bpm ? { bpmMin: bpm[1], bpmMax: bpm[2] } : {}), ...(key ? { keys: [key] } : {}), noBpm, unsureBpm });
     setParams({}, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps

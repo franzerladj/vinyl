@@ -1,5 +1,6 @@
 // „Deine Kiste als DJ“ in voller Länge: Tempo-Verteilung, Camelot-Rad, Energie. Auf Start steht die Kurzfassung.
 import { DjOverview } from "../components/DjOverview";
+import { KisteCharts } from "../components/KisteCharts";
 import { NavBar } from "../components/ui";
 
 export default function DjPage() {
@@ -11,6 +12,7 @@ export default function DjPage() {
       </div>
       <div className="page">
         <DjOverview />
+        <KisteCharts />
       </div>
     </>
   );

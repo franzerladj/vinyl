@@ -21,7 +21,7 @@ const install = require("./mock.cjs");
     await page.click("text=Tempo, Tonarten und Energie");
     await page.waitForURL(/\/dj$/);
     await page.waitForSelector(".djo-hist");
-    await page.locator(".djo").screenshot({ path: `${__dirname}/djo-full-${scheme}.png` });
+    await page.locator(".djo").first().screenshot({ path: `${__dirname}/djo-full-${scheme}.png` });
     if (scheme === "dark") {
       await page.locator(".djo-hist button.top").click();
       await page.waitForTimeout(1500);
