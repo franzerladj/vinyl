@@ -357,6 +357,51 @@ export function useSwipeDown(ref: React.RefObject<HTMLElement | null>, onClose: 
 }
 
 /** Bottom-Sheet mit Griff, Feder-Animation und Wischen nach unten zum Schließen (überall am Blatt) */
+/**
+ * Tastatur bleibt im Blatt oder Dialog, und beim Schließen geht der Fokus zurück an den Knopf, der es geöffnet hat.
+ * (Verhalten, wie es Design-Systeme für Dialoge vorgeben; bei Astryx „focus return“.) Liegen mehrere übereinander,
+ * gilt nur das oberste. Der Fokus wird nur mit Maus und Tastatur verschoben, am Handy bleibt alles, wie es war.
+ */
+const focusScopes: object[] = [];
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+export function useFocusScope(ref: React.RefObject<HTMLElement | null>, open: boolean) {
+  useEffect(() => {
+    if (!open) return;
+    const id = {};
+    focusScopes.push(id);
+    const before = document.activeElement as HTMLElement | null;
+    const fine = window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+    const t = setTimeout(() => {
+      const el = ref.current;
+      if (fine && el && !el.contains(document.activeElement)) el.focus({ preventScroll: true });
+    }, 40);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || focusScopes[focusScopes.length - 1] !== id) return;
+      const el = ref.current;
+      if (!el) return;
+      const items = [...el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((x) => x.getClientRects().length > 0);
+      if (!items.length) return void e.preventDefault();
+      const first = items[0];
+      const last = items[items.length - 1];
+      const at = document.activeElement;
+      if (!el.contains(at) || (!e.shiftKey && at === last)) {
+        e.preventDefault();
+        first.focus();
+      } else if (e.shiftKey && (at === first || at === el)) {
+        e.preventDefault();
+        last.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener("keydown", onKey, true);
+      focusScopes.splice(focusScopes.indexOf(id), 1);
+      if (fine && before?.isConnected) before.focus({ preventScroll: true });
+    };
+  }, [open, ref]);
+}
+
 export function Sheet({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<{ y: number; dy: number } | null>(null);
@@ -372,6 +417,7 @@ export function Sheet({ open, onClose, children }: { open: boolean; onClose: () 
   }, [open, onClose]);
   useSwipeDown(ref, onClose, open);
   useBackClose(open, onClose);
+  useFocusScope(ref, open);
   if (!open) return null;
   const move = (e: React.PointerEvent) => {
     if (!drag.current || !ref.current) return;
@@ -395,7 +441,7 @@ export function Sheet({ open, onClose, children }: { open: boolean; onClose: () 
   return (
     <>
       <div className="sheet-backdrop" onClick={onClose} />
-      <div className="sheet" ref={ref} role="dialog" aria-modal="true">
+      <div className="sheet" ref={ref} role="dialog" aria-modal="true" tabIndex={-1}>
         <div
           className="sheet-grab"
           onPointerDown={(e) => {
@@ -542,20 +588,35 @@ export function useDebounced<T>(value: T, ms = 300) {
 }
 
 /** iOS-Segmented-Control mit gleitendem Indikator */
-export function Seg<T extends string>({ value, options, onChange }: { value: T; options: [T, string][]; onChange: (v: T) => void }) {
+export function Seg<T extends string>({ value, options, onChange, label }: { value: T; options: [T, string][]; onChange: (v: T) => void; label?: string }) {
   // Alle Felder sind gleich breit: der Schieber wird nur verschoben, nichts wird vermessen.
   // (Messen zwang den Browser, die ganze neue Seite mitten im Seitenwechsel durchzurechnen.)
   // Gehört der aktuelle Wert zu keinem Feld (z. B. eine Kachel darüber ist gewählt), ist kein Feld markiert
   const found = options.findIndex(([v]) => v === value);
   const i = Math.max(0, found);
   return (
-    <div className="seg" role="tablist" style={{ "--seg-n": options.length } as React.CSSProperties}>
+    <div
+      className="seg"
+      role="tablist"
+      aria-label={label}
+      style={{ "--seg-n": options.length } as React.CSSProperties}
+      onKeyDown={(e) => {
+        // Wie bei Reitern üblich: Pfeile wechseln das Feld, Pos1 und Ende springen an den Rand
+        const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        const to = e.key === "Home" ? 0 : e.key === "End" ? options.length - 1 : step ? (i + step + options.length) % options.length : -1;
+        if (to < 0) return;
+        e.preventDefault();
+        onChange(options[to][0]);
+        (e.currentTarget.querySelectorAll<HTMLElement>('[role="tab"]')[to])?.focus();
+      }}
+    >
       <span className="seg-thumb" style={{ transform: `translateX(${i * 100}%)`, opacity: found < 0 ? 0 : undefined }} />
       {options.map(([v, l]) => (
         <button
           key={v}
           role="tab"
           aria-selected={v === value}
+          tabIndex={v === value || (found < 0 && v === options[0][0]) ? 0 : -1}
           onClick={() => {
             haptic(5);
             onChange(v);
@@ -699,11 +760,14 @@ function AskDialog() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, [a]);
   useBackClose(Boolean(a), () => a?.resolve(null));
+  const formRef = useRef<HTMLFormElement>(null);
+  useFocusScope(formRef, Boolean(a));
   if (!a) return null;
   const confirmIt = () => (a.input ? text.trim() && a.resolve(text.trim()) : a.resolve(""));
   return (
     <div className="ask-backdrop" onClick={() => a.resolve(null)}>
       <form
+        ref={formRef}
         className="ask"
         role="alertdialog"
         aria-modal="true"
