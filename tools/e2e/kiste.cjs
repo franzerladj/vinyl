@@ -20,12 +20,12 @@ const B = "http://localhost:8787";
     const area = page.locator(".kc-area");
     await area.scrollIntoViewIfNeeded();
     const box = await area.boundingBox();
-    out.heute = await page.locator(".kc >> nth=0").locator(".djo-big b").innerText();
+    out.heute = await page.locator(".kc-1 .djo-big b").innerText();
     await page.mouse.move(box.x + box.width * 0.3, box.y + box.height / 2);
     await page.mouse.down();
     await page.mouse.move(box.x + box.width * 0.2, box.y + box.height / 2, { steps: 4 });
     out.tip = await page.locator(".kc-area .kc-tip").innerText();
-    out.imMonat = await page.locator(".kc >> nth=0").locator(".djo-big b").innerText();
+    out.imMonat = await page.locator(".kc-1 .djo-big b").innerText();
     await page.mouse.up();
     // Tastatur: Pfeiltaste geht einen Monat weiter
     await area.focus();
@@ -42,7 +42,7 @@ const B = "http://localhost:8787";
     out.kalender = await page.locator(".kc-read").innerText();
     // Jahre
     out.jahre = await page.locator(".kc-bars > i").count();
-    out.vorn = await page.locator(".kc >> nth=2").locator(".djo-big").innerText();
+    out.vorn = await page.locator(".kc-3 .djo-big").innerText();
     await page.screenshot({ path: `${OUT}/kiste-${scheme}.png`, fullPage: true });
     // Rangliste: Labels führen in die Sammlung mit gefüllter Suche
     await page.locator(".kc .seg [role=tab]:has-text('Labels')").click();

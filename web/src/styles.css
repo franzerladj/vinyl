@@ -1946,6 +1946,11 @@ html.ios-app[data-theme="light"] body::after { content: ""; position: fixed; z-i
    Eine Farbe je Diagramm (Akzent), flache Flächen ohne Verlauf, dünne Linien, Werte am Fadenkreuz.
    ========================================================================== */
 .kc-section { margin-top: 28px; }
+/* Die große Zahl ändert sich beim Darüberfahren: die Zeile darf dabei nie umbrechen, sonst springt das Diagramm
+   unter dem Finger weg (und die Maus „verlässt“ es, obwohl sie stillsteht) */
+.kc .djo-big { flex-wrap: nowrap; white-space: nowrap; min-height: 42px; min-width: 0; }
+.kc .djo-big span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.kc .djo-head .sub { white-space: nowrap; }
 .kc-plot { position: relative; touch-action: pan-y; cursor: crosshair; outline-offset: 4px; border-radius: var(--r-xs); -webkit-user-select: none; user-select: none; }
 .kc-area { height: 120px; animation: kc-rise 0.5s var(--ease) both; }
 .kc-area svg { display: block; width: 100%; height: 100%; overflow: visible; }
@@ -1995,4 +2000,16 @@ html.ios-app[data-theme="light"] body::after { content: ""; position: fixed; z-i
 @keyframes kc-pop { from { opacity: 0; transform: scale(0.6); } }
 @keyframes kc-wide { from { transform: scaleX(0); } }
 @media (prefers-reduced-motion: reduce) { .kc-area, .kc-bars > i, .kc-cell, .kc-rank-track i { animation: none; } }
-@media (min-width: 1024px) { .kc-section { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } .kc-section h2 { grid-column: 1 / -1; } }
+/* Handy: eine Spalte, Reihenfolge über order. Computer: zwei Spalten, jede für sich gestapelt. */
+.kc-col { display: contents; }
+.kc-1 { order: 1; } .kc-2 { order: 2; } .kc-3 { order: 3; } .kc-4 { order: 4; }
+.kc-ticks span.start { transform: none; }
+.kc-ticks span.end { transform: translateX(-100%); }
+@media (min-width: 1024px) {
+  .kc-section { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; }
+  .kc-section h2 { grid-column: 1 / -1; }
+  .kc-col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .kc-col .kc { order: 0; }
+  /* Die Monatsfelder werden in der breiten Karte sonst sehr groß */
+  .kc-cal-row { grid-template-columns: 44px repeat(12, minmax(0, 30px)) 1fr; }
+}

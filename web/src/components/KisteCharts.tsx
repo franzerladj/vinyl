@@ -15,9 +15,13 @@ const num = (n: number) => n.toLocaleString("de-DE");
 function useScrub(n: number) {
   const [at, setAt] = useState<number | null>(null);
   const last = useRef<number | null>(null);
+  // Wer zuletzt gewählt hat: Verlässt die Maus das Diagramm (auch weil sich die Seite darunter verschiebt, etwa
+  // während eines Abgleichs), darf das eine Auswahl per Tastatur nicht löschen
+  const by = useRef<"ptr" | "key">("ptr");
   const pick = (e: React.PointerEvent<HTMLElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     const i = Math.max(0, Math.min(n - 1, Math.round(((e.clientX - r.left) / r.width) * (n - 1))));
+    by.current = "ptr";
     if (i !== last.current) {
       last.current = i;
       setAt(i);
@@ -33,12 +37,18 @@ function useScrub(n: number) {
         pick(e);
       },
       onPointerMove: (e: React.PointerEvent<HTMLElement>) => (e.pointerType === "mouse" || e.buttons > 0 || e.pressure > 0) && pick(e),
-      onPointerLeave: (e: React.PointerEvent<HTMLElement>) => e.pointerType === "mouse" && setAt(null),
+      onPointerLeave: (e: React.PointerEvent<HTMLElement>) => {
+        if (e.pointerType !== "mouse" || by.current !== "ptr") return;
+        last.current = null;
+        setAt(null);
+      },
       onBlur: () => setAt(null),
       onKeyDown: (e: React.KeyboardEvent) => {
         const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
         if (!step && e.key !== "Home" && e.key !== "End") return;
         e.preventDefault();
+        by.current = "key";
+        last.current = null;
         setAt((v) => (e.key === "Home" ? 0 : e.key === "End" ? n - 1 : Math.max(0, Math.min(n - 1, (v ?? (step > 0 ? -1 : n)) + step))));
       },
     },
@@ -69,14 +79,14 @@ function Growth({ s }: { s: KisteStats }) {
   const cur = at == null ? g[g.length - 1] : g[at];
   const perMonth = g.length ? Math.round((s.growth[g.length - 1].total / g.length) * 10) / 10 : 0;
   return (
-    <div className="card djo-card kc">
+    <div className="card djo-card kc kc-1">
       <div className="djo-head">
         <b>Gewachsen</b>
         <span className="sub">{at == null ? `seit ${monthLabel(g[0].month)}` : monthLabel(cur.month)}</span>
       </div>
       <div className="djo-big">
         <b>{num(cur.total)}</b>
-        <span>{at == null ? "Platten heute" : cur.added ? `Platten, davon ${num(cur.added)} neu` : "Platten"}</span>
+        <span>{at == null ? "Platten heute" : cur.added ? `Platten · ${num(cur.added)} neu` : "Platten"}</span>
       </div>
       <div className="kc-plot kc-area" {...scrub.props} role="img" aria-label={`Deine Sammlung ist seit ${monthLabel(g[0].month)} auf ${num(g[g.length - 1].total)} Platten gewachsen. Mit den Pfeiltasten Monat für Monat durchgehen.`}>
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden>
@@ -95,7 +105,7 @@ function Growth({ s }: { s: KisteStats }) {
         <span>{g[0].month.slice(0, 4)}</span>
         <span>heute</span>
       </div>
-      <p className="djo-note">Im Schnitt {perMonth.toLocaleString("de-DE")} Platten im Monat. Fahr mit dem Finger über die Kurve.</p>
+      <p className="djo-note">Im Schnitt {perMonth.toLocaleString("de-DE")} Platten im Monat. Fahr über die Kurve, um einen Monat zu sehen.</p>
     </div>
   );
 }
@@ -109,12 +119,12 @@ function Calendar({ s, today }: { s: KisteStats; today: string }) {
   const shown = sel ?? (best ? { y: best.year, m: best.month } : null);
   const shownN = shown ? (years.find((y) => y.year === shown.y)?.months[shown.m - 1] ?? 0) : 0;
   return (
-    <div className="card djo-card kc">
+    <div className="card djo-card kc kc-2">
       <div className="djo-head">
         <b>Wann du gekauft hast</b>
         <span className="sub">je Monat</span>
       </div>
-      <div className="kc-cal" role="grid" aria-label="Neue Platten je Monat und Jahr">
+      <div className="kc-cal" role="grid" aria-label="Neue Platten je Monat und Jahr" onPointerLeave={(e) => e.pointerType === "mouse" && setSel(null)}>
         <div className="kc-cal-row head" aria-hidden>
           <span />
           {Array.from({ length: 12 }, (_, k) => (
@@ -178,7 +188,7 @@ function Years({ s }: { s: KisteStats }) {
   const ticks = ys.map((y, i) => ({ y: y.year, i })).filter((t) => t.y % 10 === 0);
   const sparse = ticks.length > 6 ? ticks.filter((t) => t.y % 20 === 0) : ticks;
   return (
-    <div className="card djo-card kc">
+    <div className="card djo-card kc kc-3">
       <div className="djo-head">
         <b>Aus welchen Jahren</b>
         <span className="sub">Erscheinungsjahr</span>
@@ -195,7 +205,7 @@ function Years({ s }: { s: KisteStats }) {
       </div>
       <div className="kc-ticks" aria-hidden>
         {(sparse.length ? sparse : [{ y: ys[0].year, i: 0 }]).map((t) => (
-          <span key={t.y} style={{ left: `${ys.length > 1 ? ((t.i + 0.5) / ys.length) * 100 : 50}%` }}>
+          <span key={t.y} className={(t.i + 0.5) / ys.length < 0.06 ? "start" : (t.i + 0.5) / ys.length > 0.94 ? "end" : undefined} style={{ left: `${ys.length > 1 ? ((t.i + 0.5) / ys.length) * 100 : 50}%` }}>
             {t.y}
           </span>
         ))}
@@ -213,7 +223,7 @@ function Ranks({ s }: { s: KisteStats }) {
   const max = Math.max(1, ...rows.map((r) => r.n));
   if (!tabs.length) return null;
   return (
-    <div className="card djo-card kc">
+    <div className="card djo-card kc kc-4">
       <div className="djo-head">
         <b>Was vorn liegt</b>
         <span className="sub">Platten</span>
@@ -226,7 +236,7 @@ function Ranks({ s }: { s: KisteStats }) {
               <span className="kc-rank-name">{r.name}</span>
               <span className="kc-rank-n">{num(r.n)}</span>
               <span className="kc-rank-track">
-                <i style={{ transform: `scaleX(${Math.max(0.02, r.n / max)})`, animationDelay: `${i * 40}ms` }} />
+                <i style={{ width: `${Math.max(2, (r.n / max) * 100)}%`, animationDelay: `${i * 40}ms` }} />
               </span>
             </>
           );
@@ -260,10 +270,16 @@ export function KisteCharts() {
   return (
     <section className="djo kc-section">
       <h2>Die Kiste in Bildern</h2>
-      {s.growth.length > 1 && <Growth s={s} />}
-      {s.calendar.max > 0 && <Calendar s={s} today={today} />}
-      {s.years.length > 1 && s.peakYear && <Years s={s} />}
-      <Ranks s={s} />
+      {/* Am Handy eine Spalte in der Reihenfolge 1 bis 4 (CSS order), am Computer zwei Spalten, jede für sich gestapelt:
+          so bleibt unter einer kurzen Karte keine Lücke */}
+      <div className="kc-col">
+        {s.growth.length > 1 && <Growth s={s} />}
+        {s.years.length > 1 && s.peakYear && <Years s={s} />}
+      </div>
+      <div className="kc-col">
+        {s.calendar.max > 0 && <Calendar s={s} today={today} />}
+        <Ranks s={s} />
+      </div>
     </section>
   );
 }
