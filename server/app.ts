@@ -15,6 +15,7 @@ import { pushOps } from "./devsync";
 import { buzzStore, dmStore, nativeStore, syncStore } from "./env";
 import { DM_KINDS, dmNotice, type DmKind } from "./dm";
 import { discogsImage } from "../shared/ownPost";
+import { EXT_ORIGIN, extRelease } from "../shared/ext";
 import { APK } from "../shared/appVersion";
 import { cleanText, validPost } from "./buzz";
 import { cleanOwnPost, validRef } from "../shared/ownPost";
@@ -30,7 +31,7 @@ app.use("/api/*", async (c, next) => {
   c.set("cfg", readConfig(c.env ?? {}, c.req.url));
   // Schreibende Anfragen nur von der eigenen Seite (Schutz gegen Login-CSRF und fremde Formulare).
   // Server-zu-Server-Aufrufe (Zeitplan-Worker) schicken weder Origin noch Sec-Fetch-Site.
-  if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method) && crossSite(c.req.header("Sec-Fetch-Site"), c.req.header("Origin"), [new URL(c.req.url).origin, c.var.cfg.appUrl])) {
+  if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method) && crossSite(c.req.header("Sec-Fetch-Site"), c.req.header("Origin"), [new URL(c.req.url).origin, c.var.cfg.appUrl, EXT_ORIGIN])) {
     return c.json({ message: "Anfrage von fremder Seite abgelehnt" }, 403);
   }
   await next();
@@ -1193,6 +1194,21 @@ app.get("/api/sync/pull", async (c) => {
   const { rows, seq } = await syncStore(c.env ?? {}).since(syncUser(s), since, 800);
   c.header("Cache-Control", "no-store");
   return c.json({ seq, more: rows.length === 800, rows: rows.map((r) => ({ t: r.t, k: r.k, v: r.v, ts: r.ts })) });
+});
+
+// ---------- Chrome-Erweiterung ----------
+// Was Crate selbst zu einer Platte weiß (Tempo, Tonart, Sets, Regal). Kommt aus dem Abgleich zwischen Geräten:
+// ohne ihn liegt davon nichts auf dem Server, dann ist `sync` false und die Erweiterung sagt das.
+app.get("/api/ext/release/:id", async (c) => {
+  const s = await session(c);
+  if (!s?.username) return c.json({ message: "nicht angemeldet" }, 401);
+  const id = Number(c.req.param("id"));
+  if (!Number.isInteger(id) || id <= 0) return c.json({ message: "ungültig" }, 400);
+  const store = syncStore(c.env ?? {});
+  const user = syncUser(s);
+  const [tracks, sets, meta, n] = await Promise.all([store.scan(user, "tracks", `${id}:`, 80), store.scan(user, "sets", "", 300), store.get(user, [{ t: "recordMeta", k: String(id) }]), store.count(user)]);
+  c.header("Cache-Control", "no-store");
+  return c.json(extRelease(id, { tracks, sets, meta: [...meta.values()][0] ?? null, any: n > 0 }));
 });
 
 app.post("/api/profile/me", async (c) => {

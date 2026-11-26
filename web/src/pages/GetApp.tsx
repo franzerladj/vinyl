@@ -3,11 +3,38 @@
 import { Link } from "react-router-dom";
 import { LogoMark, Wordmark } from "../components/Logo";
 import { apkName, inAppBrowser, LATEST_APK } from "../lib/push";
+import { EXT_VERSION } from "../../../shared/ext";
 
 const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
 const isAndroid = /Android/i.test(ua);
 const isIOS = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && typeof document !== "undefined" && "ontouchend" in document);
 const standalone = typeof window !== "undefined" && (window.matchMedia?.("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true);
+
+/** Erweiterung für Chrome am Computer: als Ordner laden (ohne Chrome Web Store) */
+function ChromeExt() {
+  return (
+    <section className="getapp-card" id="erweiterung">
+      <span className="eyebrow">Chrome am Computer</span>
+      <b>Crate neben Discogs und jedem Plattenladen</b>
+      <span className="sub">
+        Auf Discogs-Plattenseiten siehst du sofort: Hast du schon, steht auf der Wantlist oder ist neu, dazu dein Tempo, deine Tonart und deine Sets. Auf jeder anderen Seite: Text markieren, Rechtsklick, „In Crate nachsehen“.
+      </span>
+      <a className="btn tinted block" href={`/download/crate-erweiterung.zip?v=${EXT_VERSION}`} download={`crate-erweiterung-${EXT_VERSION}.zip`}>
+        Erweiterung laden
+      </a>
+      <span className="tiny">Version {EXT_VERSION} · ZIP, 0,1 MB. Für Chrome, Edge und Brave am Computer.</span>
+      <ol className="getapp-steps">
+        <li>Datei laden und entpacken. Darin liegt der Ordner „crate-erweiterung“.</li>
+        <li>
+          In Chrome die Adresse <b>chrome://extensions</b> öffnen und oben rechts den „Entwicklermodus“ einschalten.
+        </li>
+        <li>„Entpackte Erweiterung laden“ klicken und den Ordner „crate-erweiterung“ wählen.</li>
+        <li>In Crate im selben Browser angemeldet sein. Die Erweiterung nutzt diese Anmeldung.</li>
+      </ol>
+      <span className="tiny">Den Ordner nicht löschen, Chrome lädt die Erweiterung von dort. Tempo, Tonart und Sets erscheinen, wenn in Crate „Handy und Computer“ eingeschaltet ist.</span>
+    </section>
+  );
+}
 
 function Android({ lead }: { lead: boolean }) {
   return (
@@ -88,6 +115,7 @@ export default function GetApp() {
               </Link>
             </section>
           )}
+          {!isAndroid && <ChromeExt />}
         </>
       )}
       <p className="tiny getapp-foot">

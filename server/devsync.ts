@@ -13,6 +13,8 @@ export interface SyncStore {
   put(user: string, rows: SyncRow[]): Promise<number>;
   since(user: string, seq: number, limit: number): Promise<{ rows: (SyncRow & { seq: number })[]; seq: number }>;
   count(user: string): Promise<number>;
+  /** Zeilen einer Tabelle, deren Schlüssel mit `prefix` beginnt (leer = alle), höchstens `limit` */
+  scan(user: string, t: SyncRow["t"], prefix: string, limit: number): Promise<SyncRow[]>;
   clear(user: string): Promise<void>;
 }
 
@@ -64,6 +66,13 @@ export function d1Store(db: D1Like): SyncStore {
     async count(user) {
       return (await db.prepare("SELECT COUNT(*) AS n FROM sync_rows WHERE user = ?").bind(user).first<{ n: number }>())?.n ?? 0;
     },
+    async scan(user, t, prefix, limit) {
+      // Bereich statt LIKE: nutzt den Primärschlüssel (user, t, k) und braucht kein Maskieren von % und _
+      const res = prefix
+        ? await db.prepare("SELECT t, k, v, fts, ts, seq FROM sync_rows WHERE user = ? AND t = ? AND k >= ? AND k < ? ORDER BY k LIMIT ?").bind(user, t, prefix, `${prefix}\uffff`, limit).all<Raw>()
+        : await db.prepare("SELECT t, k, v, fts, ts, seq FROM sync_rows WHERE user = ? AND t = ? ORDER BY k LIMIT ?").bind(user, t, limit).all<Raw>();
+      return res.results.map(parse);
+    },
     async clear(user) {
       await db.batch([db.prepare("DELETE FROM sync_rows WHERE user = ?").bind(user), db.prepare("DELETE FROM sync_meta WHERE user = ?").bind(user)]);
     },
@@ -92,6 +101,9 @@ export function memoryStore(): SyncStore {
     },
     async count(user) {
       return of(user).size;
+    },
+    async scan(user, t, prefix, limit) {
+      return [...of(user).values()].filter((r) => r.t === t && r.k.startsWith(prefix)).sort((x, y) => (x.k < y.k ? -1 : 1)).slice(0, limit);
     },
     async clear(user) {
       data.delete(user);
