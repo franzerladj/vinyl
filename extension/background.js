@@ -6,6 +6,7 @@ import * as api from "./api.js";
 const handlers = {
   me: () => api.me(),
   release: ({ id }) => api.release(Number(id)),
+  master: ({ id }) => api.master(Number(id)),
   search: ({ q }) => api.search(q),
   want: ({ id, on }) => api.setWant(Number(id), Boolean(on)),
   counts: () => refreshBadge(),

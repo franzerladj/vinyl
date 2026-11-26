@@ -3,7 +3,7 @@
 // Der private Schlüssel liegt nicht im Repo; er wird nur gebraucht, um eine .crx-Datei zu packen.
 
 /** Version der Erweiterung, die zum Laden bereitliegt (gleich wie in extension/manifest.json) */
-export const EXT_VERSION = "1.0.0";
+export const EXT_VERSION = "1.1.0";
 export const EXT_ID = "pkfioajlonlljfhjjlpopdbjnnanepoe";
 /** Von hier darf die Erweiterung schreibend anfragen (sonst lehnt der Server fremde Seiten ab) */
 export const EXT_ORIGIN = `chrome-extension://${EXT_ID}`;

@@ -64,6 +64,13 @@
     .chip.want { color: var(--lime); }
     .mini { all: unset; padding: 3px 9px; border-radius: 999px; font: 600 11.5px/1.4 "Inter", system-ui, sans-serif; background: var(--surface-2); color: var(--text); cursor: pointer; text-decoration: none; white-space: nowrap; }
     .mini:hover { background: #333; }
+    .vers { display: grid; gap: 1px; background: var(--line); border-radius: 12px; overflow: hidden; }
+    .ver { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 9px 10px; background: var(--surface); color: inherit; text-decoration: none; }
+    a.ver:hover { background: var(--surface-2); }
+    .ver .ti { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ver .sub { grid-column: 1; font-size: 12px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .ver .chip { grid-column: 2; grid-row: 1 / span 2; }
+    .cap { margin: 0 0 -6px; font-size: 12px; color: var(--text-3); }
     .empty { padding: 4px 0 2px; color: var(--text-2); font-size: 13.5px; }
     .err { color: var(--bad); font-size: 13px; }
     .spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--surface-2); border-top-color: var(--lime); animation: sp .8s linear infinite; margin: 6px 0; }
@@ -215,6 +222,54 @@
     return b;
   }
 
+  /** Feld zu einer Master-Seite (alle Pressungen einer Platte): welche Pressung du hast oder suchst.
+   *  Die Zeilen führen auf die Seite der Pressung, dort steht dann alles zu deinem Exemplar. */
+  function masterBody(d, crateUrl, reload) {
+    const b = el("div", "body");
+    const have = d.have.length > 0;
+    const want = d.want.length > 0;
+    const n = (k) => (k === 1 ? "1 Pressung" : `${k} Pressungen`);
+    const v = el("div", `verdict ${have ? "have" : want ? "want" : "new"}`, have ? "Hast du schon" : want ? "Auf deiner Wantlist" : "Neu für dich");
+    v.append(el("small", null, have ? `${d.have.length} von ${n(d.total)}` : want ? `${d.want.length} von ${n(d.total)}` : `${n(d.total)}${d.offers ? ` · ${d.offers === 1 ? "1 Angebot" : `${d.offers} Angebote`}` : ""}`));
+    b.append(v);
+    const list = (title, items, cls, chip) => {
+      if (!items.length) return;
+      b.append(el("p", "cap", title));
+      const box = el("div", "vers");
+      for (const x of items.slice(0, 6)) {
+        const a = el("a", "ver");
+        a.href = `/release/${x.id}`;
+        a.append(el("span", "ti", x.label || `Pressung ${x.id}`), el("span", `chip ${cls}`, chip), el("span", "sub", x.sub));
+        box.append(a);
+      }
+      b.append(box);
+      if (items.length > 6) b.append(el("p", "note", `und ${items.length - 6} weitere`));
+    };
+    list(d.have.length === 1 ? "Deine Pressung" : "Deine Pressungen", d.have, "have", "Hast du");
+    list(have ? "Auch auf der Wantlist" : d.want.length === 1 ? "Diese Pressung suchst du" : "Diese Pressungen suchst du", d.want, "want", "Want");
+    if (d.checked < d.total) b.append(el("p", "note", `Geprüft sind die ersten ${d.checked} von ${d.total} Pressungen.`));
+
+    const a = el("div", "actions");
+    const open = d.have[0]?.id ?? d.want[0]?.id ?? d.main;
+    if (!have && !want && d.main) {
+      const w = el("button", "btn primary", "Hauptpressung auf die Wantlist");
+      w.type = "button";
+      w.addEventListener("click", async () => {
+        w.disabled = true;
+        const r = await send({ type: "want", id: d.main, on: true });
+        if (r.ok) reload();
+        else {
+          w.disabled = false;
+          w.textContent = "Hat nicht geklappt";
+        }
+      });
+      a.append(w);
+    }
+    if (open) a.append(link(have ? "btn primary" : "btn", "In Crate öffnen", `${crateUrl}/release/${open}`));
+    b.append(a);
+    return b;
+  }
+
   /** Trefferliste nach Text: bei jedem Treffer steht, ob er dir gehört */
   function results(items, crateUrl, discogsUrl) {
     const wrap = el("div", "body");
@@ -261,5 +316,5 @@
     return wrap;
   }
 
-  globalThis.__crate = { send, el, svg, link, host, loadFont, header, signedOut, releaseBody, results, CSS };
+  globalThis.__crate = { send, el, svg, link, host, loadFont, header, signedOut, releaseBody, masterBody, results, CSS };
 })();

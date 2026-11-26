@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Crate",
   "description": "Crate neben Discogs und jedem Plattenladen: Hast du schon? Steht sie auf der Wantlist? Dein Tempo, deine Tonart, deine Sets.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA3re/6gFD4npFUUo/IMtIPqIXw4/r/ni7AxUb0lp10qt13HZNqaVXjOYakWtoJ85Hky/OF69SLcxgGGIn9T3U2vVT+0v0TgILJmMUSnMZSSnPUCKkn6Wvf9yqDPVTQIz8GKa2fTcqUt6IaUGzPXFuw8x/L15PkNTTlxZvD8SCsgWuClEwafNkIpj/jLP9Vt695vZZquvTce6bs59TCqfwh40MP2SYZ+vD/VUpMWRJq1VQlNlalvnbnqtbQRbtYTxIpMupiPNzWe6adCV0aA7ar3zmGDpq6zj0wkGO2LimzVa/53P+D6kP1zbuLwRE50nObnAn9p+uVoq59/gmWtG05wIDAQAB",
   "minimum_chrome_version": "116",
   "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },

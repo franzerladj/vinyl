@@ -1,21 +1,23 @@
-// Feld auf Discogs-Plattenseiten. Von der Seite wird nichts gelesen: die Plattennummer steht in der Adresse
-// (…/release/12345-Artist-Titel), alles andere kommt über die Schnittstelle.
+// Feld auf Discogs-Plattenseiten. Von der Seite wird nichts gelesen: die Nummer steht in der Adresse
+// (…/release/12345-Artist-Titel für eine Pressung, …/master/678-Artist-Titel für alle Pressungen einer Platte),
+// alles andere kommt über die Schnittstelle.
 (() => {
   const C = globalThis.__crate;
   if (!C || globalThis.__crateDiscogs) return;
   globalThis.__crateDiscogs = true;
 
-  const idOf = (path) => {
-    const m = /\/release\/(\d+)/.exec(path);
-    return m ? Number(m[1]) : null;
+  const refOf = (path) => {
+    const m = /\/(release|master)\/(\d+)/.exec(path);
+    return m ? { kind: m[1], id: Number(m[2]), key: `${m[1]}:${m[2]}` } : null;
   };
   let shown = null;
   let ui = null;
   let open = true;
 
-  async function show(id) {
+  async function show(ref) {
+    const id = ref?.key ?? null;
     shown = id;
-    if (!id) {
+    if (!ref) {
       ui?.host.remove();
       ui = null;
       return;
@@ -48,11 +50,20 @@
     wait.append(C.el("div", "spin"));
     body.replaceChildren(wait);
 
-    const [urls, r] = await Promise.all([C.send({ type: "urls" }), C.send({ type: "release", id })]);
+    const [urls, r] = await Promise.all([C.send({ type: "urls" }), C.send({ type: ref.kind, id: ref.id })]);
     if (shown !== id) return; // inzwischen weitergeblättert
     const crateUrl = urls.data?.crate ?? "";
     const draw = (d) => body.replaceChildren(C.releaseBody(d, crateUrl, draw));
-    if (r.ok) draw(r.data);
+    // Master: nach dem Umschalten der Wantlist neu fragen, die Liste der Pressungen ändert sich mit
+    const drawMaster = (d) =>
+      body.replaceChildren(
+        C.masterBody(d, crateUrl, async () => {
+          const again = await C.send({ type: "master", id: ref.id });
+          if (shown === id && again.ok) drawMaster(again.data);
+        }),
+      );
+    if (r.ok && ref.kind === "master") drawMaster(r.data);
+    else if (r.ok) draw(r.data);
     else if (r.signedOut) body.replaceChildren(C.signedOut(crateUrl));
     else {
       const b = C.el("div", "body");
@@ -64,10 +75,10 @@
   // Discogs wechselt Seiten ohne Neuladen: die Adresse im Blick behalten
   let last = null;
   const check = () => {
-    const id = idOf(location.pathname);
-    if (id !== last) {
-      last = id;
-      void show(id);
+    const ref = refOf(location.pathname);
+    if ((ref?.key ?? null) !== last) {
+      last = ref?.key ?? null;
+      void show(ref);
     }
   };
   check();

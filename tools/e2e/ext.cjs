@@ -57,6 +57,24 @@ const B = "http://localhost:8799";
     out.nachHerunternehmen = (await page.locator("#crate-panel .verdict").innerText()).replace(/\n/g, " | ");
     await page.screenshot({ path: `${OUT}/ext-neu.png` });
 
+    // Master-Seite (alle Pressungen): eine davon in der Sammlung, eine auf der Wantlist; Antippen führt zur Pressung
+    await page.goto(`${B}/master/900-Larry-Heard-Bar-A-Thym`);
+    await page.waitForSelector("#crate-panel .verdict");
+    out.master = (await page.locator("#crate-panel .verdict").innerText()).replace(/\n/g, " | ");
+    out.masterPressungen = await page.locator("#crate-panel .ver").allInnerTexts().then((t) => t.map((x) => x.replace(/\n/g, " | ")));
+    await page.screenshot({ path: `${OUT}/ext-master.png` });
+    await page.locator("#crate-panel .ver").first().click();
+    await page.waitForSelector("#crate-panel .facts");
+    out.masterZurPressung = new URL(page.url()).pathname;
+    // Master, von dem man nichts kennt: Hauptpressung auf die Wantlist, danach steht sie als gesucht da
+    await page.goto(`${B}/master/901-Delano-Smith-The-Bells`);
+    await page.waitForSelector("#crate-panel .verdict.new");
+    out.masterNeu = (await page.locator("#crate-panel .verdict").innerText()).replace(/\n/g, " | ");
+    await page.locator("#crate-panel .btn", { hasText: "Hauptpressung auf die Wantlist" }).click();
+    await page.waitForSelector("#crate-panel .verdict.want");
+    out.masterNachWant = [(await page.locator("#crate-panel .verdict").innerText()).replace(/\n/g, " | "), ...(await page.locator("#crate-panel .ver").allInnerTexts()).map((x) => x.replace(/\n/g, " | "))];
+    await page.screenshot({ path: `${OUT}/ext-master-want.png` });
+
     // Rechtsklick → „In Crate nachsehen“ auf einer fremden Seite (das Menü selbst lässt sich hier nicht bedienen,
     // der Test ruft denselben Weg auf, den der Menüeintrag nimmt)
     await page.goto(`${B}/shop`);

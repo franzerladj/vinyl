@@ -9,6 +9,9 @@ const REL = {
   46: { title: "Falling Up", artists: [{ name: "Patrice Scott" }], year: 2009, labels: [{ name: "Sistrum", catno: "SIS046" }] },
   71: { title: "The Bells", artists: [{ name: "Delano Smith" }], year: 1990, labels: [{ name: "Eternal", catno: "ETE190" }] },
 };
+// Master: 900 hat drei Pressungen (3 in der Sammlung, 46 auf der Wantlist), 901 zwei, die man nicht kennt
+const VER = { 3: ["Trax", "TRA103", "US", "1995"], 46: ["Sistrum", "SIS046", "US", "2009"], 71: ["Eternal", "ETE190", "US", "1990"], 72: ["Eternal", "ETE190R", "DE", "2021"] };
+const MASTER = { 900: { title: "Bar A Thym", artists: [{ name: "Larry Heard (2)" }], main_release: 3, num_for_sale: 31, versions: [3, 46, 71] }, 901: { title: "The Bells", artists: [{ name: "Delano Smith" }], main_release: 72, num_for_sale: 4, versions: [71, 72] } };
 const json = (res, body, status = 200) => {
   res.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
   res.end(JSON.stringify(body));
@@ -68,6 +71,11 @@ http
         return res.end(req.method === "PUT" ? "{}" : "");
       }
       if ((m = /^\/releases\/(\d+)$/.exec(d))) return REL[m[1]] ? json(res, { id: Number(m[1]), ...REL[m[1]], thumb: "" }) : json(res, {}, 404);
+      if ((m = /^\/masters\/(\d+)$/.exec(d))) return MASTER[m[1]] ? json(res, { id: Number(m[1]), ...MASTER[m[1]], versions: undefined }) : json(res, {}, 404);
+      if ((m = /^\/masters\/(\d+)\/versions$/.exec(d))) {
+        const ids = MASTER[m[1]]?.versions ?? [];
+        return json(res, { pagination: { page: 1, pages: 1, items: ids.length }, versions: ids.map((id) => ({ id, label: VER[id][0], catno: VER[id][1], country: VER[id][2], released: VER[id][3], format: '12", 33 ⅓ RPM', stats: { user: { in_collection: id === 3 ? 1 : 0, in_wantlist: state.wants.has(id) ? 1 : 0 } } })) });
+      }
       if (/^\/marketplace\/stats\/\d+$/.test(d)) return json(res, { lowest_price: { value: 7.5, currency: "EUR" }, num_for_sale: 9 });
       if (d === "/database/search") {
         const q = (u.searchParams.get("q") || "").toLowerCase();
@@ -78,6 +86,7 @@ http
     }
     // ---- Seiten ----
     if (/\/release\/\d+/.test(p)) return page(res, "Discogs (nachgestellt)", `<h1>Plattenseite</h1><p>Hier stünde die Seite von Discogs. Die Erweiterung liest davon nichts, nur die Nummer in der Adresse.</p><p><a href="/release/46-Patrice-Scott-Falling-Up">andere Platte</a></p>`);
+    if (/\/master\/\d+/.test(p)) return page(res, "Discogs (nachgestellt)", `<h1>Master-Seite</h1><p>Alle Pressungen einer Platte. Die Erweiterung liest auch hier nur die Nummer in der Adresse.</p>`);
     if (p === "/shop") return page(res, "Plattenladen", `<h1>Neu im Laden</h1><p id="pick">Delano Smith The Bells</p><p>ETE190 · 12" · 14,90 €</p>`);
     return page(res, "Leer", "<p>leer</p>");
   })

@@ -134,6 +134,47 @@ export async function release(id) {
   };
 }
 
+/** Wie viele Seiten mit Pressungen höchstens geprüft werden (je 100) */
+const MASTER_PAGES = 5;
+const shortVersion = (v) => ({
+  id: v.id,
+  label: [String(v.label ?? "").replace(/\s\(\d+\)$/, ""), v.catno].filter(Boolean).join(" · "),
+  sub: [v.country, v.released && String(v.released).slice(0, 4), v.format].filter(Boolean).join(" · "),
+});
+
+/** Master-Seite (alle Pressungen einer Platte): welche davon hast du, welche stehen auf der Wantlist?
+ *  Discogs sagt das bei jeder Pressung gleich dazu, es braucht also keine Anfrage je Pressung. */
+export async function master(id) {
+  await user();
+  const [info, first, wants] = await Promise.all([
+    discogs("GET", `/masters/${id}`).catch(() => null),
+    discogs("GET", `/masters/${id}/versions?per_page=100&page=1`),
+    wantIds().catch(() => new Set()),
+  ]);
+  const versions = [...(first?.versions ?? [])];
+  const pages = first?.pagination?.pages ?? 1;
+  for (let page = 2; page <= Math.min(pages, MASTER_PAGES); page++) {
+    const j = await discogs("GET", `/masters/${id}/versions?per_page=100&page=${page}`).catch(() => null);
+    if (!j) break;
+    versions.push(...(j.versions ?? []));
+  }
+  const mine = (v) => (v.stats?.user?.in_collection ?? 0) > 0;
+  const wanted = (v) => !mine(v) && ((v.stats?.user?.in_wantlist ?? 0) > 0 || wants.has(v.id));
+  const total = first?.pagination?.items ?? versions.length;
+  return {
+    id,
+    title: info?.title ?? null,
+    artist: (info?.artists ?? []).map((a) => String(a.name).replace(/\s\(\d+\)$/, "")).join(", ") || null,
+    main: info?.main_release ?? versions[0]?.id ?? null,
+    have: versions.filter(mine).map(shortVersion),
+    want: versions.filter(wanted).map(shortVersion),
+    total,
+    checked: versions.length,
+    offers: info?.num_for_sale ?? 0,
+    at: Date.now(),
+  };
+}
+
 /** Suche nach Text (Artist, Titel, Katalognummer): Discogs sagt bei jedem Treffer gleich dazu, ob er dir gehört */
 export async function search(q) {
   const text = String(q ?? "").replace(/\s+/g, " ").trim().slice(0, 120);

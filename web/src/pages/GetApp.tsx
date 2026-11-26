@@ -17,7 +17,7 @@ function ChromeExt() {
       <span className="eyebrow">Chrome am Computer</span>
       <b>Crate neben Discogs und jedem Plattenladen</b>
       <span className="sub">
-        Auf Discogs-Plattenseiten siehst du sofort: Hast du schon, steht auf der Wantlist oder ist neu, dazu dein Tempo, deine Tonart und deine Sets. Auf jeder anderen Seite: Text markieren, Rechtsklick, „In Crate nachsehen“.
+        Auf Discogs siehst du bei jeder Platte sofort: Hast du schon, steht auf der Wantlist oder ist neu, dazu dein Tempo, deine Tonart und deine Sets. Auf der Übersicht aller Pressungen steht, welche davon deine ist. Auf jeder anderen Seite: Text markieren, Rechtsklick, „In Crate nachsehen“.
       </span>
       <a className="btn tinted block" href={`/download/crate-erweiterung.zip?v=${EXT_VERSION}`} download={`crate-erweiterung-${EXT_VERSION}.zip`}>
         Erweiterung laden
@@ -30,6 +30,7 @@ function ChromeExt() {
         </li>
         <li>„Entpackte Erweiterung laden“ klicken und den Ordner „crate-erweiterung“ wählen.</li>
         <li>In Crate im selben Browser angemeldet sein. Die Erweiterung nutzt diese Anmeldung.</li>
+        <li>Auf Discogs eine Platte öffnen. Das Feld von Crate sitzt unten rechts.</li>
       </ol>
       <span className="tiny">Den Ordner nicht löschen, Chrome lädt die Erweiterung von dort. Tempo, Tonart und Sets erscheinen, wenn in Crate „Handy und Computer“ eingeschaltet ist.</span>
     </section>
